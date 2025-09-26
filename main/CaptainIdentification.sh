@@ -24,13 +24,10 @@ function print_help() {
        └── element02.fa
        ︙"
    echo
-   echo "Syntax: $0 [ -h ] -w <working_directory> -h <hmm_profile_directory> -p <pythonFunction_path> -m <macse_path> [ -c <confidence_level> -t <num_threads> ]"
+   echo "Syntax: $0 [ -h ] -w <working_directory> [ -c <confidence_level> -t <num_threads> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-h, --hmm: Specified the path were the hmm profile are stored ['CAT_domain.hmm','DUF3435.hmm','Captain.hmm'] (required)."
-   echo "-p, --python: Specify the file path to 'hmmer_process.py' script (required)."
-   echo "-m, --macse: Specify the fille path to 'macse_v2.07.jar' script (required)."
-   echo "-l, --length: minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 600)."
+   echo "-l, --length: minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 500)."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence [range: 1 - 3] (Default: 2)"
    echo "-t, --threads: Tnumber of threads to use for alignment and phylogenetic tree inference (Default: 1)."
    echo "-help: Display this help message."
@@ -39,11 +36,10 @@ function print_help() {
 # Initialize variables
 
 workingDirectory_path=""
-hmmprofile_path=""
-pythonFunction_path=""
-macseFuntion_path=""
+hmmprofile_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
+auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 level="2"
-length="600"
+length="500"
 threads="1"
 help_flag=false
 
@@ -56,14 +52,6 @@ while [[ $# -gt 0 ]]; do
         -h|--hmm)
             shift
             hmmprofile_path="$1"
-            ;;
-        -p|--python)
-            shift
-            pythonFunction_path="$1"
-            ;;
-        -m|--macse)
-            shift
-            macseFuntion_path="$1"
             ;;
         -c|--confidenceLevel)
             shift
@@ -96,7 +84,7 @@ if $help_flag; then
 fi
 
 # Check for mandatory argument and define the path as absolute
-if [[ -z "$workingDirectory_path" || -z "$hmmprofile_path" || -z "$pythonFunction_path" || -z "$macseFuntion_path" ]]; then
+if [[ -z "$workingDirectory_path" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
@@ -138,19 +126,11 @@ fi
 
 
 # Check if the python function file exists
-if [[ ! -f "$pythonFunction_path" ]]; then
-    echo "Error: file '$pythonFunction_path' does not exist."
+if [[ ! -d "$auxiliary_path" ]]; then
+    echo "Error: directory '$auxiliary_path' does not exist."
     exit 1
 else
-    pythonFunction_path=$(realpath $pythonFunction_path)
-fi
-
-# Check if the macse function file exists
-if [[ ! -f "$macseFuntion_path" ]]; then
-    echo "Error: file '$macseFuntion_path' does not exist."
-    exit 1
-else
-    macseFuntion_path=$(realpath $macseFuntion_path)
+    auxiliary_path=$(realpath $auxiliary_path)
 fi
 
 # Check confidence level is within allowed range
@@ -169,7 +149,7 @@ fi
 # Check length is within allowed range
 if [[ "$length" =~ ^[0-9]+$ ]]; then
     if (( $length < 300 || $length > 800 )); then
-        echo "Error: '$length' confidence level is not an accepted value."
+        echo "Error: '$length' length is not an accepted value."
         print_help
         exit 1
     fi
@@ -209,6 +189,11 @@ fi
 
 if [[ -z "$(which clipkit)" ]]; then
     echo "Error: Missing clipkit function."
+    exit 1
+fi
+
+if [[ -z "$(which gotree)" ]]; then
+    echo "Error: Missing gotree function."
     exit 1
 fi
 
@@ -342,13 +327,14 @@ Captain_identification() {
     local working_dir="$1"
 
     local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_gff" 2>/dev/null)
+    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_nucleotide" 2>/dev/null)
     local CAPTAIN_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_HmmsearchCaptain" 2>/dev/null)
     local CAT_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_HmmsearchCAT" 2>/dev/null)
     local DUF_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_HmmsearchDUF" 2>/dev/null)
     local results_path="${working_dir}/Captains.txt"
     local empty_elements="${working_dir}/EmptyElements.txt"
 
-    python ${pythonFunction_path} --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
+    python ${auxiliary_path}/hmmer_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
 
 }
 
@@ -385,7 +371,7 @@ Alignment() {
         do 
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking for captain pseudogene in element '${line}'"
 
-            seqkit subseq --quiet -r 1:10000 ${nucleotide_path}/${line}.fa > ${temp_prefix}blast/${line}_start.fa
+            seqkit subseq --quiet -r 1:20000 ${nucleotide_path}/${line}.fa > ${temp_prefix}blast/${line}_start.fa
 
             makeblastdb -in ${temp_prefix}blast/${line}_start.fa -dbtype nucl -out ${temp_prefix}blast/${line}_start >/dev/null
 
@@ -419,9 +405,9 @@ Alignment() {
 
             local exonNumber=$(wc -l ${temp_prefix}${line}.bed | awk '{print $1}')
 
-            if [[ ${exonNumber} -lt 4 ]]; then
+            if [[ ${exonNumber} -lt 3 ]]; then
 
-                seqkit subseq --quiet -r -10000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_prefix}blast/${line}_end.fa
+                seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_prefix}blast/${line}_end.fa
                 makeblastdb -in ${temp_prefix}blast/${line}_end.fa -dbtype nucl -out ${temp_prefix}blast/${line}_end >/dev/null
 
                 blastn -query ${working_dir}/Captains_exon.fa -db ${temp_prefix}blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
@@ -450,12 +436,12 @@ Alignment() {
                 if (last_start != -1) {
                     print $1 "\t" last_start "\t" last_end;
                 }
-                }' > ${temp_prefix}${line}.bed
+                }' > ${temp_prefix}${line}-2.bed
 
-                local exonNumber=$(wc -l ${temp_prefix}${line}.bed | awk '{print $1}')
+                local exonNumber=$(wc -l ${temp_prefix}${line}-2.bed | awk '{print $1}')
 
-                if [[ ${exonNumber} -ge 4 ]]; then
-                    seqkit subseq --quiet --bed ${temp_prefix}${line}.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
+                if [[ ${exonNumber} -ge 3 ]]; then
+                    seqkit subseq --quiet --bed ${temp_prefix}${line}-2.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
                 else 
                     echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."
                     echo "${line}" >> ${Remove_elements}
@@ -463,7 +449,7 @@ Alignment() {
             else
                 local exonNumber=$(wc -l ${temp_prefix}${line}.bed | awk '{print $1}')
 
-                if [[ ${exonNumber} -ge 4 ]]; then
+                if [[ ${exonNumber} -ge 3 ]]; then
                     seqkit subseq --quiet --bed ${temp_prefix}${line}.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
                 else 
                     echo "${exonNumber}"
@@ -479,15 +465,15 @@ Alignment() {
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
 
         if [ ! -s "${pseudoExons}" ]; then
-            java -jar ${macseFuntion_path} -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+            java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
         else
-            java -jar ${macseFuntion_path} -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+            java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
         fi
 
     else
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
 
-        java -jar ${macseFuntion_path} -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        java -jar ${auxiliary_path} -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
 
         rm ${empty_elements}
     fi
@@ -519,11 +505,21 @@ Tree_inference() {
     if [[ "$unique_sequences" -ge 4 ]]; then
         mkdir -p ${outdir}
         iqtree3 -T ${threads} -m MFP --prefix ${outdir}/Captain_tree -B 1000 --alrt 1000 -s ${protein_file} -quiet --polytomy
+
+        gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_prefix}captainlength.nw
+        gotree collapse support -s 80 -i ${temp_prefix}captainlength.nw -o ${temp_prefix}captainsupport.nw
+
+        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_prefix}captainsupport.nw
+        gotree collapse support -s 95 -i ${temp_prefix}captainsupport.nw -o ${temp_prefix}captainsupport2.nw
+        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_prefix}captainsupport2.nw
+        mv ${temp_prefix}captainsupport2.nw ${temp_prefix}captainsupport.nw
+
+        gotree reroot midpoint -i ${temp_prefix}captainsupport.nw -o ${working_dir}/CaptainPhylogeny.nw
     else
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Skipping tree inference due to low number of unique captain sequences. There's only '$unique_sequences' unique sequence(s) in the current dataset"
     fi
 
-    rm ${temp_prefix}unique
+    rm ${temp_prefix}*
 }
 
 Removed_empty_elements() {
@@ -608,3 +604,4 @@ if [ -s "${workingDirectory_path}/Remove_elements.txt" ]; then
 else
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${workingDirectory_path}."
 fi
+

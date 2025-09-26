@@ -8,7 +8,11 @@ import os
 
 def find_clusters(pairs):
     """
-    Finds weakly connected components (clusters) from a list of WEIGHTED pairs (edges).
+    Finds weakly connected components (clusters) from a list of UNWEIGHTED pairs (edges).
+    Args:
+        pairs: A list of tuples, where each tuple (u, v) represents a connection.
+    Returns:
+        A list of sets, where each set represents a unique cluster of connected elements.
     """
     graph = collections.defaultdict(set)
     all_nodes = set()
@@ -44,6 +48,14 @@ def find_sub_clusters_spectral(all_raw_weighted_edges, main_clusters,
                                modularity_split_threshold=0.05):
     """
     Applies an iterative spectral clustering approach.
+    Args:
+        all_raw_weighted_edges: A list of tuples (node1, node2, weight).
+        main_clusters: A list of sets, each an initial connected component.
+        min_final_cluster_size (int): The minimum size a resulting sub-cluster should have.
+        min_nodes_for_meaningful_spectral_split (int): Minimum nodes for attempting a split.
+        modularity_split_threshold (float): The minimum modularity score for a split to be accepted.
+    Returns:
+        A list of tuples: (original_cluster_idx, sub_cluster_set, was_split_flag).
     """
     sub_clusters_with_parent_info = []
     
@@ -198,6 +210,7 @@ def write_network_edges(filename, edges):
 def write_cytoscape_node_attributes(filename, sub_clusters_info, main_cluster_id_map, node_metadata):
     """
     Writes node attributes (cluster IDs, split status, and metadata) to a file for Cytoscape.
+    Handles both metadata-rich and simple input files.
     """
     node_attributes = {}
     sorted_raw_sub_clusters = sorted(sub_clusters_info, key=lambda item: (item[0], sorted(list(item[1]))[0] if item[1] else ''))
@@ -220,15 +233,64 @@ def write_cytoscape_node_attributes(filename, sub_clusters_info, main_cluster_id
                     'WasSplit': was_split
                 }
 
+    # Determine which headers to use based on whether metadata was provided
+    if node_metadata:
+        header = "NodeID\tSubClusterID\tMainClusterID\tWasSplit\tgenus\tspecies\tlength\n"
+    else:
+        header = "NodeID\tSubClusterID\tMainClusterID\tWasSplit\n"
+
     with open(filename, 'w') as f_out:
-        # Modified header to include the new 'genus' column
-        f_out.write("NodeID\tSubClusterID\tMainClusterID\tWasSplit\tfamily\tgenus\tspecies\tlength\n")
+        f_out.write(header)
         for node_id in sorted(node_attributes.keys()):
             attrs = node_attributes[node_id]
-            metadata = node_metadata.get(node_id, {'family': 'N/A', 'species': 'N/A', 'length': 'N/A', 'genus': 'N/A'})
-            # Modified output line to include the genus
-            f_out.write(f"{node_id}\t{attrs['SubClusterID']}\t{attrs['MainClusterID']}\t{attrs['WasSplit']}\t{metadata['family']}\t{metadata['genus']}\t{metadata['species']}\t{metadata['length']}\n")
+            line_parts = [node_id, attrs['SubClusterID'], attrs['MainClusterID'], str(attrs['WasSplit'])]
+            
+            # Add metadata if available
+            if node_metadata:
+                metadata = node_metadata.get(node_id, {'species': 'N/A', 'length': 'N/A', 'genus': 'N/A'})
+                line_parts.extend([metadata['genus'], metadata['species'], metadata['length']])
+            
+            f_out.write('\t'.join(line_parts) + '\n')
     print(f"Node attributes written to '{filename}' for Cytoscape visualization.")
+
+def write_cluster_stats(filename, main_clusters, sub_clusters_with_parent_info, main_cluster_id_map):
+    """
+    Generates a statistics file for each main cluster.
+    """
+    cluster_stats = collections.defaultdict(lambda: {'Size': 0, 'NumberSubCluster': 1})
+    
+    # Populate initial stats from main clusters
+    for i, cluster_set in enumerate(main_clusters):
+        original_idx = -1
+        # Find the original index of the current cluster set
+        for idx, s in enumerate(main_clusters):
+            if s == cluster_set:
+                original_idx = idx
+                break
+        if original_idx != -1:
+            cluster_id = main_cluster_id_map[original_idx]
+            cluster_stats[cluster_id]['Size'] = len(cluster_set)
+
+    # Update stats based on sub-cluster splits
+    sub_cluster_counts = collections.defaultdict(int)
+    for original_parent_idx, _, was_split in sub_clusters_with_parent_info:
+        if was_split:
+            parent_cluster_id = main_cluster_id_map[original_parent_idx]
+            sub_cluster_counts[parent_cluster_id] += 1
+    
+    # Set the final sub-cluster count
+    for cluster_id, count in sub_cluster_counts.items():
+        cluster_stats[cluster_id]['NumberSubCluster'] = count
+
+    # Write the statistics to the file
+    with open(filename, 'w') as f_out:
+        f_out.write("ClusterID\tSize\tNumberSubCluster\n")
+        sorted_cluster_ids = sorted(cluster_stats.keys())
+        for cluster_id in sorted_cluster_ids:
+            stats = cluster_stats[cluster_id]
+            f_out.write(f"{cluster_id}\t{stats['Size']}\t{stats['NumberSubCluster']}\n")
+            
+    print(f"Cluster statistics written to '{filename}'.")
 
 def main():
     """
@@ -257,7 +319,7 @@ def main():
         os.makedirs(output_dir)
         print(f"Created output directory: {output_dir}")
     
-    # 3. Reading the input file and storing metadata with header check and tab delimiter
+    # 3. Reading the input file and storing metadata with automatic column detection
     all_raw_weighted_edges = []
     unweighted_pairs_for_wccs = []
     node_metadata = {}
@@ -267,43 +329,53 @@ def main():
             lines = f.readlines()
             start_line = 0
 
-            # Check if the first line is a header by trying to parse the weight column.
+            # Check for header
             if len(lines) > 0:
                 first_line_parts = lines[0].strip().split('\t')
                 try:
-                    # If parsing the third column as a float fails, it's likely a header.
                     _ = float(first_line_parts[2])
                 except (ValueError, IndexError):
                     print("Info: Skipping what appears to be a header row.", file=sys.stderr)
                     start_line = 1
 
+            # Check if input file has metadata based on column count
+            has_metadata = False
+            if len(lines) > start_line:
+                first_data_line = lines[start_line].strip().split('\t')
+                if len(first_data_line) >= 7: # Check for the number of columns with metadata
+                    has_metadata = True
+
             for line in lines[start_line:]:
                 parts = line.strip().split('\t')
-                if len(parts) >= 11:
-                    node1, node2 = parts[0], parts[1]
-                    try:
-                        weight = float(parts[2])
-                        all_raw_weighted_edges.append((node1, node2, weight))
-                        unweighted_pairs_for_wccs.append((node1, node2))
-                        
-                        # New code to handle genus and species extraction
-                        node1_family, node1_species, node1_length = parts[5], parts[6], parts[7]
-                        node2_family, node2_species, node2_length = parts[8], parts[9], parts[10]
+                
+                # Check for minimum required columns for network analysis
+                if len(parts) < 3:
+                    print(f"Warning: Skipping line due to insufficient columns (expected at least 3, got {len(parts)}): {line.strip()}", file=sys.stderr)
+                    continue
+
+                node1, node2 = parts[0], parts[1]
+                try:
+                    weight = float(parts[2])
+                    all_raw_weighted_edges.append((node1, node2, weight))
+                    unweighted_pairs_for_wccs.append((node1, node2))
+
+                    if has_metadata and len(parts) >= 7:
+                        # Parsing metadata from the known columns
+                        node1_species, node1_length = parts[5], parts[6]
+                        node2_species, node2_length = parts[7], parts[8]
                         
                         node1_genus = node1_species.split()[0] if node1_species and ' ' in node1_species else node1_species
                         node2_genus = node2_species.split()[0] if node2_species and ' ' in node2_species else node2_species
 
                         if node1 not in node_metadata:
-                            node_metadata[node1] = {'family': node1_family, 'species': node1_species, 'length': node1_length, 'genus': node1_genus}
+                            node_metadata[node1] = {'species': node1_species, 'length': node1_length, 'genus': node1_genus}
                         if node2 not in node_metadata:
-                            node_metadata[node2] = {'family': node2_family, 'species': node2_species, 'length': node2_length, 'genus': node2_genus}
+                            node_metadata[node2] = {'species': node2_species, 'length': node2_length, 'genus': node2_genus}
 
-                    except ValueError:
-                        print(f"Warning: Could not parse weight on line: {line.strip()}. Skipping line.", file=sys.stderr)
-                        continue
-                else:
-                    print(f"Warning: Skipping line due to insufficient columns (expected at least 11, got {len(parts)}): {line.strip()}", file=sys.stderr)
+                except ValueError:
+                    print(f"Warning: Could not parse weight on line: {line.strip()}. Skipping line.", file=sys.stderr)
                     continue
+
     except FileNotFoundError:
         print(f"Error: Input file '{args.input_file}' not found.", file=sys.stderr)
         sys.exit(1)
@@ -335,7 +407,9 @@ def main():
 
     node_attributes_output_file = os.path.join(output_dir, "node_attributes.txt")
     write_cytoscape_node_attributes(node_attributes_output_file, sub_clusters_with_parent_info, main_cluster_id_map, node_metadata)
+    
+    cluster_stats_output_file = os.path.join(output_dir, "cluster_stats.txt")
+    write_cluster_stats(cluster_stats_output_file, main_clusters, sub_clusters_with_parent_info, main_cluster_id_map)
 
 if __name__ == "__main__":
     main()
-

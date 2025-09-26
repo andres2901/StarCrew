@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Function to display the main help message
+show_main_help() {
+  echo "Usage: $0 <module> [options]"
+  echo
+  echo "Available modules:"
+  echo "  Initialize   - Gather the input and organize the working directory for run this toolkit."
+  echo "  QuickGenePrediction    - Performs a quick gene prediction with metaeuk."
+  echo "  SyntenyClustering    - Performs a quick gene prediction with metaeuk."
+  echo "  RobustGenePrediction    - Performs a quick gene prediction with metaeuk."
+  echo "  CaptainIdentification    - Performs a quick gene prediction with metaeuk."
+  echo "  ClusterProfiling    - Performs a quick gene prediction with metaeuk."
+  echo
+  echo "Use '$0 <module> -help' for help on a specific module."
+}
+
+# --- Rest of the script ---
+MODULE="$1"
+shift
+
+# Check if no arguments were provided or if --help was requested
+if [ -z "$MODULE" ] || [ "$MODULE" == "-help" ]; then
+  show_main_help
+  exit 0
+fi
+
+# Define the directory where your module scripts are located
+MODULES_DIR="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../main/"
+MODULE_SCRIPT="$MODULES_DIR/$MODULE.sh"
+
+# Check if the module script exists and is executable
+if [ ! -x "$MODULE_SCRIPT" ]; then
+  echo "Error: Unknown module '$MODULE'."
+  show_main_help
+  exit 1
+fi
+
+# Execute the module script
+exec "$MODULE_SCRIPT" "$@"
