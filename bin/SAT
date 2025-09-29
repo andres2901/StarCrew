@@ -8,6 +8,7 @@ show_main_help() {
   echo "  Initialize   - Gather the input and organize the working directory for run this toolkit."
   echo "  QuickGenePrediction    - Performs a quick gene prediction with metaeuk."
   echo "  SyntenyClustering    - Performs a quick gene prediction with metaeuk."
+  echo "  BrakerGenePrediction    - Performs a quick gene prediction with metaeuk."
   echo "  RobustGenePrediction    - Performs a quick gene prediction with metaeuk."
   echo "  CaptainIdentification    - Performs a quick gene prediction with metaeuk."
   echo "  ClusterProfiling    - Performs a quick gene prediction with metaeuk."

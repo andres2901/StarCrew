@@ -16,7 +16,7 @@ function print_help() {
 # Initialize variables
 protein_path=""
 Working_directory=""
-minimum_gene_content=8
+minimum_gene_content="8"
 metadata_flag=false
 help_flag=false
 
@@ -154,7 +154,7 @@ gene_prediction() {
     metaeuk unitesetstofasta ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukpred ${working_dir}/metaeukFinal -v 0
 
     # Modify gff, so Agat can recognized it structure
-    sed -e 's/Target_ID=.*;TCS_//g' metaeukFinal.gff > metaeuk.gff
+    sed -e 's/Target_ID=.*;TCS_//g' ${working_dir}/metaeukFinal.gff > metaeuk.gff
 
     # Remove elements with incomplete gene coding models
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing gene models without start and stop codon..."
@@ -214,7 +214,7 @@ organize_files() {
 
     # Filter gff files to select elements above a threshold
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering elements based on a minimum of '$minimum_gene_content' predicted genes and storing related files..."
-    awk -v min="$minimum_gene_content" 'NR>1{if($2>=min){print $1}}' ${out_directory}/gene_stats.txt | sed $'s/[^[:print:]\t]//g' | while read line
+    awk -v min="$minimum_gene_content" 'NR>1{if($2>=min){print $1}}' ${base_dir}/Gene_stats.txt | sed $'s/[^[:print:]\t]//g' | while read line
     do
         # Filtering gff files
         cp ${temp_directory}gff/${line}.gff ${Output_dir}/Gff/
@@ -293,5 +293,5 @@ rm -r ${Working_directory}/Workspace/QuickGenePrediction/temp/
 
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Organization and filtering of the results is finished."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${out_directory}."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${Working_directory}."
 

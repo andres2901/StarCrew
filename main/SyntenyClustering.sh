@@ -41,7 +41,8 @@ function print_help() {
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
    echo "-s, --minSize: The minimum desired size for any final sub-cluster (Default: 2)."
    echo "-t, --threshold: The minimum modularity score for a split to be accepted. Range [-0.5, 1.0] (Default: 0.05)."
-   echo "-s, --searchThreads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
+   echo "-st, --searchThreads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
+   echo "-p, --predictionMode: Mode of the gene prediction performed for the data (Available mode: Quick, Robust) (Default = Quick)"
    echo "-help: Display this help message."
 }
 
@@ -56,6 +57,7 @@ minSize="2"
 minNodes="4"
 threshold="0.05"
 threads="8"
+predictionMode="Quick"
 help_flag=false
 metadata_flag=false
 
@@ -89,9 +91,13 @@ while [[ $# -gt 0 ]]; do
             shift
             threshold="$1"
             ;;
-        -s|--searchThreads)
+        -st|--searchThreads)
             shift
             threads="$1"
+            ;;
+        -p|--predictionMode)
+            shift
+            predictionMode="$1"
             ;;
         -help)
             help_flag=true
@@ -212,6 +218,13 @@ if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
+# Check if prediction mode parameter is correct
+if [[ "$predictionMode" != "Quick" && "$predictionMode" != "Robust" ]]; then
+    echo "Error: provided mode '$predictionMode' is not accepted."
+    print_help
+    exit 1
+fi
+
 # ==============================================================================
 # Bash function block
 # ==============================================================================
@@ -219,23 +232,14 @@ fi
 check_directory_structure() {
     local base_dir="$1"
     
-    # Locate required subdirectories and file
-    local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
-    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
-
-    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-
-    local metadata_file="${data_dir}/metadata.csv"
+    # Step 1: Locate required subdirectories and file
+    local gff_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local nucleotide_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     if [[ -z "$gff_dir" ]]; then
         echo "Error: GFF subdirectory not found in '$base_dir'." >&2
-        exit 1
-    fi
-
-    if [[ -z "$nucleotide_dir" ]]; then
-        echo "Error: Nucleoide subdirectory not found in '$base_dir'." >&2
         exit 1
     fi
 
@@ -243,44 +247,64 @@ check_directory_structure() {
         echo "Error: Protein subdirectory not found in '$base_dir'." >&2
         exit 1
     fi
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Continuing without metadata file in the working directory"
-    else
-        metadata_flag=true
+
+    if [[ -z "$nucleotide_dir" ]]; then
+        echo "Error: nucleotide subdirectory not found in '$base_dir'." >&2
+        exit 1
     fi
 
+    if [[ -z "$exon_dir" ]]; then
+        echo "Error: exon subdirectory not found in '$base_dir'." >&2
+        exit 1
+    fi
+    
     # Step 2: Check for consistent filenames across subdirectories
 
     # Define temporary file paths in the working directory
     local gff_files="$base_dir/gff_files.txt"
-    local nucleotide_files="$base_dir/nucleotide_files.txt"
     local protein_files="$base_dir/protein_files.txt"
+    local nucleotide_files="$base_dir/nucleotide_files.txt"
+    local exon_files="$base_dir/exon_files.txt"
     
     # Get sorted list of base filenames from the GFF directory
     find "$gff_dir" -maxdepth 1 -type f -name "*.gff" | xargs -n 1 basename -s .gff | sort > "$gff_files"
     
-    # Get sorted list of base filenames from the nucleotide directory
-    find "$nucleotide_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$nucleotide_files"
-    
     # Get sorted list of base filenames from the protein directory
     find "$protein_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$protein_files"
 
+    # Get sorted list of base filenames from the GFF directory
+    find "$nucleotide_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$nucleotide_files"
+    
+    # Get sorted list of base filenames from the protein directory
+    find "$exon_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$exon_files"
+
     # Compare the lists. If diff finds a difference, it returns a non-zero exit code.
-    if ! diff -q "$gff_files" "$nucleotide_files" >/dev/null || \
-       ! diff -q "$gff_files" "$protein_files" >/dev/null; then
+    if ! diff -q "$gff_files" "$protein_files" >/dev/null || \
+        ! diff -q "$gff_files" "$nucleotide_files" >/dev/null || \
+        ! diff -q "$gff_files" "$exon_files" >/dev/null || \
+        ! diff -q "$protein_files" "$nucleotide_files" >/dev/null || \
+        ! diff -q "$protein_files" "$exon_files" >/dev/null || \
+        ! diff -q "$nucleotide_files" "$exon_files" >/dev/null; then
         echo "Error: File lists in subdirectories do not match." >&2
         echo "Details:" >&2
-        echo "GFF vs. Nucleotide:" >&2
-        diff "$gff_files" "$nucleotide_files" >&2
         echo "GFF vs. Protein:" >&2
         diff "$gff_files" "$protein_files" >&2
-        rm "$gff_files" "$nucleotide_files" "$protein_files"
+        echo "GFF vs. nucleotide:" >&2
+        diff "$gff_files" "$nucleotide_files" >&2
+        echo "GFF vs. exon:" >&2
+        diff "$gff_files" "$exon_files" >&2
+        echo "protein vs. nucleotide:" >&2
+        diff "$protein_files" "$nucleotide_files" >&2
+        echo "protein vs. exon:" >&2
+        diff "$protein_files" "$exon_files" >&2
+        echo "nucleotide vs. exon:" >&2
+        diff "$nucleotide_files" "$exon_files" >&2
+        rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"
         exit 1
     fi
 
     # Cleanup temporary files
-    rm "$gff_files" "$nucleotide_files" "$protein_files"
+    rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"
 }
 
 organize_working_directory() {
@@ -626,7 +650,11 @@ process_cluster_file() {
     local cluster_dir="${base_dir}/Clusters/"
     local working_dir="${base_dir}/Workspace/SyntenyClustering/"
     
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+
     local cluster_path="${cluster_dir}/main_clusters.txt"
 
     # --- Error Handling ---
@@ -639,22 +667,46 @@ process_cluster_file() {
     local OLD_IFS="$IFS"
     IFS=$'\t'
 
-    while read -r cluster_id values_string; do
+    if [[ "$predictionMode" == "Quick" ]]
+    then
+        while read -r cluster_id values_string; do
 
-        IFS=' ' read -r -a values_array <<< "$values_string"
+            IFS=' ' read -r -a values_array <<< "$values_string"
         
-        echo "Processing: $cluster_id with ${#values_array[@]} values."
+            echo "Processing: $cluster_id with ${#values_array[@]} values."
         
-        mkdir -p "${cluster_dir}/${cluster_id}"
-        mkdir -p "${cluster_dir}/${cluster_id}/Nucleotide"
+            mkdir -p "${cluster_dir}/${cluster_id}"
+            mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data"
         
-        for value in "${values_array[@]}"; do
-            cp ${nucleotide_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Nucleotide/         
-        done
+            for value in "${values_array[@]}"; do
+                cat ${nucleotide_dir}/${value}.fa >> ${cluster_dir}/${cluster_id}/Sequences.fa        
+            done
+        done < "$cluster_path"
+    elif [[ "$predictionMode" == "Robust" ]] 
+    then
+        while read -r cluster_id values_string; do
 
-        cat ${cluster_dir}/${cluster_id}/Nucleotide/* > ${cluster_dir}/Sequences_${cluster_id}.fa
+            IFS=' ' read -r -a values_array <<< "$values_string"
 
-    done < "$cluster_path"
+            echo "Processing: $cluster_id with ${#values_array[@]} values."
+        
+            mkdir -p "${cluster_dir}/${cluster_id}"
+            mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Exon"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Nucleotide"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Protein"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Gff"
+        
+            for value in "${values_array[@]}"; do
+                cp ${gff_dir}/${value}.gff ${cluster_dir}/C${cluster_id}/Gff/
+                cp ${protein_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Protein/
+                cp ${nucleotide_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Nucleotide/    
+                cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Exon/        
+            done
+        done < "$cluster_path"
+    fi
 
     # Restore the original IFS at the end of the function.
     IFS="$OLD_IFS"

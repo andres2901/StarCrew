@@ -8,18 +8,28 @@ function print_help() {
    echo "Syntax: SAT RobustGenePrediction [ -h ] -w <genome_file> [ -m <mode> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for the whole dataset or specifics clusters (Available mode: Cluster, Whole) (Default = Cluster)."
+   echo "-p, --proteinDB: protein database fasta file (required)."
+   echo "-h, --headers: headers of the protein database (required)."
+   echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
+   echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset when running the 'All' mode (Default: 8) [range: 5 - 100]"
+   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 5) [range: 5 - 10]"
+   echo "-t, --threads: Number of threads for Braker (Default = 8)"
    echo "-help: Display this help message."
 }
 
 # Initialize variables
 
 Working_directory=""
+protein_path=""
 mode="Cluster"
+minimum_gene_content="8"
+minimum_size="5"
+threads="8"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 hmm_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
-captain_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/captains.fa"
+captain_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/Captains.fa"
 help_flag=false
+metadata_flag=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -27,9 +37,25 @@ while [[ $# -gt 0 ]]; do
 	        shift
 	        fasta_path="$1"
 	        ;; 
+        -p|--proteinDB)
+            shift
+            protein_path="$1"
+            ;;
         -m|--mode)
             shift
             mode="$1"
+            ;;
+        -mg|--minGene)
+            shift
+            mode="$1"
+            ;;
+        -ms|--minSize)
+            shift
+            minimum_size="$1"
+            ;;
+        -t|--threads)
+            shift
+            threads="$1"
             ;;
         -help)
             help_flag=true
@@ -52,7 +78,7 @@ fi
 
 # Check for mandatory arguments
 
-if [[ -z "$Working_directory" ]]; then
+if [[ -z "$Working_directory" || -z "$protein_path" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
@@ -67,6 +93,24 @@ else
     if [[ ! "${Working_directory:0:1}" == "/" ]]; then
         Working_directory=$(realpath $Working_directory)
     fi
+fi
+
+# Check if protein file exists
+if [[ ! -f "$protein_path" ]]; then
+    echo "Error: file '$protein_path' does not exist."
+    exit 1
+else
+    # Check if the path is absolute
+    if [[ ! "${protein_path:0:1}" == "/" ]]; then
+        protein_path=$(realpath $protein_path)
+    fi
+fi
+
+# Check if mode parameter is correct
+if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
+    echo "Error: provided mode '$mode' is not accepted."
+    print_help
+    exit 1
 fi
 
 # check if python folder exist
@@ -90,6 +134,39 @@ else
     fi
 fi
 
+# Check minimum gene content is within allowed range
+if [[ "$minimum_gene_content" =~ ^[0-9]+$ ]]; then
+    if (( $minimum_gene_content < 5 || $minimum_gene_content > 100 )); then
+        echo "Error: '$minimum_gene_content' minimum gene content is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$minimum_gene_content' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check minimum size is within allowed range
+if [[ "$minimum_size" =~ ^[0-9]+$ ]]; then
+    if (( $minimum_size < 5 || $minimum_size > 10 )); then
+        echo "Error: '$minimum_size' minimum size is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$minimum_size' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check thread parameter
+if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$threads' is not a positive integer."
+    print_help
+    exit 1
+fi
+
 # ==============================================================================
 # Bash function block
 # ==============================================================================
@@ -101,8 +178,9 @@ check_directory_structure() {
     local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
     local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
 
-    local fasta_file="${base_dir}/sequences.fa"
     local metadata_file="${base_dir}/metadata_files/metadata.csv"
+
+    local fasta_file="${base_dir}/sequences.fa"
 
     if [[ ! -f $fasta_file ]]; then
         echo "Error: sequence fasta file does not exist in '$base_dir'."
@@ -113,322 +191,346 @@ check_directory_structure() {
         echo -e "Number of input elements: ${input_size}\n"
     fi
 
-    if [[ -f $metadata_file ]]; then
-        metadata_flag=true
-    fi
-
     if [[ -z "$workspace_dir" ]]; then
         echo "Error: Workspace directory not found in '$base_dir'." >&2
         exit 1
+    else
+        local Working_dir=$(find "$workspace_dir" -maxdepth 1 -type d -name "RobustGenePrediction" 2>/dev/null)
+        if [[ -z "$Working_dir" ]]; then
+            echo "Error: RobustGenePrediction directory not found in '$workspace_dir'." >&2
+            echo "Run the module BrakerGenePrediction before this module." >&2
+            exit 1
+        else
+            local braker_dir=$(find "$Working_dir" -maxdepth 1 -type d -name "braker" 2>/dev/null)
+            if [[ -z "$braker_dir" ]]; then
+                echo "Error: braker directory not found in '$Working_dir'." >&2
+                echo "Run the module BrakerGenePrediction before this module." >&2
+                exit 1
+            fi
+        fi
     fi
 
     if [[ -z "$data_dir" ]]; then
-        echo "Error: Organized_data directory not found in '$base_dir'." >&2
+        echo "Error: Data directory not found in '$base_dir'." >&2
         exit 1
     fi
-}
 
-organize_working_directory() {
-    local base_dir="$1"
-
-    local data_dir="${base_dir}/Data/"
-
-    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-
-    local cluster_dir="${base_dir}/Clusters/"
-    local working_dir="${base_dir}/Workspace/SyntenyClustering/"
-    local temp_dir="${base_dir}/Workspace/SyntenyClustering/temp/"
-
-    # Create required subdirectories
-    mkdir -p ${working_dir}
-    mkdir -p ${temp_dir}
-    mkdir -p ${cluster_dir}
-
-    # Copy require files
-    cp -r ${gff_dir} ${working_dir}
-    cp -r ${nucleotide_dir} ${working_dir}
-    cp -r ${protein_dir} ${working_dir}
-    if $metadata_flag; then
-        cp "${data_dir}/metadata.csv" ${working_dir}
+    if [[ -f $metadata_file ]]; then
+        metadata_flag=true
     fi
 }
 
-generate_database() {
+process_braker() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/QuickGenePrediction/"
+    local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
+    local temp_dir="${working_dir}/temp/"
+    local output="${working_dir}/braker_filter.gff"
 
-    # Create databases for metaeuk
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating metaeuk database..."
-    metaeuk createdb  $fasta_path ${working_dir}/ContigsDB --dbtype 2 -v 0
+    agat_sp_filter_incomplete_gene_coding_models.pl --gff ${working_dir}/braker/braker.gff3 --fasta ${base_dir}/Sequences.fa -o ${temp_dir}/braker.gff &> /dev/null
 
-    metaeuk createdb $protein_path ${working_dir}/ProteinDB --dbtype 1 -v 0
+    python ${auxiliary_path}/gff_filter.py -i ${temp_dir}/braker.gff -o ${temp_dir}/selectedgenes.txt
 
-    # Run metaeuk gene prediction
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk predictexons..."
-    metaeuk easy-predict ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --max-seqs 500 --use-all-table-starts 1 --start-sens 7.5 -v 0
-
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing redundancy from metaeuk..."
-    metaeuk reduceredundancy ${working_dir}/metaeukResults ${working_dir}/metaeukpred ${working_dir}/metaeukgroups -v 0
-
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating gff file from metaeuk results..."
-    metaeuk unitesetstofasta ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukpred ${working_dir}/metaeukFinal -v 0
-
-    # Modify gff, so Agat can recognized it structure
-    sed -e 's/Target_ID=.*;TCS_//g' metaeukFinal.gff > metaeuk.gff
-
-    # Remove elements with incomplete gene coding models
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing gene models without start and stop codon..."
-    agat_sp_filter_incomplete_gene_coding_models.pl --gff metaeuk.gff --fasta $fasta_path -o ${working_dir}/metaeuk_fix.gff &> /dev/null
-
-    find ./ -name "*.agat.log" -delete
-}
-
-run_braker() {
-    local work_dir="$1"
-
-    local temp_prefix="${work_dir}/temp_"
-    local output="${work_dir}/braker_filter.gff"
-
-    braker --genome <sequences> --softmasking_off --downsampling_lambda=0 --prot_seq <protein_database> --gff3 --fungus --alternatives-from-evidence=false --augustus_args "--genemodel=complete --noInFrameStop=true" --threads=8 --useexisting
-
-    agat_sp_filter_incomplete_gene_coding_models.pl --gff "$gff_path" --fasta "$fasta_path" -o ${temp_prefix}braker.gff &> /dev/null
-
-    python ${auxiliary_path}/gff_filter.py -i ${temp_prefix}braker.gff -o ${temp_prefix}selectedgenes.txt
-
-    agat_sp_filter_feature_from_keep_list.pl --gff ${temp_prefix}braker.gff --keep_list ${temp_prefix}selectedgenes.txt --output ${output} &> /dev/null
-
-    rm ${temp_prefix}*
+    agat_sp_filter_feature_from_keep_list.pl --gff ${temp_dir}/braker.gff --keep_list ${temp_dir}/selectedgenes.txt --output ${output} &> /dev/null
 
 }
 
-run_metaeuk() {
-    local work_dir="$1"
-    local genome="$2"
-    local protein="$3"
+run_captain_metaeuk() {
+    local base_dir="$1"
 
+    local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
+    local temp_dir="${working_dir}/temp/"
+    local hmmer_results="${working_dir}/metaeuk_hmmer.txt"
+    local output="${working_dir}/metaeuk_filter.gff"
 
     # Create databases for metaeuk
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating metaeuk database."
-    metaeuk createdb  $genome ContigsDB --dbtype 2 -v 0
 
-    metaeuk createdb $protein ProteinDB --dbtype 1 -v 0
+    metaeuk createdb $captain_path ${working_dir}/ProteinDB --dbtype 1 -v 0
 
     # Run metaeuk gene prediction
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk predictexons."
-    metaeuk predictexons ContigsDB ProteinDB metaeukResults tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --use-all-table-starts 1 --start-sens 7.5 --orf-start-mode 0 -v 0
+    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --use-all-table-starts 1 --start-sens 7.5 --orf-start-mode 0 -v 0
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing redundancy from metaeuk."
-    metaeuk reduceredundancy metaeukResults metaeukpred metaeukgroups -v 0
+    metaeuk reduceredundancy ${working_dir}/metaeukResults ${working_dir}/metaeukpred ${working_dir}/metaeukgroups -v 0
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating gff file from metaeuk results."
-    metaeuk unitesetstofasta ContigsDB ProteinDB metaeukpred metaeukFinal -v 0
+    metaeuk unitesetstofasta ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukpred ${working_dir}/metaeukFinal -v 0
 
-    # Modify gff that agat recognized
-
-    sed -e 's/Target_ID=.*;TCS_//g' metaeukFinal.gff > metaeuk.gff
+    # Modify gff that agat can recognize
+    sed -e 's/Target_ID=.*;TCS_//g' ${working_dir}/metaeukFinal.gff > ${working_dir}/metaeuk.gff
 
     #Remove elements with incomplete gene coding models
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing gene models without start and stop codon."
-    agat_sp_filter_incomplete_gene_coding_models.pl --gff metaeuk.gff --fasta $genome -o ${work_dir}/metaeuk_fix.gff &> /dev/null
+    agat_sp_filter_incomplete_gene_coding_models.pl --gff ${working_dir}/metaeuk.gff --fasta ${base_dir}/Sequences.fa -o ${working_dir}/metaeuk_fix.gff &> /dev/null
 
-    agat_sp_extract_sequences.pl --gff ${work_dir}/metaeuk_fix.gff --fasta $genome -t exon --merge -p -o ${work_dir}/metaeuk_protein.fa &> /dev/null
+    agat_sp_extract_sequences.pl --gff ${working_dir}/metaeuk_fix.gff --fasta ${base_dir}/Sequences.fa -t exon --merge -p -o ${working_dir}/metaeuk_protein.fa &> /dev/null
 
     sed -i 's/_mRNA//g' ${work_dir}/metaeuk_protein.fa
 
+    hmmsearch --max --noali --domE 10e-6 --domtblout ${hmmer_results} ${hmm_path}/Captain.hmm ${working_dir}/metaeuk_protein.fa &> /dev/null
+
+    grep -v "#" ${hmmer_results} | awk '{print $1}' | sort -u > ${temp_dir}/selected_captains.txt
+
+    agat_sp_filter_feature_from_keep_list.pl --gff ${working_dir}/metaeuk_fix.gff --keep_list ${temp_dir}/selected_captains.txt --output ${output} &> /dev/null
+
     # Cleanup temporary files and intermediate results
-    rm metaeuk*
-    rm -r temp*
-    rm ContigsDB*
-    rm ProteinDB*
-    rm -r ${work_dir}/*_incomplete.gff
-
-}
-
-select_models() {
-    local work_dir="$1"
-    local hmm_profile="$2"
-
-    local protein="${work_dir}/metaeuk_protein.fa"
-    local gff_path="${work_dir}/metaeuk_fix.gff"
-    local hmmer_results="${work_dir}/metaeuk_hmmer.txt"
-    local temp_prefix="${work_dir}/temp_"
-    local out_gff="${work_dir}/metaeuk_selected.gff"
-
-    # Check presence of require files 
-
-    if [[ ! -f "$protein" ]]; then
-        echo "Error: metaeuk extracted protein not found in '$work_dir'." >&2
-        exit 1
-    fi
-
-    if [[ ! -f "$gff_path" ]]; then
-        echo "Error: metaeuk gff results not found in '$work_dir'." >&2
-        exit 1
-    fi
-
-    hmmsearch --max --noali --domE 10e-6 --domtblout ${hmmer_results} ${hmm_profile} ${protein} &> /dev/null
-
-    grep -v "#" ${hmmer_results} | awk '{print $1}' | sort -u > ${temp_prefix}selected_captains.txt
-
-    agat_sp_filter_feature_from_keep_list.pl --gff ${gff_path} --keep_list ${temp_prefix}selected_captains.txt --output ${out_gff} &> /dev/null
-
-    rm ${temp_prefix}*
-    rm ${gff_path}
-    rm ${protein}
-    rm ${hmmer_results}
+    rm ${working_dir}/metaeuk*
+    rm ${working_dir}/ContigsDB*
+    rm ${working_dir}/ProteinDB*
+    rm ${working_dir}/*_incomplete.gff
 }
 
 merge_models() {
-    local work_dir="$1"
-    local braker_gff="$2" 
-    local temp_prefix="${work_dir}/temp_"
-    local gff_path="${work_dir}/metaeuk_selected.gff"
-    local out_gff="${work_dir}/Final_model.gff"
 
+    local base_dir="$1"
 
-    if [[ ! -f "$gff_path" ]]; then
-        echo "Error: metaeuk gff with selected results not found in '$work_dir'." >&2
+    local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
+    local braker_results="${working_dir}/braker_filter.gff"
+    local metaeuk_results="${working_dir}/metaeuk_filter.gff"
+    local temp_dir="${working_dir}/temp/"
+    local out_gff="${working_dir}/Final_model.gff"
+
+    if [[ ! -f "$braker_results" || ! -f "$metaeuk_results" ]]; then
+        echo "Error: result from one of the gene predictors cannot be found." >&2
         exit 1
     fi
 
-    agat_sp_keep_longest_isoform.pl -g ${braker_gff} -o ${temp_prefix}LongIso.gff &> /dev/null
+    agat_sp_keep_longest_isoform.pl -g ${braker_results} -o ${temp_dir}/LongIso.gff &> /dev/null
 
-    agat_sp_merge_annotations.pl --gff ${temp_prefix}LongIso.gff --gff ${gff_path} --out ${temp_prefix}merge.gff &> /dev/null
+    agat_sp_merge_annotations.pl --gff ${temp_dir}/LongIso.gff --gff ${metaeuk_results} --out ${temp_dir}/merge.gff &> /dev/null
 
-    python3 ${auxiliary_path}/merge.py ${temp_prefix}merge.gff ${temp_prefix}modelsKeep.txt
+    python3 ${auxiliary_path}/merge.py ${temp_dir}/merge.gff ${temp_dir}/modelsKeep.txt
 
-    agat_sp_filter_feature_from_keep_list.pl --gff ${temp_prefix}merge.gff --keep_list ${temp_prefix}modelsKeep.txt --output ${out_gff} &> /dev/null
+    agat_sp_filter_feature_from_keep_list.pl --gff ${temp_dir}/merge.gff --keep_list ${temp_dir}/modelsKeep.txt --output ${out_gff} &> /dev/null
+}
 
-    rm ${temp_prefix}*
+gene_stats() {
+    local base_dir="$1"
 
+    local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
+    local temp_directory="${base_dir}/Workspace/RobustGenePrediction/temp/"
+
+    awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
+    do 
+        echo -e ${line}"\t"$(grep ${line} ${working_dir}/Final_model.gff | grep -c "gene")"\t"$(grep ${line} ${working_dir}/Final_model.gff | grep "gene" | awk '{ sum  += $5 - $4 } END { print sum / NR }') >> ${temp_directory}stats_gff3.txt 
+    done
+
+    awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
+    do 
+        grep -E "${line}|gene" ${working_dir}/Final_model.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = prev_col2 - $4; if (diff > 0) total_sum += diff; prev_col2 = $5} END {print total_sum / (NR - 1)}' >> ${temp_directory}intergenic.txt
+    done
+
+    echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${base_dir}/Gene_stats.txt
+
+    paste ${temp_directory}stats_gff3.txt ${temp_directory}intergenic.txt >> ${base_dir}/Gene_stats.txt
+}
+
+organize_files() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/QuickGenePrediction/"
+    local Output_dir="${base_dir}/Data/"
+    local temp_directory="${base_dir}/Workspace/QuickGenePrediction/temp/"
+    if $metadata_flag; then
+        local metadata_file="${base_dir}/metadata_files/metadata.csv"
+        local updated_metadata="${Output_dir}metadata.csv"
+    fi
+
+    mkdir -p ${temp_directory}multiple ${temp_directory}gff/ ${temp_directory}protein/ ${temp_directory}exon/ ${Output_dir}/Protein/ ${Output_dir}/Gff/ ${Output_dir}/Nucleotide/ ${Output_dir}/Exon/
+
+    # Divide the gff result for each element
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff for individual elements."
+    awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
+    do 
+        head -n1 ${working_dir}/metaeuk_fix.gff > ${temp_directory}multiple/${line}.gff
+        grep $line ${working_dir}/metaeuk_fix.gff >> ${temp_directory}multiple/${line}.gff
+    done
+
+    awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
+    do 
+        agat_sp_manage_IDs.pl --gff ${temp_directory}multiple/${line}.gff --prefix ${line}. -o ${temp_directory}gff/${line}.gff &> /dev/null
+    done
+
+    find ./ -name "*.agat.log" -delete
+
+    # Filter gff files to select elements above a threshold
+    if [[ "${mode}" == "All" ]]
+    then
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering elements based on a minimum of '$minimum_gene_content' predicted genes and storing related files..."
+        awk -v min="$minimum_gene_content" 'NR>1{if($2>=min){print $1}}' ${base_dir}/Gene_stats.txt | sed $'s/[^[:print:]\t]//g' | while read line
+        do
+            # Filtering gff files
+            cp ${temp_directory}gff/${line}.gff ${Output_dir}/Gff/
+        
+            # Dividing nucleotide of elements
+            echo $line > ${temp_directory}temp_element.txt
+            seqkit grep -n -f temp_element.txt $output_fasta -o ${out_directory}/Filter_nucleotide/${line}.fasta &> /dev/null
+
+            # Creating Exome
+            agat_sp_extract_sequences.pl --gff ${Output_dir}/Gff/${line}.gff --fasta $fasta_path -t exon --merge -o ${temp_directory}exon/${line}.fa &> /dev/null
+            awk '{if($2){$1=">"$2} print $1}' ${temp_prefix}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
+
+            # Creating proteome
+            seqkit translate ${Output_dir}/Exon/${line}.fa --trim > ${Output_dir}/Protein/${line}.fa
+
+            # Updating metadata
+            if $metadata_flag; then
+                grep -w $line $metadata_file > $updated_metadata
+            fi
+        done
+        
+        local element_number=$(ls ${Output_dir}/Gff/ | wc -l)
+
+        echo -e "  Elements that pass the filter stage: ${element_number}"
+    elif [[ "${mode}" == "Cluster" ]]
+    then
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Storing related files for each element gene prediction..."
+        awk 'NR>1{print $1}' ${base_dir}/Gene_stats.txt | sed $'s/[^[:print:]\t]//g' | while read line
+        do
+            # Filtering gff files
+            cp ${temp_directory}gff/${line}.gff ${Output_dir}/Gff/
+        
+            # Dividing nucleotide of elements
+            echo $line > ${temp_directory}temp_element.txt
+            seqkit grep -n -f temp_element.txt $output_fasta -o ${out_directory}/Filter_nucleotide/${line}.fasta &> /dev/null
+
+            # Creating Exome
+            agat_sp_extract_sequences.pl --gff ${Output_dir}/Gff/${line}.gff --fasta $fasta_path -t exon --merge -o ${temp_directory}exon/${line}.fa &> /dev/null
+            awk '{if($2){$1=">"$2} print $1}' ${temp_prefix}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
+
+            # Creating proteome
+            seqkit translate ${Output_dir}/Exon/${line}.fa --trim > ${Output_dir}/Protein/${line}.fa
+        done
+    fi
+
+    rm ${temp_directory}temp_element.txt
 }
 
 # ==============================================================================
-# Run metaeuk gene prediction
+# Start the process
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running metaeuk prediction only with captain proteins."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running RobustGenePrediction Module with the following parameters:"
+echo "  Protein database: ${protein_path}"
+echo -e "  Mode: ${mode}\n"
 
-run_metaeuk "${out_directory}" "${fasta_path}" "${captain_path}"
+if [[ "${mode}" == "All" ]]
+then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
+    check_directory_structure "$Working_directory"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+    # ==============================================================================
+    # Creating protein database for braker run
+    # ==============================================================================
 
-# ==============================================================================
-# Select gene models
-# ==============================================================================
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running metaeuk prediction to generate specialized protein database..."
+    generate_database "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Selecting gene models based on hmm profile."
+    # ==============================================================================
+    # Running braker
+    # ==============================================================================
 
-select_models "${out_directory}" "${hmm_path}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running braker gene prediction.."
+    run_braker "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+    # ==============================================================================
+    # Running metaeuk for captain identification
+    # ==============================================================================
 
-# ==============================================================================
-# Merge and generate final gene model
-# ==============================================================================
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running metaeuk for specialized captain prediction.."
+    run_captain_metaeuk "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Filtering braker results."
+    # ==============================================================================
+    # merging models to select a putative captain
+    # ==============================================================================
 
-filter_braker "${out_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: merging Braker and metaeuk results.."
+    merge_models "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+    # ==============================================================================
+    # Generate gene prediction statistics
+    # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Merging Braker results and metaeuk captain results."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Creating gene statistics file.."
+    gene_stats "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
-merge_models "${out_directory}" "${out_directory}/braker_filter.gff"
+    # ==============================================================================
+    # Dividing and organizing results
+    # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Organizing files.."
+    organize_files "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished. Proceeding."
 
-# ==============================================================================
-# Generate gene prediction statistics
-# ==============================================================================
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${out_directory}."
 
-gff_path="${out_directory}/Final_model.gff"
+elif [[ "${mode}" == "Cluster" ]]
+then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode. Analyzing clusters with a minimum size of ${minimum_size}."
+    awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | | while read ClusterId
+    do
+        internal_dir="${Working_directory}/Clusters/${ClusterId}/"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
+        check_directory_structure "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
-if [[ ! -f "$gff_path" ]]; then
-    echo "Error: File $gff_path with the results of the merging process not found." >&2
-    exit 1
+        # ==============================================================================
+        # Creating protein database for braker run
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running metaeuk prediction to generate specialized protein database..."
+        generate_database "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+
+        # ==============================================================================
+        # Running braker
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running braker gene prediction.."
+        run_braker "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+        # ==============================================================================
+        # Running metaeuk for captain identification
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running metaeuk for specialized captain prediction.."
+        run_captain_metaeuk "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+
+        # ==============================================================================
+        # merging models to select a putative captain
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: merging Braker and metaeuk results.."
+        merge_models "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+
+        # ==============================================================================
+        # Generate gene prediction statistics
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Creating gene statistics file.."
+        gene_stats "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
+
+        # ==============================================================================
+        # Dividing and organizing results
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Organizing files.."
+        organize_files "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished. Proceeding."
+    done
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 fi
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Generating statistics of gene prediction."
-
-# Generate statistics
-
-mkdir temp_directory
-
-awk 'NR>1{print $1}' $gff_path | sort -u | while read line
-do 
-  echo -e ${line}"\t"$(grep ${line} ${gff_path} | grep -c "gene")"\t"$(grep ${line} ${gff_path} | grep "gene" | awk '{ sum  += $5 - $4 } END { print sum / NR }') >> temp_directory/stats_gff3.txt 
-done
-
-awk 'NR>1{print $1}' ${gff_path} | sort -u | while read line
-do 
-  grep -E "${line}|gene" ${gff_path} | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = prev_col2 - $4; if (diff > 0) total_sum += diff; prev_col2 = $5} END {print total_sum / (NR - 1)}' >> temp_directory/intergenic.txt
-done
-
-echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${out_directory}/gene_stats.txt
-
-paste temp_directory/stats_gff3.txt temp_directory/intergenic.txt >> ${out_directory}/gene_stats.txt
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
-
-# ==============================================================================
-# Dividing and organizing results
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Organizing results."
-
-# Create directories
-mkdir temp_directory/multiple ${out_directory}/updated_gff/ ${out_directory}/updated_protein/ ${out_directory}/updated_exon/ ${out_directory}/updated_nucleotide/ ${out_directory}/temp_gff/ ${out_directory}/temp_exon/ ${out_directory}/temp_protein/
-
-# Divide the gff result for each element
-echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff for individual elements."
-awk 'NR>1{print $1}' ${gff_path} | sort -u | while read line
-do 
-  head -n1 ${gff_path} > temp_directory/multiple/${line}.gff
-  grep -w $line ${gff_path} >> temp_directory/multiple/${line}.gff
-done
-
-awk 'NR>1{print $1}' ${gff_path} | sort -u | while read line
-do 
-  agat_sp_keep_longest_isoform.pl --gff temp_directory/multiple/${line}.gff -o ${out_directory}/temp_gff/${line}.gff &> /dev/null
-done
-
-awk 'NR>1{print $1}' ${gff_path} | sort -u | while read line
-do 
-  agat_sp_manage_IDs.pl --gff ${out_directory}/temp_gff/${line}.gff --prefix ${line}. -o ${out_directory}/updated_gff/${line}.gff &> /dev/null
-done
-
-# Cleanup temporary directory
-rm -r temp*
-find ./ -name "*.agat.log" -delete
-
-# Generate proteome fasta for each element
-echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generate proteome and exome fasta for each element."
-ls ${out_directory}/updated_gff/ | awk -F '/' '{print $NF}' | sed 's/\.gff//g' | while read line
-do 
-  agat_sp_extract_sequences.pl --gff ${out_directory}/updated_gff/${line}.gff --fasta $fasta_path -t exon --merge -p -o ${out_directory}/temp_protein/${line}.fa &> /dev/null
-  agat_sp_extract_sequences.pl --gff ${out_directory}/updated_gff/${line}.gff --fasta $fasta_path -t exon --merge -o ${out_directory}/temp_exon/${line}.fa &> /dev/null
-  awk '{if($2){$1=">"$2} print $1}' ${out_directory}/temp_protein/${line}.fa | sed 's/gene=//g' > ${out_directory}/updated_protein/${line}.fa
-  awk '{if($2){$1=">"$2} print $1}' ${out_directory}/temp_exon/${line}.fa | sed 's/gene=//g' > ${out_directory}/updated_exon/${line}.fa
-done
-
-# Generate nucleotide individual files of filter elements
-echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing nucleotide fasta for individual elements."
-awk -v min="$minimum_gene_content" 'NR>1{if($2>=min){print $1}}' ${out_directory}/gene_stats.txt | sed $'s/[^[:print:]\t]//g' | while read line
-do
-  echo $line > ${out_directory}/temp_element.txt
-  seqkit grep -n -f ${out_directory}/temp_element.txt $fasta_path -o ${out_directory}/updated_nucleotide/${line}.fa &> /dev/null
-done
-
-find ./ -name "*.agat.log" -delete
-
-# Cleanup temporary directories and files in output path
-rm -r ${out_directory}/temp*
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished."
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${out_directory}."
 
