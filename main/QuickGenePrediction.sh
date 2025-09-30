@@ -190,6 +190,7 @@ organize_files() {
     local working_dir="${base_dir}/Workspace/QuickGenePrediction/"
     local Output_dir="${base_dir}/Data/"
     local temp_directory="${base_dir}/Workspace/QuickGenePrediction/temp/"
+    local fasta_sequence=""
     if $metadata_flag; then
         local metadata_file="${base_dir}/metadata_files/metadata.csv"
         local updated_metadata="${Output_dir}metadata.csv"
@@ -220,25 +221,29 @@ organize_files() {
         cp ${temp_directory}gff/${line}.gff ${Output_dir}/Gff/
         
         # Dividing nucleotide of elements
-        echo $line > ${temp_directory}temp_element.txt
-        seqkit grep -n -f temp_element.txt $output_fasta -o ${out_directory}/Filter_nucleotide/${line}.fasta &> /dev/null
+        echo $line > ${temp_directory}/temp_element.txt
+        seqkit grep -n -f ${temp_directory}/temp_element.txt $fasta_path -o ${Output_dir}/Nucleotide/${line}.fa &> /dev/null
 
         # Creating Exome
         agat_sp_extract_sequences.pl --gff ${Output_dir}/Gff/${line}.gff --fasta $fasta_path -t exon --merge -o ${temp_directory}exon/${line}.fa &> /dev/null
-        awk '{if($2){$1=">"$2} print $1}' ${temp_prefix}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
+        awk '{if($2){$1=">"$2} print $1}' ${temp_directory}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
 
         # Creating proteome
         seqkit translate ${Output_dir}/Exon/${line}.fa --trim > ${Output_dir}/Protein/${line}.fa
 
         # Updating metadata
         if $metadata_flag; then
-            grep -w $line $metadata_file > $updated_metadata
+            grep -w $line $metadata_file >> $updated_metadata
         fi
+
+        find ./ -name "*.agat.log" -delete
     done
 
     local element_number=$(ls ${Output_dir}/Gff/ | wc -l)
 
     echo -e "  Elements that pass the filter stage: ${element_number}"
+
+    rm ${base_dir}/*index*
 
     rm ${temp_directory}temp_element.txt
 }

@@ -23,9 +23,9 @@ help_flag=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
 	    -f|--fasta) 
-	    shift
-	    fasta_path="$1"
-	    ;;
+	        shift
+	        fasta_path="$1"
+	        ;;
          -m|--metadata)
             shift
             metadata_path="$1"
@@ -217,8 +217,10 @@ sed 's/\t/;/g' temp_association.tsv | sed '1s/^/new_header;original_header\n/' >
 if $metadata; then
     metadata_csv="${out_directory}/metadata_files/metadata.csv"
     awk 'BEGIN{FS=OFS=";"}{if($2=="")$2="NA"; else if($3=="")$3="NA"; print}' $metadata_path > temp_metadata.csv
-    mv temp_metadata.csv $metadata_path
-    join -1 2 -2 1 -t ';' <( sort -t ";" -k2,2 $association_csv) <(sort -t ";" -k1,1 $metadata_path) | awk 'BEGIN {FS=OFS=";"} {for (i=3; i<=5; i++) if ($i == "" || $i == " ") $i = "NA"; print}' > $metadata_csv
+    #mv  $metadata_path
+    join -1 2 -2 1 -t ';' <( sort -t ";" -k2,2 $association_csv) <(sort -t ";" -k1,1 temp_metadata.csv) > $metadata_csv
+    #awk 'BEGIN{FS=OFS=";"}{print $1 OFS $2 OFS $3}'
+    #| awk 'BEGIN {FS=OFS=";"} {for (i=3; i<=5; i++) if ($i == "" || $i == " ") $i = "NA"; print}'
 else
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Skipping metadata file update..."
 fi

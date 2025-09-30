@@ -7,11 +7,12 @@ show_main_help() {
   echo "Available modules:"
   echo "  Initialize   - Gather the input and organize the working directory for run this toolkit."
   echo "  QuickGenePrediction    - Performs a quick gene prediction with metaeuk."
-  echo "  SyntenyClustering    - Performs a quick gene prediction with metaeuk."
-  echo "  BrakerGenePrediction    - Performs a quick gene prediction with metaeuk."
-  echo "  RobustGenePrediction    - Performs a quick gene prediction with metaeuk."
-  echo "  CaptainIdentification    - Performs a quick gene prediction with metaeuk."
-  echo "  ClusterProfiling    - Performs a quick gene prediction with metaeuk."
+  echo "  SyntenyClustering    - Perform the clustering stage using syntenet R package."
+  echo "  BrakerGenePrediction    - Performs gene prediciton with Braker."
+  echo "  RobustGenePrediction    - Performs a metaeuk captain prediction and merge with the braker gene prediction after a filtering stage"
+  echo "  CaptainIdentification    - Performs the identification and phylogenetic analysis of Captains of the elements."
+  echo "  ClusterProfiling    - Performs a profiling and visualization of each cluster."
+  echo "  MovementEvents    - Try to identify cargo movement events between elements."
   echo
   echo "Use '$0 <module> -help' for help on a specific module."
 }

@@ -418,6 +418,9 @@ echo -e "  Mode: ${mode}\n"
 
 if [[ "${mode}" == "All" ]]
 then
+    # ==============================================================================
+    # Checking Working directory structure
+    # ==============================================================================
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
     check_directory_structure "$Working_directory"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."

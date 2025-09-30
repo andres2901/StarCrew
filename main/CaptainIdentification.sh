@@ -27,9 +27,11 @@ function print_help() {
    echo "Syntax: $0 [ -h ] -w <working_directory> [ -c <confidence_level> -t <num_threads> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-l, --length: minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 500)."
+   echo "-l, --length: Minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 500)."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence [range: 1 - 3] (Default: 2)"
-   echo "-t, --threads: Tnumber of threads to use for alignment and phylogenetic tree inference (Default: 1)."
+   echo "-m, --mode: Define the data that will be use for the captain identification and phylogeny. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
+   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 5) [range: 5 - 10]"
+   echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
    echo "-help: Display this help message."
 }
 
@@ -40,6 +42,8 @@ hmmprofile_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 level="2"
 length="500"
+mode="Cluster"
+minimum_size="5"
 threads="1"
 help_flag=false
 
@@ -60,6 +64,14 @@ while [[ $# -gt 0 ]]; do
         -l|--length)
             shift
             length="$1"
+            ;;
+        -m|--mode)
+            shift
+            mode="$1"
+            ;;
+        -ms|--minSize)
+            shift
+            minimum_size="$1"
             ;;
         -t|--threads)
             shift
@@ -159,6 +171,26 @@ else
     exit 1
 fi
 
+# Check if mode parameter is correct
+if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
+    echo "Error: provided mode '$mode' is not accepted."
+    print_help
+    exit 1
+fi
+
+# Check minimum size is within allowed range
+if [[ "$minimum_size" =~ ^[0-9]+$ ]]; then
+    if (( $minimum_size < 5 || $minimum_size > 10 )); then
+        echo "Error: '$minimum_size' minimum size is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$minimum_size' is not a positive integer."
+    print_help
+    exit 1
+fi
+
 # Check thread parameter
 if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     echo "Error: '$threads' is not a positive integer."
@@ -203,30 +235,44 @@ fi
 
 check_directory_structure() {
     local base_dir="$1"
+
+    # Locate required subdirectories and file
+    local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+
+    if [[ -z "$workspace_dir" ]]; then
+        echo "Error: Workspace directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+
+    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+
+    if [[ -z "$data_dir" ]]; then
+        echo "Error: Data directory not found in '$base_dir'." >&2
+        exit 1
+    fi
     
-    # Step 1: Locate required subdirectories and file
-    local gff_dir=$(find "$base_dir" -maxdepth 1 -type d -name "*_gff" 2>/dev/null)
-    local protein_dir=$(find "$base_dir" -maxdepth 1 -type d -name "*_protein" 2>/dev/null)
-    local nucleotide_dir=$(find "$base_dir" -maxdepth 1 -type d -name "*_nucleotide" 2>/dev/null)
-    local exon_dir=$(find "$base_dir" -maxdepth 1 -type d -name "*_exon" 2>/dev/null)
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     if [[ -z "$gff_dir" ]]; then
-        echo "Error: GFF subdirectory not found in '$base_dir'." >&2
+        echo "Error: GFF subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
 
     if [[ -z "$protein_dir" ]]; then
-        echo "Error: Protein subdirectory not found in '$base_dir'." >&2
+        echo "Error: Protein subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
 
     if [[ -z "$nucleotide_dir" ]]; then
-        echo "Error: nucleotide subdirectory not found in '$base_dir'." >&2
+        echo "Error: nucleotide subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
 
     if [[ -z "$exon_dir" ]]; then
-        echo "Error: exon subdirectory not found in '$base_dir'." >&2
+        echo "Error: exon subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
     
@@ -279,15 +325,40 @@ check_directory_structure() {
     rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"
 }
 
+organize_working_directory() {
+    local base_dir="$1"
+
+    local data_dir="${base_dir}/Data/"
+
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+
+    local working_dir="${base_dir}/Workspace/CaptainIdentification/"
+    local temp_dir="${base_dir}/Workspace/CaptainIdentification/temp/"
+
+    # Create required subdirectories
+    mkdir -p ${working_dir}
+    mkdir -p ${temp_dir}
+
+    # Copy require files
+    cp -r ${gff_dir} ${working_dir}
+    cp -r ${nucleotide_dir} ${working_dir}
+    cp -r ${protein_dir} ${working_dir}
+    cp -r ${exon_dir} ${working_dir}
+}
+
 process_hmmsearch() {
-    local working_dir="$1"
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/CaptainIdentification/"
 
     # Locate the protein directory based on the pattern *_protein
-    local protein_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_protein" 2>/dev/null)
+    local protein_path=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     
     # Define path for the output directory
-    local NAME=$(basename "$working_dir")
-    local hmmer_results_prefix="${working_dir}/${NAME}_Hmmsearch"
+    local hmmer_results_prefix="${working_dir}/Hmmsearch_"
     local hmmer_results_CAT="${hmmer_results_prefix}CAT"
     local hmmer_results_DUF="${hmmer_results_prefix}DUF"
     local hmmer_results_CAPTAIN="${hmmer_results_prefix}Captain"
@@ -324,14 +395,16 @@ process_hmmsearch() {
 }
 
 Captain_identification() {
-    local working_dir="$1"
+    local base_dir="$1"
 
-    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_gff" 2>/dev/null)
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_nucleotide" 2>/dev/null)
-    local CAPTAIN_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_HmmsearchCaptain" 2>/dev/null)
-    local CAT_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_HmmsearchCAT" 2>/dev/null)
-    local DUF_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_HmmsearchDUF" 2>/dev/null)
-    local results_path="${working_dir}/Captains.txt"
+    local working_dir="${base_dir}/Workspace/CaptainIdentification/"
+
+    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local CAPTAIN_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_Captain" 2>/dev/null)
+    local CAT_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_CAT" 2>/dev/null)
+    local DUF_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_DUF" 2>/dev/null)
+    local results_path="${working_dir}/CaptainsID.txt"
     local empty_elements="${working_dir}/EmptyElements.txt"
 
     python ${auxiliary_path}/hmmer_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
@@ -339,18 +412,20 @@ Captain_identification() {
 }
 
 Alignment() {
-    local working_dir="$1"
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/CaptainIdentification/"
 
     # Locate required subdirectories and define output path
-    local protein_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_protein" 2>/dev/null)
-    local nucleotide_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_nucleotide" 2>/dev/null)
-    local exon_path=$(find "$working_dir" -maxdepth 1 -type d -name "*_exon" 2>/dev/null)
-    local captain_file="$working_dir/Captains.txt"
-    local temp_prefix="${working_dir}/temp_"
+    local nucleotide_path=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_path=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local captain_file="$working_dir/CaptainsID.txt"
+    
     local empty_elements="${working_dir}/EmptyElements.txt"
     local pseudoExons="${working_dir}/Captains_pseudo.fa"
     local Remove_elements="${working_dir}/Remove_elements.txt"
- 
+    local temp_dir="${working_dir}/temp/"
+
 
     if [ ! -s "${captain_file}" ]; then
         echo "ERROR: there is no captain identify in this set of data"
@@ -358,24 +433,23 @@ Alignment() {
     fi
 
     # Select captains that were correctly identify 
-    cat ${exon_path}/*.fa > ${temp_prefix}exon.fa
-    awk '{print $1}' ${captain_file} > ${temp_prefix}CaptainIDs.txt
-    seqkit grep --quiet -f ${temp_prefix}CaptainIDs.txt ${temp_prefix}exon.fa -o ${working_dir}/Captains_exon.fa
+    cat ${exon_path}/*.fa > ${temp_dir}/exon.fa
+    seqkit grep --quiet -f ${captain_file} ${temp_dir}/exon.fa -o ${working_dir}/Captains_exon.fa
 
     if [ -s "${empty_elements}" ]; then
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] \033[01;31mWARNING\033[m: Not all elements have an identifible captain. Trying to identify a region possibly associated to a captain pseudogene..."
 
         #Search for possible pseudogenes in the empty elements
-        mkdir -p ${temp_prefix}blast
+        mkdir -p ${temp_dir}/blast
         cat ${empty_elements} | while read line 
         do 
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking for captain pseudogene in element '${line}'"
 
-            seqkit subseq --quiet -r 1:20000 ${nucleotide_path}/${line}.fa > ${temp_prefix}blast/${line}_start.fa
+            seqkit subseq --quiet -r 1:20000 ${nucleotide_path}/${line}.fa > ${temp_dir}/blast/${line}_start.fa
 
-            makeblastdb -in ${temp_prefix}blast/${line}_start.fa -dbtype nucl -out ${temp_prefix}blast/${line}_start >/dev/null
+            makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null
 
-            blastn -query ${working_dir}/Captains_exon.fa -db ${temp_prefix}blast/${line}_start -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+            blastn -query ${working_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
             BEGIN {
             last_start = -1;
             last_end = -1;
@@ -401,16 +475,16 @@ Alignment() {
                 if (last_start != -1) {
                     print $1 "\t" last_start "\t" last_end;
                 }
-            }' > ${temp_prefix}${line}.bed
+            }' > ${temp_dir}/${line}_start.bed
 
-            local exonNumber=$(wc -l ${temp_prefix}${line}.bed | awk '{print $1}')
+            local exonNumber=$(wc -l ${temp_dir}/${line}_start.bed | awk '{print $1}')
 
             if [[ ${exonNumber} -lt 3 ]]; then
 
-                seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_prefix}blast/${line}_end.fa
-                makeblastdb -in ${temp_prefix}blast/${line}_end.fa -dbtype nucl -out ${temp_prefix}blast/${line}_end >/dev/null
+                seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
+                makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
 
-                blastn -query ${working_dir}/Captains_exon.fa -db ${temp_prefix}blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+                blastn -query ${working_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
                 BEGIN {
                 last_start = -1;
                 last_end = -1;
@@ -436,27 +510,20 @@ Alignment() {
                 if (last_start != -1) {
                     print $1 "\t" last_start "\t" last_end;
                 }
-                }' > ${temp_prefix}${line}-2.bed
+                }' > ${temp_dir}/${line}_end.bed
 
-                local exonNumber=$(wc -l ${temp_prefix}${line}-2.bed | awk '{print $1}')
+                local exonNumber=$(wc -l ${temp_dir}/${line}_end.bed | awk '{print $1}')
 
                 if [[ ${exonNumber} -ge 3 ]]; then
-                    seqkit subseq --quiet --bed ${temp_prefix}${line}-2.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
+                    seqkit subseq --quiet --bed ${temp_dir}/${line}_end.bed ${temp_dir}/blast/${line}_end.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
                 else 
                     echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."
                     echo "${line}" >> ${Remove_elements}
                 fi
             else
-                local exonNumber=$(wc -l ${temp_prefix}${line}.bed | awk '{print $1}')
 
-                if [[ ${exonNumber} -ge 3 ]]; then
-                    seqkit subseq --quiet --bed ${temp_prefix}${line}.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
-                else 
-                    echo "${exonNumber}"
-                    echo -e "  \033[01;31mWARNING\033[m: Element '${line}' do not have an identifiable confident pseudogene. It will be removed from the final alignment."
-                    echo "${line}" >> ${Remove_elements}
+                seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
 
-                fi
             fi 
         done
 
@@ -482,15 +549,17 @@ Alignment() {
 
     awk -F '.' '{print $1}' ${working_dir}/Captain_proteins_aligned.fa.clipkit > ${working_dir}/Captain_proteins_aligned_trimmed.fa
 
-    rm -r ${temp_prefix}*
     rm ${working_dir}/Captain_proteins_aligned.fa.clipkit
 }
 
 Tree_inference() {
-    local working_dir="$1"
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/CaptainIdentification/"
+
     local protein_file="${working_dir}/Captain_proteins_aligned_trimmed.fa"
     local outdir="${working_dir}/captainPhylogeny"
-    local temp_prefix="${working_dir}/temp_"
+    local temp_dir="${working_dir}/temp/"
 
     # --- Error Handling ---
     if [[ ! -f "$protein_file" ]]; then
@@ -498,38 +567,37 @@ Tree_inference() {
         exit 1
     fi
 
-    seqkit rmdup --quiet -s ${protein_file} -o ${temp_prefix}unique &> /dev/null
+    seqkit rmdup --quiet -s ${protein_file} -o ${temp_dir}/unique &> /dev/null
 
-    local unique_sequences=$(grep -c ">" ${temp_prefix}unique)
+    local unique_sequences=$(grep -c ">" ${temp_dir}/unique)
 
     if [[ "$unique_sequences" -ge 4 ]]; then
         mkdir -p ${outdir}
         iqtree3 -T ${threads} -m MFP --prefix ${outdir}/Captain_tree -B 1000 --alrt 1000 -s ${protein_file} -quiet --polytomy
 
-        gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_prefix}captainlength.nw
-        gotree collapse support -s 80 -i ${temp_prefix}captainlength.nw -o ${temp_prefix}captainsupport.nw
+        gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_dir}/captainlength.nw
+        gotree collapse support -s 80 -i ${temp_dir}/captainlength.nw -o ${temp_dir}/captainsupport.nw
 
-        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_prefix}captainsupport.nw
-        gotree collapse support -s 95 -i ${temp_prefix}captainsupport.nw -o ${temp_prefix}captainsupport2.nw
-        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_prefix}captainsupport2.nw
-        mv ${temp_prefix}captainsupport2.nw ${temp_prefix}captainsupport.nw
+        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_dir}/captainsupport.nw
+        gotree collapse support -s 95 -i ${temp_dir}/captainsupport.nw -o ${temp_dir}/captainsupport2.nw
+        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_dir}/captainsupport2.nw
+        mv ${temp_dir}/captainsupport2.nw ${temp_dir}/captainsupport.nw
 
-        gotree reroot midpoint -i ${temp_prefix}captainsupport.nw -o ${working_dir}/CaptainPhylogeny.nw
+        gotree reroot midpoint -i ${temp_dir}/captainsupport.nw -o ${base_dir}/CaptainPhylogeny.nw
     else
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Skipping tree inference due to low number of unique captain sequences. There's only '$unique_sequences' unique sequence(s) in the current dataset"
     fi
-
-    rm ${temp_prefix}*
 }
 
 Removed_empty_elements() {
+    local base_dir="$1"
 
-    local working_dir="$1"
+    local working_dir="${base_dir}/Workspace/CaptainIdentification/"
 
-    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_gff" 2>/dev/null)
-    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_protein" 2>/dev/null)
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_nucleotide" 2>/dev/null)
-    local exon_dir=$(find "$working_dir" -maxdepth 1 -type d -name "*_exon" 2>/dev/null)
+    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     local Remove_elements="${working_dir}/Remove_elements.txt"
     local output="${working_dir}/Remove_elements/"
@@ -547,6 +615,79 @@ Removed_empty_elements() {
     done
 }
 
+# ==============================================================================
+# Start the process
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running Captain identification Module with the following parameters:"
+echo "  minimum length: ${length}"
+echo "  minimum confidence level: ${level}"
+echo -e "  Mode: ${mode}\n"
+
+if [[ "${mode}" == "All" ]]
+then
+    # ==============================================================================
+    # Checking Working directory structure
+    # ==============================================================================
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${workingDirectory_path}' structure."
+    check_directory_structure "${workingDirectory_path}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${workingDirectory_path}' is valid. Proceeding."
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
+
+    organize_working_directory "${Working_directory}"
+
+    # ==============================================================================
+    # Preprocessing data
+    # ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+
+process_hmmsearch "${workingDirectory_path}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+# ==============================================================================
+# Identify captains
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
+
+Captain_identification "${workingDirectory_path}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+
+# ==============================================================================
+# Alignment
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
+
+Alignment "${workingDirectory_path}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+
+
+# ==============================================================================
+# Alignment
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
+
+Tree_inference "${workingDirectory_path}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
+
+elif [[ "${mode}" == "Cluster" ]]
+then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode. Analyzing clusters with a minimum size of ${minimum_size}."
+    awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | | while read ClusterId
+    do
+        internal_dir="${Working_directory}/Clusters/${ClusterId}/"
+
+    done
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyzed"
+fi
 # ==============================================================================
 # Checking Working directory structure
 # ==============================================================================

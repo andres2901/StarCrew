@@ -233,28 +233,49 @@ check_directory_structure() {
     local base_dir="$1"
     
     # Step 1: Locate required subdirectories and file
-    local gff_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local protein_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local nucleotide_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local exon_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+
+    if [[ -z "$workspace_dir" ]]; then
+        echo "Error: Workspace directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+
+    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+
+    if [[ -z "$data_dir" ]]; then
+        echo "Error: Data directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+
+    local metadata_file="${data_dir}/metadata.csv"
+
+    if [[ -f "$metadata_file" ]]; then
+        metadata_flag=true
+        exit 1
+    fi
 
     if [[ -z "$gff_dir" ]]; then
-        echo "Error: GFF subdirectory not found in '$base_dir'." >&2
+        echo "Error: GFF subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
 
     if [[ -z "$protein_dir" ]]; then
-        echo "Error: Protein subdirectory not found in '$base_dir'." >&2
+        echo "Error: Protein subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
 
     if [[ -z "$nucleotide_dir" ]]; then
-        echo "Error: nucleotide subdirectory not found in '$base_dir'." >&2
+        echo "Error: nucleotide subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
 
     if [[ -z "$exon_dir" ]]; then
-        echo "Error: exon subdirectory not found in '$base_dir'." >&2
+        echo "Error: exon subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
     
@@ -315,6 +336,7 @@ organize_working_directory() {
     local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
     local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     local cluster_dir="${base_dir}/Clusters/"
     local working_dir="${base_dir}/Workspace/SyntenyClustering/"
@@ -329,6 +351,7 @@ organize_working_directory() {
     cp -r ${gff_dir} ${working_dir}
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
+    cp -r ${exon_dir} ${working_dir}
     if $metadata_flag; then
         cp "${data_dir}/metadata.csv" ${working_dir}
     fi
@@ -650,10 +673,10 @@ process_cluster_file() {
     local cluster_dir="${base_dir}/Clusters/"
     local working_dir="${base_dir}/Workspace/SyntenyClustering/"
     
-    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local exon_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     local cluster_path="${cluster_dir}/main_clusters.txt"
 
@@ -732,65 +755,64 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_direc
 check_directory_structure "${Working_directory}"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organize workspace"
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
 
-organize_working_directory ""
-
+organize_working_directory "${Working_directory}"
 
 # ==============================================================================
 # Preprocessing data
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Preprocessing data for Diamond."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Preprocessing data for Diamond."
 
-Rscript ${auxiliary_path}/syntenetPreprocess.R "${Working_directory}"
+Rscript ${auxiliary_path}/syntenetPreprocess.R "${Working_directory}/Workspace/SyntenyClustering/"
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Preprocessing finished. Proceeding."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
 # ==============================================================================
 # Running Diamond analysis
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running Diamond analysis."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running Diamond analysis."
 
 process_diamond "${Working_directory}/Workspace/SyntenyClustering/"
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Diamond analysis finished. Proceeding."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
 # ==============================================================================
 # Running Diamond analysis
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Running syntenet analysis."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running syntenet analysis."
 Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/SyntenyClustering/" -a "${anchorPoints}" -g "${gaps}"
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Syntenet analysis finished. Proceeding."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
 # ==============================================================================
 # Running Diamond analysis
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Summarizing syntenet results in '${mode}' mode."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Summarizing syntenet results in '${mode}' mode."
 
 process_collinearity "${Working_directory}" "${mode}"
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Summary finished. Proceeding."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
 # ==============================================================================
 # Running Clustering analysis
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Generating element clusters."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Generating element clusters."
 
-python3 ${auxiliary_path}/Clustering.py -i "${Working_directory}/Collinearity_percentage.txt" -o "${Working_directory}/Clusters" -m "${minSize}" -n "${minNodes}" -t "${threshold}"
+python3 ${auxiliary_path}/Clustering.py -i "${Working_directory}/Workspace/SyntenyClustering/Collinearity_percentage.txt" -o "${Working_directory}/Clusters/" -m "${minSize}" -n "${minNodes}" -t "${threshold}"
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Clustering finished. Proceeding."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
 # ==============================================================================
 # Running Clusters division
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 7: Sorting elements from clusters."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Sorting elements from clusters."
 
 process_cluster_file "${Working_directory}"
 
