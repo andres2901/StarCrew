@@ -244,7 +244,6 @@ organize_files() {
     echo -e "  Elements that pass the filter stage: ${element_number}"
 
     rm ${base_dir}/*index*
-
     rm ${temp_directory}temp_element.txt
 }
 

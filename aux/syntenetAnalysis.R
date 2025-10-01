@@ -33,7 +33,7 @@ if (!requireNamespace("syntenet", quietly = TRUE)) {
 internal_dir <- list.dirs(arguments$directory, recursive = F)
 
 # Import data
-cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Reading data...","\n"))
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]"," Reading data..."," \n", sep=""))
 gff_dir <- as.character(grep("Gff", internal_dir, value = TRUE))
 fasta_dir <- as.character(grep("Protein", internal_dir, value = TRUE))
   
@@ -48,5 +48,5 @@ blast_dir <- as.character(grep("DiamondResults", internal_dir, value = TRUE))
 blast_list <- read_diamond(blast_dir)
   
 #perform synteny block analysis
-cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Processing data with syntenet...","\n"))
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]"," Processing data with syntenet..."," \n", sep=""))
 intersyn <- interspecies_synteny(blast_list, pdata$annotation, inter_dir = paste(arguments$directory,"/","Collinearity", sep = ""), anchors = arguments$anchors, max_gaps = arguments$gaps)

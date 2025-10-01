@@ -7,11 +7,7 @@ if (!requireNamespace("optparse", quietly = TRUE)) {
 
 option_list <- list(
   make_option(c("-d", "--directory"), type="character", action = "store", default=NULL, 
-              help="path of the working directory [default %default]",metavar="PATH"),
-  make_option(c("-c", "--clusters"), type="integer", action = "store", default=NULL,
-              help=" Number of subclusters obtained in the syntenet approach [default %default]", metavar="number"),
-  make_option(c("-g", "--gaps"), type="integer", action = "store", default=8,
-              help="Number of maximum allowed gaps between anchor points for syntenet to call a collinear region [default %default]", metavar="number")
+              help="path of the working directory [default %default]",metavar="PATH")
 )
 
 # Parse the command-line arguments
@@ -20,10 +16,6 @@ arguments <- parse_args(OptionParser(option_list = option_list))
 # Check for required arguments and flags
 if (is.null(arguments$directory)) {
   stop("Error: directory must be provided.", call.=FALSE)
-}
-
-if (is.null(arguments$clusters)) {
-  stop("Error: number of clusters must be provided.", call.=FALSE)
 }
 
 # Check software installation
@@ -122,7 +114,7 @@ fit_Orthofinder <- cutree(Hierar_cl, h = 0.99999999)
 Individual_clusters <- length(unique(fit_Orthofinder))
 
 # Process Clusters
-cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Analyzing",Individual_clusters,"individual clusters identified","\n"))
+cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Analyzing",Individual_clusters,"individual cluster(s) identified","\n"))
 
 # Process each cluster
 for( ClusterId in 1:Individual_clusters ) {

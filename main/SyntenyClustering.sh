@@ -256,7 +256,6 @@ check_directory_structure() {
 
     if [[ -f "$metadata_file" ]]; then
         metadata_flag=true
-        exit 1
     fi
 
     if [[ -z "$gff_dir" ]]; then
@@ -434,13 +433,10 @@ process_diamond() {
 }
 
 blastn_all_vs_all() {
-    local base_dir="$1"
+    local fasta_dir="$1"
     local output_file="$2"
 
-    local working_dir="${base_dir}/Workspace/SyntenyClustering/"
-    local temp_dir="${working_dir}/temp/"
-
-    local fasta_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local temp_dir="${fasta_dir}/../"
 
     if [[ ! -d "$fasta_dir" ]]; then
         echo "Error: Directory '$fasta_dir' not found." >&2
@@ -522,7 +518,7 @@ process_collinearity() {
 
     # Determine number of genes per element for percentage estimation
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Counting genes per element from GFF files..."
-    find "${gff3_path}" -maxdepth 1 -type f -name "*.gff" -exec grep -c "gene" {} + | awk -F'/' '{ gsub(".gff:", "\t", $NF); print $NF }' | sort > "${temp_prefix}_genes_per_element.txt"
+    find "${gff_path}" -maxdepth 1 -type f -name "*.gff" -exec grep -c "gene" {} + | awk -F'/' '{ gsub(".gff:", "\t", $NF); print $NF }' | sort > "${temp_prefix}_genes_per_element.txt"
 
     # Determine the number of collinear genes per element
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Counting collinear genes from collinearity files..."
@@ -590,12 +586,12 @@ process_collinearity() {
             awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | awk '{if($3 >= 8) print}' | \
             sed -e 's/ /;/g' | sort -t ';'  >> "${temp_prefix}_Collinearity_percentage.txt"
         join -t ';' -j 1 -a1 "${temp_prefix}_Collinearity_percentage.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
-        join -t ';' -1 2 -2 1 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${base_dir}/Collinearity_percentage.txt"
+        join -t ';' -1 2 -2 1 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         else
             awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
             "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
             awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | awk '{if($3 >= 8) print}' | \
-            sed -e 's/ /;/g' | sort -t ';' | sed -e 's/;/\t/g' >> "${base_dir}/Collinearity_percentage.txt"
+            sed -e 's/ /;/g' | sort -t ';' | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
     elif [[ "${mode}" == "SSP" ]]
     then
@@ -607,13 +603,13 @@ process_collinearity() {
             awk '{if(($3 >= 41) || (($4 >= 45 || $5 >= 45) && ($4/$5 >= 1.8 || $4/$5 <= 0.55 ))) print}' | \
             sed -e 's/ /;/g' | sort -t ';' > "${temp_prefix}_Collinearity_percentage.txt"
         join -t ';' -a1 "${temp_prefix}_Collinearity_percentage.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
-        join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${base_dir}/Collinearity_percentage.txt"
+        join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         else
             awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
             "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
             awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | \
             awk '{if(($3 >= 41) || (($4 >= 45 || $5 >= 45) && ($4/$5 >= 1.8 || $4/$5 <= 0.55 ))) print}' | \
-            sed -e 's/ /;/g' | sort -t ';' | sed -e 's/;/\t/g' >> "${base_dir}/Collinearity_percentage.txt"
+            sed -e 's/ /;/g' | sort -t ';' | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
     elif [[ "${mode}" == "Filter" ]]
     then
@@ -656,15 +652,15 @@ process_collinearity() {
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
         if $metadata_flag; then
             join -t ';' -a1 "${temp_prefix}_Collinearity_percentage_filter.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
-            join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${base_dir}/Collinearity_percentage.txt"
+            join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         else
-            cat "${temp_prefix}_Collinearity_percentage_filter.txt" | sed -e 's/;/\t/g' >> "${base_dir}/Collinearity_percentage.txt"
+            cat "${temp_prefix}_Collinearity_percentage_filter.txt" | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
     fi
 
     # Remove temporary data
     rm -rf ${temp_prefix}*
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Processing complete. Final report saved to ${base_dir}/Collinearity_percentage.txt"
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Processing complete. Final report saved to ${working_dir}/Collinearity_percentage.txt"
 }
 
 process_cluster_file() {
@@ -677,6 +673,10 @@ process_cluster_file() {
     local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local exon_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+
+    if $metadata_flag; then
+        local metadata_file="${working_dir}/metadata.csv"
+    fi
 
     local cluster_path="${cluster_dir}/main_clusters.txt"
 
@@ -696,14 +696,21 @@ process_cluster_file() {
 
             IFS=' ' read -r -a values_array <<< "$values_string"
         
-            echo "Processing: $cluster_id with ${#values_array[@]} values."
+            echo "Processing: $cluster_id with ${#values_array[@]} elements."
         
             mkdir -p "${cluster_dir}/${cluster_id}"
             mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
             mkdir -p "${cluster_dir}/${cluster_id}/Data"
+
+            if $metadata_flag; then
+                local updated_metadata="${cluster_dir}/${cluster_id}/Data/metadata.csv"
+            fi
         
             for value in "${values_array[@]}"; do
-                cat ${nucleotide_dir}/${value}.fa >> ${cluster_dir}/${cluster_id}/Sequences.fa        
+                cat ${nucleotide_dir}/${value}.fa >> ${cluster_dir}/${cluster_id}/sequences.fa      
+                if $metadata_flag; then
+                    grep -w $value $metadata_file >> $updated_metadata
+                fi   
             done
         done < "$cluster_path"
     elif [[ "$predictionMode" == "Robust" ]] 
@@ -712,7 +719,7 @@ process_cluster_file() {
 
             IFS=' ' read -r -a values_array <<< "$values_string"
 
-            echo "Processing: $cluster_id with ${#values_array[@]} values."
+            echo "Processing: $cluster_id with ${#values_array[@]} elements."
         
             mkdir -p "${cluster_dir}/${cluster_id}"
             mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
@@ -721,12 +728,19 @@ process_cluster_file() {
             mkdir -p "${cluster_dir}/${cluster_id}/Data/Nucleotide"
             mkdir -p "${cluster_dir}/${cluster_id}/Data/Protein"
             mkdir -p "${cluster_dir}/${cluster_id}/Data/Gff"
+
+            if $metadata_flag; then
+                local updated_metadata="${cluster_dir}/${cluster_id}/Data/metadata.csv"
+            fi
         
             for value in "${values_array[@]}"; do
                 cp ${gff_dir}/${value}.gff ${cluster_dir}/C${cluster_id}/Gff/
                 cp ${protein_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Protein/
                 cp ${nucleotide_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Nucleotide/    
-                cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Exon/        
+                cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Exon/
+                if $metadata_flag; then
+                    grep -w $value $metadata_file >> $updated_metadata
+                fi        
             done
         done < "$cluster_path"
     fi
@@ -742,12 +756,12 @@ process_cluster_file() {
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running Syntenet module analysis with '${mode}' mode."
 
-echo "For Step 4 (Syntenet analysis), using the following parameter:"
+echo "For Syntenet analysis, using the following parameter:"
 echo "  Minimum anchor points: $anchorPoints."
 echo "  Maximum allowed gaps: $gaps."
 
-echo "For Step 6 (Generating element clusters), using the following parameter:"
-echo "  Minimum number of elements in a cluster for clustering to be attempted: $minSize."
+echo "For Subclustering, using the following parameter:"
+echo "  Minimum number of elements in a cluster for subclustering to be attempted: $minSize."
 echo "  Minimum desired size for any final sub-cluster: $minNodes."
 echo "  Minimum modularity score for a split to be accepted: $threshold."
 
@@ -775,7 +789,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running Diamond analysis."
 
-process_diamond "${Working_directory}/Workspace/SyntenyClustering/"
+process_diamond "${Working_directory}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 

@@ -12,7 +12,7 @@ function print_help() {
    echo "-h, --headers: headers of the protein database (required)."
    echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
    echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset when running the 'All' mode (Default: 8) [range: 5 - 100]"
-   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 5) [range: 5 - 10]"
+   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
    echo "-t, --threads: Number of threads for Braker (Default = 8)"
    echo "-help: Display this help message."
 }
@@ -20,10 +20,9 @@ function print_help() {
 # Initialize variables
 
 Working_directory=""
-protein_path=""
 mode="Cluster"
 minimum_gene_content="8"
-minimum_size="5"
+minimum_size="4"
 threads="8"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 hmm_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
@@ -37,10 +36,6 @@ while [[ $# -gt 0 ]]; do
 	        shift
 	        fasta_path="$1"
 	        ;; 
-        -p|--proteinDB)
-            shift
-            protein_path="$1"
-            ;;
         -m|--mode)
             shift
             mode="$1"
@@ -78,7 +73,7 @@ fi
 
 # Check for mandatory arguments
 
-if [[ -z "$Working_directory" || -z "$protein_path" ]]; then
+if [[ -z "$Working_directory" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
@@ -92,17 +87,6 @@ else
     # Check if the path is absolute
     if [[ ! "${Working_directory:0:1}" == "/" ]]; then
         Working_directory=$(realpath $Working_directory)
-    fi
-fi
-
-# Check if protein file exists
-if [[ ! -f "$protein_path" ]]; then
-    echo "Error: file '$protein_path' does not exist."
-    exit 1
-else
-    # Check if the path is absolute
-    if [[ ! "${protein_path:0:1}" == "/" ]]; then
-        protein_path=$(realpath $protein_path)
     fi
 fi
 
@@ -149,7 +133,7 @@ fi
 
 # Check minimum size is within allowed range
 if [[ "$minimum_size" =~ ^[0-9]+$ ]]; then
-    if (( $minimum_size < 5 || $minimum_size > 10 )); then
+    if (( $minimum_size < 4 || $minimum_size > 10 )); then
         echo "Error: '$minimum_size' minimum size is not an accepted value."
         print_help
         exit 1
@@ -178,8 +162,6 @@ check_directory_structure() {
     local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
     local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
 
-    local metadata_file="${base_dir}/metadata_files/metadata.csv"
-
     local fasta_file="${base_dir}/sequences.fa"
 
     if [[ ! -f $fasta_file ]]; then
@@ -206,6 +188,11 @@ check_directory_structure() {
                 echo "Error: braker directory not found in '$Working_dir'." >&2
                 echo "Run the module BrakerGenePrediction before this module." >&2
                 exit 1
+            fi
+
+            local metadata_file="${Working_dir}/metadata.csv"
+            if [[ -f $metadata_file ]]; then
+                metadata_flag=true
             fi
         fi
     fi
@@ -245,6 +232,7 @@ run_captain_metaeuk() {
 
     # Create databases for metaeuk
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating metaeuk database."
+    metaeuk createdb  $fasta_path ${working_dir}/ContigsDB --dbtype 2 -v 0
 
     metaeuk createdb $captain_path ${working_dir}/ProteinDB --dbtype 1 -v 0
 
@@ -333,10 +321,6 @@ organize_files() {
     local working_dir="${base_dir}/Workspace/QuickGenePrediction/"
     local Output_dir="${base_dir}/Data/"
     local temp_directory="${base_dir}/Workspace/QuickGenePrediction/temp/"
-    if $metadata_flag; then
-        local metadata_file="${base_dir}/metadata_files/metadata.csv"
-        local updated_metadata="${Output_dir}metadata.csv"
-    fi
 
     mkdir -p ${temp_directory}multiple ${temp_directory}gff/ ${temp_directory}protein/ ${temp_directory}exon/ ${Output_dir}/Protein/ ${Output_dir}/Gff/ ${Output_dir}/Nucleotide/ ${Output_dir}/Exon/
 
@@ -358,6 +342,11 @@ organize_files() {
     # Filter gff files to select elements above a threshold
     if [[ "${mode}" == "All" ]]
     then
+        if $metadata_flag; then
+            local metadata_file="${working_dir}/metadata.csv"
+            local updated_metadata="${Output_dir}metadata.csv"
+        fi
+        
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering elements based on a minimum of '$minimum_gene_content' predicted genes and storing related files..."
         awk -v min="$minimum_gene_content" 'NR>1{if($2>=min){print $1}}' ${base_dir}/Gene_stats.txt | sed $'s/[^[:print:]\t]//g' | while read line
         do
@@ -365,20 +354,22 @@ organize_files() {
             cp ${temp_directory}gff/${line}.gff ${Output_dir}/Gff/
         
             # Dividing nucleotide of elements
-            echo $line > ${temp_directory}temp_element.txt
-            seqkit grep -n -f temp_element.txt $output_fasta -o ${out_directory}/Filter_nucleotide/${line}.fasta &> /dev/null
+            echo $line > ${temp_directory}/temp_element.txt
+            seqkit grep -n -f ${temp_directory}/temp_element.txt $fasta_path -o ${Output_dir}/Nucleotide/${line}.fa &> /dev/null
 
             # Creating Exome
             agat_sp_extract_sequences.pl --gff ${Output_dir}/Gff/${line}.gff --fasta $fasta_path -t exon --merge -o ${temp_directory}exon/${line}.fa &> /dev/null
-            awk '{if($2){$1=">"$2} print $1}' ${temp_prefix}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
+            awk '{if($2){$1=">"$2} print $1}' ${temp_directory}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
 
             # Creating proteome
             seqkit translate ${Output_dir}/Exon/${line}.fa --trim > ${Output_dir}/Protein/${line}.fa
 
             # Updating metadata
             if $metadata_flag; then
-                grep -w $line $metadata_file > $updated_metadata
+                grep -w $line $metadata_file >> $updated_metadata
             fi
+
+            find ./ -name "*.agat.log" -delete
         done
         
         local element_number=$(ls ${Output_dir}/Gff/ | wc -l)
@@ -393,19 +384,22 @@ organize_files() {
             cp ${temp_directory}gff/${line}.gff ${Output_dir}/Gff/
         
             # Dividing nucleotide of elements
-            echo $line > ${temp_directory}temp_element.txt
-            seqkit grep -n -f temp_element.txt $output_fasta -o ${out_directory}/Filter_nucleotide/${line}.fasta &> /dev/null
+            echo $line > ${temp_directory}/temp_element.txt
+            seqkit grep -n -f ${temp_directory}/temp_element.txt $fasta_path -o ${Output_dir}/Nucleotide/${line}.fa &> /dev/null
 
             # Creating Exome
             agat_sp_extract_sequences.pl --gff ${Output_dir}/Gff/${line}.gff --fasta $fasta_path -t exon --merge -o ${temp_directory}exon/${line}.fa &> /dev/null
-            awk '{if($2){$1=">"$2} print $1}' ${temp_prefix}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
+            awk '{if($2){$1=">"$2} print $1}' ${temp_directory}exon/${line}.fa | sed 's/gene=//g' > ${Output_dir}/Exon/${line}.fa
 
             # Creating proteome
             seqkit translate ${Output_dir}/Exon/${line}.fa --trim > ${Output_dir}/Protein/${line}.fa
+
+            find ./ -name "*.agat.log" -delete
         done
     fi
 
     rm ${temp_directory}temp_element.txt
+    rm ${base_dir}/*index*
 }
 
 # ==============================================================================
@@ -426,52 +420,44 @@ then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
     # ==============================================================================
-    # Creating protein database for braker run
+    # Process braker results
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running metaeuk prediction to generate specialized protein database..."
-    generate_database "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running braker gene prediction.."
+    process_braker "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
-
-    # ==============================================================================
-    # Running braker
-    # ==============================================================================
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running braker gene prediction.."
-    run_braker "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
     # ==============================================================================
     # Running metaeuk for captain identification
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running metaeuk for specialized captain prediction.."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running metaeuk for specialized captain prediction.."
     run_captain_metaeuk "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
     # ==============================================================================
     # merging models to select a putative captain
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: merging Braker and metaeuk results.."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: merging Braker and metaeuk results.."
     merge_models "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
     # ==============================================================================
     # Generate gene prediction statistics
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Creating gene statistics file.."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Creating gene statistics file.."
     gene_stats "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
     # ==============================================================================
     # Dividing and organizing results
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Organizing files.."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Organizing files.."
     organize_files "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${out_directory}."
 
@@ -487,52 +473,44 @@ then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
         # ==============================================================================
-        # Creating protein database for braker run
+        # process braker results
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running metaeuk prediction to generate specialized protein database..."
-        generate_database "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running braker gene prediction.."
+        process_braker "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
-
-        # ==============================================================================
-        # Running braker
-        # ==============================================================================
-
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running braker gene prediction.."
-        run_braker "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
         # ==============================================================================
         # Running metaeuk for captain identification
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running metaeuk for specialized captain prediction.."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running metaeuk for specialized captain prediction.."
         run_captain_metaeuk "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
         # ==============================================================================
         # merging models to select a putative captain
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: merging Braker and metaeuk results.."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: merging Braker and metaeuk results.."
         merge_models "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
         # ==============================================================================
         # Generate gene prediction statistics
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Creating gene statistics file.."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Creating gene statistics file.."
         gene_stats "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
         # ==============================================================================
         # Dividing and organizing results
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Organizing files.."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Organizing files.."
         organize_files "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
     done
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 fi
