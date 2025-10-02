@@ -30,7 +30,6 @@ function print_help() {
    echo "-l, --length: Minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 500)."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence [range: 1 - 3] (Default: 2)"
    echo "-m, --mode: Define the data that will be use for the captain identification and phylogeny. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
-   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 5) [range: 5 - 10]"
    echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
    echo "-help: Display this help message."
 }
@@ -43,7 +42,6 @@ auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 level="2"
 length="500"
 mode="Cluster"
-minimum_size="5"
 threads="1"
 help_flag=false
 
@@ -423,7 +421,7 @@ Alignment() {
     
     local empty_elements="${working_dir}/EmptyElements.txt"
     local pseudoExons="${working_dir}/Captains_pseudo.fa"
-    local Remove_elements="${working_dir}/Remove_elements.txt"
+    local Remove_elements="${working_dir}/Captainless_elements.txt"
     local temp_dir="${working_dir}/temp/"
 
 
@@ -599,8 +597,8 @@ Removed_empty_elements() {
     local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local exon_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
-    local Remove_elements="${working_dir}/Remove_elements.txt"
-    local output="${working_dir}/Remove_elements/"
+    local Remove_elements="${working_dir}/Captainless_elements.txt"
+    local output="${working_dir}/Captainless_elements/"
 
     mkdir -p "${output}"
 
@@ -613,6 +611,20 @@ Removed_empty_elements() {
         mv ${nucleotide_dir}/${line}.fa ${output}${line}_nucleotide.fa
         mv ${exon_dir}/${line}.fa ${output}${line}_exon.fa
     done
+}
+
+check_clusters() {
+    local base_dir="$1"
+
+    local cluster_information="${base_dir}/Clusters/SelectedClusters.txt"
+
+    if [[ ! -f $cluster_information ]]; then
+        echo "Error: SelectedClusters.txt file does not exist in '${base_dir}/Clusters/'."
+        exit 1
+    else
+        Cluster_number=$(wc -l "$cluster_information" | awk '{print $1}')
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters."
+    fi
 }
 
 # ==============================================================================
@@ -634,54 +646,46 @@ then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${workingDirectory_path}' is valid. Proceeding."
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
-
     organize_working_directory "${Working_directory}"
 
     # ==============================================================================
     # Preprocessing data
     # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+    process_hmmsearch "${workingDirectory_path}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-process_hmmsearch "${workingDirectory_path}"
+    # ==============================================================================
+    # Identify captains
+    # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
+    Captain_identification "${workingDirectory_path}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
-# ==============================================================================
-# Identify captains
-# ==============================================================================
+    # ==============================================================================
+    # Alignment
+    # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
-
-Captain_identification "${workingDirectory_path}"
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
-
-# ==============================================================================
-# Alignment
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
-
-Alignment "${workingDirectory_path}"
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
+    Alignment "${workingDirectory_path}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
 
-# ==============================================================================
-# Alignment
-# ==============================================================================
+    # ==============================================================================
+    # Alignment
+    # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
-
-Tree_inference "${workingDirectory_path}"
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
+    Tree_inference "${workingDirectory_path}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
 elif [[ "${mode}" == "Cluster" ]]
 then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode. Analyzing clusters with a minimum size of ${minimum_size}."
-    awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | | while read ClusterId
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode."
+    check_clusters() "${Working_directory}"
+    cat ${Working_directory}/Clusters/SelectedClusters.txt | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
 

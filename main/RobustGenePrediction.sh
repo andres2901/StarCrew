@@ -8,11 +8,8 @@ function print_help() {
    echo "Syntax: SAT RobustGenePrediction [ -h ] -w <genome_file> [ -m <mode> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-p, --proteinDB: protein database fasta file (required)."
-   echo "-h, --headers: headers of the protein database (required)."
    echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
    echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset when running the 'All' mode (Default: 8) [range: 5 - 100]"
-   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
    echo "-t, --threads: Number of threads for Braker (Default = 8)"
    echo "-help: Display this help message."
 }
@@ -22,7 +19,6 @@ function print_help() {
 Working_directory=""
 mode="Cluster"
 minimum_gene_content="8"
-minimum_size="4"
 threads="8"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 hmm_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
@@ -32,9 +28,9 @@ metadata_flag=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-	    -f|--fasta) 
+	    -w|--workingDirectory) 
 	        shift
-	        fasta_path="$1"
+	        Working_directory="$1"
 	        ;; 
         -m|--mode)
             shift
@@ -43,10 +39,6 @@ while [[ $# -gt 0 ]]; do
         -mg|--minGene)
             shift
             mode="$1"
-            ;;
-        -ms|--minSize)
-            shift
-            minimum_size="$1"
             ;;
         -t|--threads)
             shift
@@ -80,7 +72,7 @@ if [[ -z "$Working_directory" ]]; then
 fi
 
 # check if working directory exist
-if [[ ! -f "$Working_directory" ]]; then
+if [[ ! -d "$Working_directory" ]]; then
     echo "Error: folder '$Working_directory' does not exist."
     exit 1
 else
@@ -131,19 +123,6 @@ else
     exit 1
 fi
 
-# Check minimum size is within allowed range
-if [[ "$minimum_size" =~ ^[0-9]+$ ]]; then
-    if (( $minimum_size < 4 || $minimum_size > 10 )); then
-        echo "Error: '$minimum_size' minimum size is not an accepted value."
-        print_help
-        exit 1
-    fi
-else
-    echo "Error: '$minimum_size' is not a positive integer."
-    print_help
-    exit 1
-fi
-
 # Check thread parameter
 if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     echo "Error: '$threads' is not a positive integer."
@@ -162,7 +141,7 @@ check_directory_structure() {
     local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
     local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
 
-    local fasta_file="${base_dir}/sequences.fa"
+    local fasta_file="${base_dir}/Sequences.fa"
 
     if [[ ! -f $fasta_file ]]; then
         echo "Error: sequence fasta file does not exist in '$base_dir'."
@@ -188,6 +167,14 @@ check_directory_structure() {
                 echo "Error: braker directory not found in '$Working_dir'." >&2
                 echo "Run the module BrakerGenePrediction before this module." >&2
                 exit 1
+            else
+                braker_file=${braker_dir}/braker.gff3
+                if [[ ! -f $braker_file ]]; then
+                    echo "Error: braker file does not exist in '$braker_dir'."
+                    break
+                else
+                    braker_path=$(realpath $braker_file)
+                fi
             fi
 
             local metadata_file="${Working_dir}/metadata.csv"
@@ -214,7 +201,7 @@ process_braker() {
     local temp_dir="${working_dir}/temp/"
     local output="${working_dir}/braker_filter.gff"
 
-    agat_sp_filter_incomplete_gene_coding_models.pl --gff ${working_dir}/braker/braker.gff3 --fasta ${base_dir}/Sequences.fa -o ${temp_dir}/braker.gff &> /dev/null
+    agat_sp_filter_incomplete_gene_coding_models.pl --gff ${braker_path} --fasta ${base_dir}/Sequences.fa -o ${temp_dir}/braker.gff &> /dev/null
 
     python ${auxiliary_path}/gff_filter.py -i ${temp_dir}/braker.gff -o ${temp_dir}/selectedgenes.txt
 
@@ -251,11 +238,12 @@ run_captain_metaeuk() {
 
     #Remove elements with incomplete gene coding models
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing gene models without start and stop codon."
+
     agat_sp_filter_incomplete_gene_coding_models.pl --gff ${working_dir}/metaeuk.gff --fasta ${base_dir}/Sequences.fa -o ${working_dir}/metaeuk_fix.gff &> /dev/null
 
     agat_sp_extract_sequences.pl --gff ${working_dir}/metaeuk_fix.gff --fasta ${base_dir}/Sequences.fa -t exon --merge -p -o ${working_dir}/metaeuk_protein.fa &> /dev/null
 
-    sed -i 's/_mRNA//g' ${work_dir}/metaeuk_protein.fa
+    sed -i 's/_mRNA//g' ${working_dir}/metaeuk_protein.fa
 
     hmmsearch --max --noali --domE 10e-6 --domtblout ${hmmer_results} ${hmm_path}/Captain.hmm ${working_dir}/metaeuk_protein.fa &> /dev/null
 
@@ -264,7 +252,10 @@ run_captain_metaeuk() {
     agat_sp_filter_feature_from_keep_list.pl --gff ${working_dir}/metaeuk_fix.gff --keep_list ${temp_dir}/selected_captains.txt --output ${output} &> /dev/null
 
     # Cleanup temporary files and intermediate results
-    rm ${working_dir}/metaeuk*
+    rm ${working_dir}/metaeukResults*
+    rm ${working_dir}/metaeukpred*
+    rm ${working_dir}/metaeukgroups*
+    rm ${working_dir}/metaeukFinal*
     rm ${working_dir}/ContigsDB*
     rm ${working_dir}/ProteinDB*
     rm ${working_dir}/*_incomplete.gff
@@ -318,21 +309,21 @@ gene_stats() {
 organize_files() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/QuickGenePrediction/"
+    local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
     local Output_dir="${base_dir}/Data/"
-    local temp_directory="${base_dir}/Workspace/QuickGenePrediction/temp/"
+    local temp_directory="${base_dir}/Workspace/RobustGenePrediction/temp/"
 
     mkdir -p ${temp_directory}multiple ${temp_directory}gff/ ${temp_directory}protein/ ${temp_directory}exon/ ${Output_dir}/Protein/ ${Output_dir}/Gff/ ${Output_dir}/Nucleotide/ ${Output_dir}/Exon/
 
     # Divide the gff result for each element
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff for individual elements."
-    awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
+    awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
     do 
-        head -n1 ${working_dir}/metaeuk_fix.gff > ${temp_directory}multiple/${line}.gff
-        grep $line ${working_dir}/metaeuk_fix.gff >> ${temp_directory}multiple/${line}.gff
+        head -n1 ${working_dir}/Final_model.gff > ${temp_directory}multiple/${line}.gff
+        grep $line ${working_dir}/Final_model.gff >> ${temp_directory}multiple/${line}.gff
     done
 
-    awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
+    awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
     do 
         agat_sp_manage_IDs.pl --gff ${temp_directory}multiple/${line}.gff --prefix ${line}. -o ${temp_directory}gff/${line}.gff &> /dev/null
     done
@@ -402,13 +393,28 @@ organize_files() {
     rm ${base_dir}/*index*
 }
 
+check_clusters() {
+    local base_dir="$1"
+
+    local cluster_information="${base_dir}/Clusters/SelectedClusters.txt"
+
+    if [[ ! -f $cluster_information ]]; then
+        echo "Error: SelectedClusters.txt file does not exist in '${base_dir}/Clusters/'."
+        exit 1
+    else
+        Cluster_number=$(wc -l "$cluster_information" | awk '{print $1}')
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters."
+    fi
+}
 # ==============================================================================
 # Start the process
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running RobustGenePrediction Module with the following parameters:"
-echo "  Protein database: ${protein_path}"
-echo -e "  Mode: ${mode}\n"
+if [[ "${mode}" == "All" ]]
+then
+    echo -e "  Mode: ${mode}\n"
+    echo -e "  Minimum gene content: ${}"
 
 if [[ "${mode}" == "All" ]]
 then
@@ -423,7 +429,7 @@ then
     # Process braker results
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running braker gene prediction.."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Filtering braker gene prediction.."
     process_braker "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
@@ -463,8 +469,9 @@ then
 
 elif [[ "${mode}" == "Cluster" ]]
 then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode. Analyzing clusters with a minimum size of ${minimum_size}."
-    awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | | while read ClusterId
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode."
+    check_clusters() "${Working_directory}"
+    cat ${Working_directory}/Clusters/SelectedClusters.txt | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."

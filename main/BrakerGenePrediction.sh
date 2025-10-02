@@ -255,10 +255,20 @@ run_braker() {
     local base_dir="$1"
 
     local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
-    local temp_dir="${working_dir}/temp/"
-    local output="${working_dir}/braker_filter.gff"
 
-    braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --alternatives-from-evidence=false --augustus_args "--genemodel=complete --noInFrameStop=true" --threads=8 --workingdir ${working_dir}/braker --useexisting
+    braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --alternatives-from-evidence=false --augustus_args "--genemodel=complete --noInFrameStop=true" --threads=8 --workingdir ${working_dir}/braker --verbosity=0 --useexisting &> /dev/null
+}
+
+check_braker() {
+    local base_dir="$1"
+
+    local braker_file="${base_dir}/Workspace/RobustGenePrediction/braker/braker.gff3"
+
+    if [[ -f $braker_file ]]; then
+        braker_flag=false
+    else
+        braker_flag=true 
+    fi
 }
 
 
@@ -326,8 +336,19 @@ then
         # Running braker
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running braker gene prediction.."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running braker gene prediction..."
         run_braker "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+        check_braker "${internal_dir}"
+        if $braker_flag; then
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running braker a second time because previous run has issues..."
+            rm -r "${internal_dir}/Workspace/RobustGenePrediction/braker/"
+            run_braker "${internal_dir}"
+            check_braker "${internal_dir}"
+        fi
+        if ! $braker_flag; then
+            echo ${ClusterId} >> ${Working_directory}/Clusters/SelectedClusters.txt
+        fi
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
     done
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"

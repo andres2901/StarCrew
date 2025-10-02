@@ -142,7 +142,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Processing headers, creating sequen
 mkdir -p ${out_directory}/Data ${out_directory}/Workspace ${out_directory}/metadata_files
 
 # Define output file names
-output_fasta="${out_directory}/sequences.fa"
+output_fasta="${out_directory}/Sequences.fa"
 association_csv="${out_directory}/metadata_files/sequence_head.csv"
 
 # Create a temporary file with initials and original headers

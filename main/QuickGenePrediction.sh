@@ -105,7 +105,7 @@ check_directory_structure() {
     local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
     local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
 
-    local fasta_file="${base_dir}/sequences.fa"
+    local fasta_file="${base_dir}/Sequences.fa"
     local metadata_file="${base_dir}/metadata_files/metadata.csv"
 
     if [[ ! -f $fasta_file ]]; then
