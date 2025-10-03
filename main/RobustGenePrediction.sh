@@ -10,7 +10,6 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
    echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset when running the 'All' mode (Default: 8) [range: 5 - 100]"
-   echo "-t, --threads: Number of threads for Braker (Default = 8)"
    echo "-help: Display this help message."
 }
 
@@ -19,7 +18,6 @@ function print_help() {
 Working_directory=""
 mode="Cluster"
 minimum_gene_content="8"
-threads="8"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 hmm_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
 captain_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/Captains.fa"
@@ -39,10 +37,6 @@ while [[ $# -gt 0 ]]; do
         -mg|--minGene)
             shift
             mode="$1"
-            ;;
-        -t|--threads)
-            shift
-            threads="$1"
             ;;
         -help)
             help_flag=true
@@ -123,13 +117,6 @@ else
     exit 1
 fi
 
-# Check thread parameter
-if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$threads' is not a positive integer."
-    print_help
-    exit 1
-fi
-
 # ==============================================================================
 # Bash function block
 # ==============================================================================
@@ -162,19 +149,11 @@ check_directory_structure() {
             echo "Run the module BrakerGenePrediction before this module." >&2
             exit 1
         else
-            local braker_dir=$(find "$Working_dir" -maxdepth 1 -type d -name "braker" 2>/dev/null)
-            if [[ -z "$braker_dir" ]]; then
-                echo "Error: braker directory not found in '$Working_dir'." >&2
+            braker_file=${Working_dir}/PreliminarGenePrediction.gff
+            if [[ -f "$braker_file" ]]; then
+                echo "Error: preliminary gene prediction not found in '$Working_dir'." >&2
                 echo "Run the module BrakerGenePrediction before this module." >&2
                 exit 1
-            else
-                braker_file=${braker_dir}/braker.gff3
-                if [[ ! -f $braker_file ]]; then
-                    echo "Error: braker file does not exist in '$braker_dir'."
-                    break
-                else
-                    braker_path=$(realpath $braker_file)
-                fi
             fi
 
             local metadata_file="${Working_dir}/metadata.csv"
@@ -225,7 +204,7 @@ run_captain_metaeuk() {
 
     # Run metaeuk gene prediction
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk predictexons."
-    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --use-all-table-starts 1 --start-sens 7.5 --orf-start-mode 0 -v 0
+    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --use-all-table-starts 1 --start-sens 7.5 --orf-start-mode 0 -v 0 &> /dev/null
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing redundancy from metaeuk."
     metaeuk reduceredundancy ${working_dir}/metaeukResults ${working_dir}/metaeukpred ${working_dir}/metaeukgroups -v 0
@@ -413,8 +392,12 @@ check_clusters() {
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running RobustGenePrediction Module with the following parameters:"
 if [[ "${mode}" == "All" ]]
 then
+    echo "  Mode: ${mode}"
+    echo -e "  Minimum gene content: ${minimum_gene_content}\n"
+elif [[ "${mode}" == "Cluster" ]]
+then
     echo -e "  Mode: ${mode}\n"
-    echo -e "  Minimum gene content: ${}"
+fi
 
 if [[ "${mode}" == "All" ]]
 then
@@ -470,8 +453,8 @@ then
 elif [[ "${mode}" == "Cluster" ]]
 then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode."
-    check_clusters() "${Working_directory}"
-    cat ${Working_directory}/Clusters/SelectedClusters.txt | while read ClusterId
+    check_clusters "${Working_directory}"
+    awk '{print $1}}' ${Working_directory}/Clusters/SelectedClusters.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
@@ -517,8 +500,7 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Organizing files.."
         organize_files "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding.\n"
     done
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 fi
-

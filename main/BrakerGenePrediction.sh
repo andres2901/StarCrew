@@ -228,7 +228,7 @@ generate_database() {
 
     # Run metaeuk gene prediction
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk..."
-    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --max-seqs 500 --use-all-table-starts 1 --start-sens 7.5 -v 0
+    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --max-seqs 500 --use-all-table-starts 1 --start-sens 7.5 -v 0 &> /dev/null
 
     metaeuk unitesetstofasta ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/metaeukFinal -v 0
 
@@ -256,13 +256,14 @@ run_braker() {
 
     local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
 
-    braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --alternatives-from-evidence=false --augustus_args "--genemodel=complete --noInFrameStop=true" --threads=8 --workingdir ${working_dir}/braker --verbosity=0 --useexisting &> /dev/null
+    braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --alternatives-from-evidence=false --augustus_args "--genemodel=complete --noInFrameStop=true" --threads=8 --workingdir ${working_dir}/braker --useexisting &> /dev/null
 }
 
 check_braker() {
     local base_dir="$1"
 
     local braker_file="${base_dir}/Workspace/RobustGenePrediction/braker/braker.gff3"
+    local ourtput="${base_dir}/Workspace/RobustGenePrediction/PreliminarGenePrediction.gff"
 
     if [[ -f $braker_file ]]; then
         braker_flag=false
@@ -270,8 +271,6 @@ check_braker() {
         braker_flag=true 
     fi
 }
-
-
 
 # ==============================================================================
 # Start the process
@@ -341,15 +340,13 @@ then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         check_braker "${internal_dir}"
         if $braker_flag; then
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running braker a second time because previous run has issues..."
+            echo -e "\033[01;31mWARNING\033[m: Braker fails, this cluster needs to be manually checked."
             rm -r "${internal_dir}/Workspace/RobustGenePrediction/braker/"
-            run_braker "${internal_dir}"
-            check_braker "${internal_dir}"
+        else
+            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker. Storing this cluster for further analysis."
+            grep -w ${ClusterId} ${Working_directory}/Clusters/cluster_stats.txt >> ${Working_directory}/Clusters/SelectedClusters.txt
         fi
-        if ! $braker_flag; then
-            echo ${ClusterId} >> ${Working_directory}/Clusters/SelectedClusters.txt
-        fi
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding.\n"
     done
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 fi

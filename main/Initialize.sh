@@ -207,7 +207,7 @@ done < temp_initials_and_headers.tsv
 
 # Use seqkit to renames headers
 awk 'BEGIN {OFS="\t"} {print $2, $1}' temp_association.tsv > temp_association2.tsv
-seqkit replace --kv-file temp_association2.tsv -p "(.*)" -r "{kv}" "$fasta_path" > "$output_fasta"
+seqkit replace --kv-file temp_association2.tsv -p "(.*)" -r "{kv}" "$fasta_path" | seqkit seq -u > "$output_fasta"
 
 # Create the final CSV association file
 sed 's/\t/;/g' temp_association.tsv | sed '1s/^/new_header;original_header\n/' > "$association_csv"

@@ -9,7 +9,7 @@ function print_help() {
    2. Run diamond on the preprocess data.
    3. Run interspecies synteny of syntenet that identify regions with collinearity genes.
    4. Summarize the results of syntenet on three possible modes:
-     a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. WARNING: False positive could be return with this mode.
+     a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. \033[01;31mWARNING\033[m: High rate of false positive could be return with this mode.
      b. SSP: Return only pairs with strong synteny.
      c. Filter: Return pairs that were filter with a blast approach at the nucleotide level.
    5. Define Clusters of elements and perform a spectral clustering process to identify possible subclusters.
@@ -569,9 +569,9 @@ process_collinearity() {
     # Generate the final result
     if $metadata_flag; then
         cut -d ';' -f 2- "${metadata_file}" | sort -t ';' > "${temp_prefix}_metadata.txt"
-        echo -e "element01""\t""element02""\t""General_percentage""\t""element01_percentage""\t""element02_percentage""\t""element01_species""\t""element01_length""\t""element02_species""\t""element02_length" > "${base_dir}/Collinearity_percentage.txt"
+        echo -e "element01""\t""element02""\t""General_percentage""\t""element01_percentage""\t""element02_percentage""\t""element01_species""\t""element01_length""\t""element02_species""\t""element02_length" > "${working_dir}/Collinearity_percentage.txt"
     else
-        echo -e "element01""\t""element02""\t""General_percentage""\t""element01_percentage""\t""element02_percentage" > "${base_dir}/Collinearity_percentage.txt"
+        echo -e "element01""\t""element02""\t""General_percentage""\t""element01_percentage""\t""element02_percentage" > "${working_dir}/Collinearity_percentage.txt"
     fi
 
     awk '{if($4>0){print}}' "${temp_prefix}_percentage_general.txt" > "${temp_prefix}_percentage_general_filter.txt"
