@@ -707,7 +707,7 @@ process_cluster_file() {
             fi
         
             for value in "${values_array[@]}"; do
-                cat ${nucleotide_dir}/${value}.fa >> ${cluster_dir}/${cluster_id}/sequences.fa      
+                cat ${nucleotide_dir}/${value}.fa >> ${cluster_dir}/${cluster_id}/Sequences.fa      
                 if $metadata_flag; then
                     grep -w $value $metadata_file >> $updated_metadata
                 fi   

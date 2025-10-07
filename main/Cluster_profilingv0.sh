@@ -593,7 +593,8 @@ Process_treefile() {
         local NumberCaptain=$(wc -l ${temp_file_prefix}CaptainTips | awk '{print $1}')
 
         if [[ ! "$NumberCargo" -eq "$NumberCaptain" ]]; then
-            echo -e "\033[01;31mWARNING\033[m: there's difference in the number of tips between captain and Cargo tree. Comparison of trees is going to be skipped..."
+            echo -e "
+             there's difference in the number of tips between captain and Cargo tree. Comparison of trees is going to be skipped..."
             grep -v -f ${temp_file_prefix}CargoTips ${temp_file_prefix}CaptainTips > ${Remove_elements}
         else
             paste ${temp_file_prefix}CargoTips ${temp_file_prefix}CaptainTips > ${temp_file_prefix}mapfile

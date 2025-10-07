@@ -1,22 +1,6 @@
 # Check and Call directory argument
-suppressPackageStartupMessages(library(optparse))
-
-if (!requireNamespace("optparse", quietly = TRUE)) {
-  stop("Package \"optparse\" not installed. Please install it to run this script.", call. = FALSE)
-}
-
-option_list <- list(
-  make_option(c("-d", "--directory"), type="character", action = "store", default=NULL, 
-              help="path of the working directory [default %default]",metavar="PATH")
-)
-
-# Parse the command-line arguments
-arguments <- parse_args(OptionParser(option_list = option_list))
-
-# Check for required arguments and flags
-if (is.null(arguments$directory)) {
-  stop("Error: directory must be provided.", call.=FALSE)
-}
+args <- commandArgs(trailingOnly = TRUE)
+dir <- as.character(args[1])
 
 # Check software installation
 suppressPackageStartupMessages(library(ggplot2))
@@ -55,7 +39,7 @@ if (!requireNamespace("scales", quietly = TRUE)) {
 
   
 # Call directories in the Working directory
-setwd(arguments$directory)
+setwd(dir)
 
 cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Reading data...","\n"))
 

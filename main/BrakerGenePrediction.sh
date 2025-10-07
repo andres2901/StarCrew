@@ -263,7 +263,7 @@ check_braker() {
     local base_dir="$1"
 
     local braker_file="${base_dir}/Workspace/RobustGenePrediction/braker/braker.gff3"
-    local ourtput="${base_dir}/Workspace/RobustGenePrediction/PreliminarGenePrediction.gff"
+    local output="${base_dir}/Workspace/RobustGenePrediction/PreliminarGenePrediction.gff"
 
     if [[ -f $braker_file ]]; then
         braker_flag=false

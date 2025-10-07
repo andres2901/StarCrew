@@ -36,7 +36,7 @@ function print_help() {
 
 # Initialize variables
 
-workingDirectory_path=""
+Working_directory=""
 hmmprofile_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 level="2"
@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -w|--workingDirectory)
             shift
-            workingDirectory_path="$1"
+            Working_directory="$1"
             ;;
         -h|--hmm)
             shift
@@ -94,18 +94,18 @@ if $help_flag; then
 fi
 
 # Check for mandatory argument and define the path as absolute
-if [[ -z "$workingDirectory_path" ]]; then
+if [[ -z "$Working_directory" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
 fi
 
 # Check if working directory exists
-if [[ ! -d "$workingDirectory_path" ]]; then
-    echo "Error: Directory '$workingDirectory_path' does not exist."
+if [[ ! -d "$Working_directory" ]]; then
+    echo "Error: Directory '$Working_directory' does not exist."
     exit 1
 else
-    workingDirectory_path=$(realpath $workingDirectory_path)
+    Working_directory=$(realpath $Working_directory)
 fi
 
 # Check if hmmprofile directory exists
@@ -627,6 +627,18 @@ check_clusters() {
     fi
 }
 
+check_phylogeny() {
+    local base_dir="$1"
+
+    local phylogeny_file="${base_dir}/CaptainPhylogeny.nw"
+
+    if [[ -f $phylogeny_file ]]; then
+        phylogeny_flag=false
+    else
+        phylogeny_flag=true 
+    fi
+}
+
 # ==============================================================================
 # Start the process
 # ==============================================================================
@@ -641,9 +653,9 @@ then
     # ==============================================================================
     # Checking Working directory structure
     # ==============================================================================
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${workingDirectory_path}' structure."
-    check_directory_structure "${workingDirectory_path}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${workingDirectory_path}' is valid. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${Working_directory}' structure."
+    check_directory_structure "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${Working_directory}' is valid. Proceeding."
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
     organize_working_directory "${Working_directory}"
@@ -653,7 +665,7 @@ then
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
-    process_hmmsearch "${workingDirectory_path}"
+    process_hmmsearch "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
     # ==============================================================================
@@ -661,7 +673,7 @@ then
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
-    Captain_identification "${workingDirectory_path}"
+    Captain_identification "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
     # ==============================================================================
@@ -669,7 +681,7 @@ then
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
-    Alignment "${workingDirectory_path}"
+    Alignment "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
 
@@ -678,7 +690,7 @@ then
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
-    Tree_inference "${workingDirectory_path}"
+    Tree_inference "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
 elif [[ "${mode}" == "Cluster" ]]
@@ -687,66 +699,68 @@ then
     check_clusters() "${Working_directory}"
     cat ${Working_directory}/Clusters/SelectedClusters.txt | while read ClusterId
     do
+        # ==============================================================================
+        # Checking Working directory structure
+        # ==============================================================================
+
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${internal_dir}' structure."
+        check_directory_structure "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${internal_dir}' is valid. Proceeding."
 
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
+        organize_working_directory "${internal_dir}"
+
+        # ==============================================================================
+        # Preprocessing data
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+        process_hmmsearch "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+        # ==============================================================================
+        # Identify captains
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
+        Captain_identification "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+
+        # ==============================================================================
+        # Alignment
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
+        Alignment "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+
+        # ==============================================================================
+        # Alignment
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
+        Tree_inference "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+        check_phylogeny "${internal_dir}"
+        if $phylogeny_flag; then
+            echo -e "\033[01;31mWARNING\033[m: There's no captain phylogeny file, this cluster needs to be manually checked."
+        else
+            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run. Storing this cluster for further analysis."
+            grep -w ${ClusterId} ${Working_directory}/Clusters/SelectedClusters.txt >> ${Working_directory}/Clusters/ClustersAnalyzed.txt
+        fi
+
+        if [ -s "${internal_dir}/Remove_elements.txt" ]; then
+            Removed_empty_elements "${internal_dir}"
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
+            echo -e "\033[01;31mWARNING\033[m: Elements have been removed, please check file '${internal_dir}/Remove_elements.txt' and folder '${internal_dir}/RemovedElements'.\n"
+        else
+            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
+        fi
     done
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyzed"
-fi
-# ==============================================================================
-# Checking Working directory structure
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running captain identification and phylogenetic tree reconstruction of elements."
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${workingDirectory_path}' structure."
-check_directory_structure "${workingDirectory_path}"
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${workingDirectory_path}' is valid. Proceeding."
-
-# ==============================================================================
-# Preprocessing data
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
-
-process_hmmsearch "${workingDirectory_path}"
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
-
-# ==============================================================================
-# Identify captains
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
-
-Captain_identification "${workingDirectory_path}"
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
-
-# ==============================================================================
-# Alignment
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
-
-Alignment "${workingDirectory_path}"
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
-
-
-# ==============================================================================
-# Alignment
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
-
-Tree_inference "${workingDirectory_path}"
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
-
-if [ -s "${workingDirectory_path}/Remove_elements.txt" ]; then
-    Removed_empty_elements "${workingDirectory_path}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${workingDirectory_path}."
-    echo -e "\033[01;31mWARNING\033[m: Elements have been removed, please check file '${workingDirectory_path}/Remove_elements.txt' and folder '${workingDirectory_path}/RemovedElements'."
-else
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${workingDirectory_path}."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 fi
 
