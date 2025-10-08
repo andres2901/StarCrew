@@ -1,6 +1,24 @@
 # Check and Call directory argument
-args <- commandArgs(trailingOnly = TRUE)
-dir <- as.character(args[1])
+suppressPackageStartupMessages(library(optparse))
+
+if (!requireNamespace("optparse", quietly = TRUE)) {
+  stop("Package \"optparse\" not installed. Please install it to run this script.", call. = FALSE)
+}
+
+option_list <- list(
+  make_option(c("-d", "--directory"), type="character", action = "store", default=NULL, 
+              help="path of the working directory [default %default]",metavar="PATH"),
+  make_option(c("-s", "--subclusters"), type="integer", action = "store", default=1,
+              help=" Number of subclusters get in the synteny analysis", metavar="number")
+)
+
+# Parse the command-line arguments
+arguments <- parse_args(OptionParser(option_list = option_list))
+
+# Check for required arguments and flags
+if (is.null(arguments$directory)) {
+  stop("Error: directory must be provided.", call.=FALSE)
+}
 
 # Check software installation
 suppressPackageStartupMessages(library(ggplot2))
@@ -39,9 +57,9 @@ if (!requireNamespace("scales", quietly = TRUE)) {
 
   
 # Call directories in the Working directory
-setwd(dir)
+setwd(arguments$directory)
 
-cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Reading data...","\n"))
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Reading data...","\n", sep=""))
 
 col_names <- c("qseqid", "sseqid", "qstart", "qend", "sstart", "send", "pident", "length", "qlen", "slen")
 col_classes <- c("character", "character", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric")
@@ -86,7 +104,7 @@ genes <- read.delim("Final_model.gff",
 
 
 # Preprocess data
-cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Identifying if there are separate clusters","\n"))
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Identifying if there are separate clusters","\n", sep=""))
 OrthoFinder <- read.table("Orthogroups.GeneCount.tsv", header = T, check.names = F, row.names = 1)
 OrthoFinder2 <- OrthoFinder[ , ! names(OrthoFinder) %in% c("Total")]
 transposase_OrthoFinder <- t(OrthoFinder2)
@@ -98,7 +116,7 @@ fit_Orthofinder <- cutree(Hierar_cl, h = 0.99999999)
 Individual_clusters <- length(unique(fit_Orthofinder))
 
 # Process Clusters
-cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]","Analyzing",Individual_clusters,"individual cluster(s) identified","\n"))
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",Individual_clusters," individual cluster(s) identified","\n", sep=""))
 
 # Process each cluster
 for( ClusterId in 1:Individual_clusters ) {
@@ -190,3 +208,62 @@ for( ClusterId in 1:Individual_clusters ) {
     ggsave(final_plot,filename="CargoSynteny.svg", width = max(16,round(max(ordered_seqs$length)*0.0001)+round(max(tree_sorted$edge.length)*10)), height = nrow(Cluster_matrix))
   }
 }
+
+if((Individual_clusters == 1) & (arguments$subclusters >= 2)){
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",arguments$subclusters," subclusters","\n", sep=""))
+
+  fit <- cutree(Hierar_cl, k = arguments$subclusters) # k is the number of subclusters from the first approach
+  Table_fit <- as.data.frame(table(fit))
+  New_dist <- as.matrix(distance_mat)
+
+  for( ClusterId in 1:arguments$subclusters ) {
+
+    matrix <- New_dist[grep(ClusterId,fit),] # The number is the number of the cluster that want to analyze
+
+    reduce_matrix <- matrix[,colSums(abs(matrix)) < nrow(matrix)*0.95]
+    reduce_matrix <- reduce_matrix[,names(sort(colSums(reduce_matrix), decreasing = F))]
+    selected_seqs <- colnames(reduce_matrix)
+
+    if(length(selected_seqs) > nrow(matrix)){
+      seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs)
+    
+      genes_filtered <- genes %>%
+        filter(seq_id %in% selected_seqs)
+    
+      links_filtered <- blast_results %>%
+        filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
+        select(
+        seq_id = qseqid,
+        start = qstart,
+        end = qend,
+        seq_id2 = sseqid,
+        start2 = sstart,
+        end2 = send,
+        pident)
+
+      ordered_seqs <- seqs_filtered %>%
+        inner_join(tree_y_coords, by = "seq_id") %>%
+        arrange(y)
+
+      p_genome <- gggenomes(
+        seqs = ordered_seqs,
+        links = links_filtered,
+        genes = genes_filtered,
+      ) +
+        geom_seq(aes(y = y)) +
+        geom_gene(aes(y = y)) +
+        geom_link(aes(y = y, fill = pident), colour = NA ) +
+        geom_bin_label(aes(y = y), x = -10) +
+        scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
+        scale_fill_gradient(low = "gray80", high = "gray60") +
+        theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm")) # c(top, right, bottom, left)
+
+        ggsave(p_genome,filename=paste("CargoSynteny_SubCluster",ClusterId,".svg",sep=""), width = max(16,round(max(ordered_seqs$length)*0.0001)+round(max(tree_sorted$edge.length)*10)), height = nrow(Cluster_matrix))
+    }
+  }
+
+} else{
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No subcluster to analyzed","\n", sep=""))
+}
+
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Finished","\n", sep=""))

@@ -97,7 +97,7 @@ check_clusters() {
         exit 1
     else
         Cluster_number=$(wc -l "$cluster_information" | awk '{print $1}')
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters."
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters.\n"
     fi
 }
 
@@ -214,6 +214,8 @@ organize_working_directory() {
     local working_dir="${base_dir}/Workspace/ClusterProfiling/"
     local temp_dir="${base_dir}/Workspace/ClusterProfiling/temp/"
 
+    local full_gff="${working_dir}/Final_model.gff"
+
     # Create required subdirectories
     mkdir -p ${working_dir}
     mkdir -p ${temp_dir}
@@ -223,6 +225,10 @@ organize_working_directory() {
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
     cp -r ${exon_dir} ${working_dir}
+
+    echo "##gff-version 3" > ${full_gff}
+
+    cat ${gff_dir}/* | grep -v "#" >> ${full_gff}
 }
 
 run_orthofinder() {
@@ -234,9 +240,16 @@ run_orthofinder() {
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local output_dir="${working_dir}/Orthofinder"
 
-    orthofinder -f ${protein_dir} -A mafft -S diamond -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n profiling
+    orthofinder -f ${protein_dir} -A mafft -S diamond -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n profiling &> ${working_dir}/orthofinder.log
 
-    cp ${output_dir}/Results_profiling/Orthogroups/Orthogroups.GeneCount.tsv ${working_dir}
+    local results_path="${output_dir}/Results_profiling/Orthogroups/Orthogroups.GeneCount.tsv"
+
+    if [ -f "${results_path}" ]; then
+        orthofinder_flag=true
+        cp ${results_path} ${working_dir}
+    else
+        orthofinder_flag=false
+    fi
 }
 
 run_blast() {
@@ -248,7 +261,7 @@ run_blast() {
 
     cat ${nucleotide_dir}/*.fa > ${working_dir}/sequence.fasta
 
-    makeblastdb -dbtype nucl -parse_seqids -in ${working_dir}/sequence.fasta -out ${working_dir}/Cluster
+    makeblastdb -dbtype nucl -parse_seqids -in ${working_dir}/sequence.fasta -out ${working_dir}/Cluster &>/dev/null
 
     blastn -query ${working_dir}/sequence.fasta -db ${working_dir}/Cluster -evalue 1e-60 -num_threads 2 -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${working_dir}/blastresults.txt
 
@@ -263,9 +276,10 @@ run_blast() {
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterProfiling Module."
 check_clusters "${Working_directory}"
 
-awk '{print $1}}' ${Working_directory}/Clusters/ClustersAnalyzed.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
+awk '{print $1}' ${Working_directory}/Clusters/ClustersAnalyzed.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
 do
     internal_dir="${Working_directory}/Clusters/${ClusterId}/"
+    subcluster_number=$(grep -w ${ClusterId} ${Working_directory}/Clusters/ClustersAnalyzed.txt | awk '{print $3}' | sed $'s/[^[:print:]\t]//g')
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
     check_directory_structure "${internal_dir}"
@@ -280,6 +294,12 @@ do
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running orthofinder..."
     run_orthofinder "${internal_dir}"
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+    if ! $orthofinder_flag; then
+        echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder with this cluster.\n"
+        rm -r "${internal_dir}/Workspace/ClusterProfiling/"
+        continue
+    fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
     # ==============================================================================
@@ -295,7 +315,7 @@ do
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
-    Rscript ${auxiliary_path}/profilingAnalysis.R "${internal_dir}/Workspace/ClusterProfiling/"
+    Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}"
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding.\n"
 done
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"

@@ -70,7 +70,7 @@ def get_gff_data(gff_path, fasta_path):
 
     element_start = 1
     element_end = fasta_length
-    """print(f"Using FASTA file for element length: {fasta_length}bp")"""
+    print(f"Using FASTA file for element length: {fasta_length}bp")
 
     gff_data = []
     mrna_exons = {}
@@ -215,7 +215,7 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
     with open(empty_output_file, 'w') as empty_f:
         for hmm_path1 in hmm_files1:
             base_name = os.path.basename(hmm_path1).split('.')[0]
-            print(f"Processing {base_name}...")
+            print(f"\nProcessing {base_name}...")
 
             final_selected_id = None
             final_reason = ""
@@ -298,9 +298,9 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
         final_df = pd.DataFrame(all_results)
         # MODIFICATION: Only write the 'ID' column to the output file.
         final_df['ID'].to_csv(output_file, index=False, header=False)
-        print(f"Successfully wrote a list of {len(final_df)} IDs to {output_file}")
+        print(f"\nSuccessfully wrote a list of {len(final_df)} IDs to {output_file}")
     else:
-        print("No results were collected to write to the output file.")
+        print("\nNo results were collected to write to the output file.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process HMMSEARCH domtblout and GFF files and save to a single structured table.')

@@ -267,6 +267,7 @@ check_braker() {
 
     if [[ -f $braker_file ]]; then
         braker_flag=false
+        cp ${braker_file} ${output}
     else
         braker_flag=true 
     fi

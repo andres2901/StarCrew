@@ -457,7 +457,7 @@ blastn_all_vs_all() {
     
     # Step 2: Create a BLAST database from the merged FASTA file
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating the database for blast filtering stage..."
-    makeblastdb -dbtype nucl -parse_seqids -in "$temp_fasta" -out "$temp_db"
+    makeblastdb -dbtype nucl -parse_seqids -in "$temp_fasta" -out "$temp_db" &>/dev/null
     
     # Step 3: Run all-against-all search and append results to output file
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running blastn..."

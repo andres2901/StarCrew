@@ -141,6 +141,11 @@ if [[ ! -d "$auxiliary_path" ]]; then
     exit 1
 else
     auxiliary_path=$(realpath $auxiliary_path)
+    # Check the presence of the specific scripts
+    if [[ ! -f "${auxiliary_path}/macse.jar" ]]; then
+        echo "Error: file '${auxiliary_path}/macse.jar' does not exist."
+        exit 1
+    fi
 fi
 
 # Check confidence level is within allowed range
@@ -172,19 +177,6 @@ fi
 # Check if mode parameter is correct
 if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
     echo "Error: provided mode '$mode' is not accepted."
-    print_help
-    exit 1
-fi
-
-# Check minimum size is within allowed range
-if [[ "$minimum_size" =~ ^[0-9]+$ ]]; then
-    if (( $minimum_size < 5 || $minimum_size > 10 )); then
-        echo "Error: '$minimum_size' minimum size is not an accepted value."
-        print_help
-        exit 1
-    fi
-else
-    echo "Error: '$minimum_size' is not a positive integer."
     print_help
     exit 1
 fi
@@ -407,6 +399,12 @@ Captain_identification() {
 
     python ${auxiliary_path}/hmmer_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
 
+    if [ ! -s "${results_path}" ]; then
+        captainless_flag=true
+    else
+        captainless_flag=false
+    fi
+
 }
 
 Alignment() {
@@ -426,8 +424,8 @@ Alignment() {
 
 
     if [ ! -s "${captain_file}" ]; then
-        echo "ERROR: there is no captain identify in this set of data"
-        exit 1
+        echo -e "\033[01;31mERROR\033[m:: there is no captain identify in this set of data"
+        return 1
     fi
 
     # Select captains that were correctly identify 
@@ -538,7 +536,7 @@ Alignment() {
     else
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
 
-        java -jar ${auxiliary_path} -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
 
         rm ${empty_elements}
     fi
@@ -592,17 +590,19 @@ Removed_empty_elements() {
 
     local working_dir="${base_dir}/Workspace/CaptainIdentification/"
 
-    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local exon_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     local Remove_elements="${working_dir}/Captainless_elements.txt"
-    local output="${working_dir}/Captainless_elements/"
+    local output="${data_dir}/Captainless_elements/"
 
     mkdir -p "${output}"
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Removing elements without suitable gene or pseudogene model of captain from the final dataset."
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing elements without suitable gene or pseudogene model of captain from the final dataset."
 
     cat "${Remove_elements}" | while read line
     do
@@ -674,6 +674,11 @@ then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
     Captain_identification "${Working_directory}"
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+    if $captainless_flag; then
+        echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
+        exit 1
+    fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
     # ==============================================================================
@@ -683,7 +688,6 @@ then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
     Alignment "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
-
 
     # ==============================================================================
     # Alignment
@@ -696,8 +700,8 @@ then
 elif [[ "${mode}" == "Cluster" ]]
 then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode."
-    check_clusters() "${Working_directory}"
-    cat ${Working_directory}/Clusters/SelectedClusters.txt | while read ClusterId
+    check_clusters "${Working_directory}"
+    awk '{print $1}' ${Working_directory}/Clusters/SelectedClusters.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
     do
         # ==============================================================================
         # Checking Working directory structure
@@ -726,6 +730,11 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
         Captain_identification "${internal_dir}"
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+        if $captainless_flag; then
+            echo -e "  \033[01;31mWARNING\033[m: There is no captain identify in this set of data.\n"
+            continue
+        fi
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
         # ==============================================================================
@@ -744,7 +753,7 @@ then
         Tree_inference "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         check_phylogeny "${internal_dir}"
         if $phylogeny_flag; then
             echo -e "\033[01;31mWARNING\033[m: There's no captain phylogeny file, this cluster needs to be manually checked."
@@ -753,14 +762,13 @@ then
             grep -w ${ClusterId} ${Working_directory}/Clusters/SelectedClusters.txt >> ${Working_directory}/Clusters/ClustersAnalyzed.txt
         fi
 
-        if [ -s "${internal_dir}/Remove_elements.txt" ]; then
+        if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
             Removed_empty_elements "${internal_dir}"
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
-            echo -e "\033[01;31mWARNING\033[m: Elements have been removed, please check file '${internal_dir}/Remove_elements.txt' and folder '${internal_dir}/RemovedElements'.\n"
+            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
+            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
         else
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
         fi
     done
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 fi
-

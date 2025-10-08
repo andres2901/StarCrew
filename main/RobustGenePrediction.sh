@@ -149,11 +149,13 @@ check_directory_structure() {
             echo "Run the module BrakerGenePrediction before this module." >&2
             exit 1
         else
-            braker_file=${Working_dir}/PreliminarGenePrediction.gff
-            if [[ -f "$braker_file" ]]; then
+            braker_file="${Working_dir}/braker/braker.gff3"
+            if [[ ! -f "$braker_file" ]]; then
                 echo "Error: preliminary gene prediction not found in '$Working_dir'." >&2
                 echo "Run the module BrakerGenePrediction before this module." >&2
                 exit 1
+            else
+                braker_path=$(realpath $braker_file)
             fi
 
             local metadata_file="${Working_dir}/metadata.csv"
@@ -255,13 +257,15 @@ merge_models() {
         exit 1
     fi
 
-    agat_sp_keep_longest_isoform.pl -g ${braker_results} -o ${temp_dir}/LongIso.gff &> /dev/null
+    agat_sp_keep_longest_isoform.pl --gff ${braker_results} -o ${temp_dir}/LongIso.gff &> /dev/null
 
     agat_sp_merge_annotations.pl --gff ${temp_dir}/LongIso.gff --gff ${metaeuk_results} --out ${temp_dir}/merge.gff &> /dev/null
 
     python3 ${auxiliary_path}/merge.py ${temp_dir}/merge.gff ${temp_dir}/modelsKeep.txt
 
-    agat_sp_filter_feature_from_keep_list.pl --gff ${temp_dir}/merge.gff --keep_list ${temp_dir}/modelsKeep.txt --output ${out_gff} &> /dev/null
+    agat_sp_filter_feature_from_keep_list.pl --gff ${temp_dir}/merge.gff --keep_list ${temp_dir}/modelsKeep.txt --output ${temp_dir}/merge_keep.gff &> /dev/null
+
+    agat_sp_keep_longest_isoform.pl --gff ${temp_dir}/merge_keep.gff -o ${out_gff} &> /dev/null
 }
 
 gene_stats() {
@@ -455,7 +459,7 @@ elif [[ "${mode}" == "Cluster" ]]
 then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode."
     check_clusters "${Working_directory}"
-    awk '{print $1}}' ${Working_directory}/Clusters/SelectedClusters.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
+    awk '{print $1}' ${Working_directory}/Clusters/SelectedClusters.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
@@ -467,7 +471,7 @@ then
         # process braker results
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running braker gene prediction.."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: processing braker results.."
         process_braker "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
