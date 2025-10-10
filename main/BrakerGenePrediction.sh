@@ -305,6 +305,14 @@ then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running braker gene prediction.."
     run_braker "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+    check_braker "${Working_directory}"
+    if $braker_flag; then
+        echo -e "\033[01;31mWARNING\033[m: Braker fails, this cluster needs to be manually checked."
+        rm -r "${Working_directory}/Workspace/RobustGenePrediction/braker/"
+    else
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker. Storing this cluster for further analysis."
+    fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
     
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${out_directory}."

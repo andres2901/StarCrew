@@ -199,6 +199,14 @@ check_directory_structure() {
         exit 1
     fi
 
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Captainless_elements" 2>/dev/null)
+
+    if [[ -z "$exon_dir" ]]; then
+        captainremoval_flag=false
+    elif
+        captanremoval_flag=true
+
+    fi
 }
 
 organize_working_directory() {
@@ -315,7 +323,12 @@ do
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
-    Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}"
+    if $captainremoval_flag; then
+        Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c
+    else
+        Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}"
+    fi
+    
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding.\n"
 done
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"

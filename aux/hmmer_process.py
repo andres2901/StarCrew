@@ -4,7 +4,7 @@ import pandas as pd
 import argparse
 
 # --- Variables that can be easily changed ---
-EXON_RANGE = (3, 10)
+EXON_RANGE = (3, 11)
 POS_RANGE_KB = 20 
 
 def parse_hmm_file(file_path):
@@ -253,23 +253,44 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
                 hmm_path3 = os.path.join(hmm_folder3, f'{base_name}.txt')
                 ids2, _, _ = parse_hmm_file(hmm_path2)
                 ids3, _, _ = parse_hmm_file(hmm_path3)
+
+                unique_candidate = None
+                unique_candidate_level = 0
+                gff_candidates = set()
+
+                common_ids_123 = ids1.intersection(ids2).intersection(ids3)
+                common_ids_12 = ids1.intersection(ids2)
+
+                if len(common_ids_123) == 1:
+                    unique_candidate = list(common_ids_123)[0]
+                    unique_candidate_level = 3
+                elif len(common_ids_12) == 1:
+                    unique_candidate = list(common_ids_12)[0]
+                    unique_candidate_level = 2
+                elif len(ids1) == 1:
+                    unique_candidate = list(ids1)[0]
+                    unique_candidate_level = 1
+
+                    # Set the list to be used for GFF tie-breaker, if needed
+                if len(common_ids_123) > 1:
+                    gff_candidates = common_ids_123
+                    gff_candidate_level = 3
+                elif len(common_ids_12) > 1:
+                    gff_candidates = common_ids_12
+                    gff_candidate_level = 2
+                elif len(ids1) > 1:
+                    gff_candidates = ids1
+                    gff_candidate_level = 1
                 
-                candidates_for_analysis = set()
-                if min_common == 3:
-                    candidates_for_analysis = ids1.intersection(ids2).intersection(ids3)
-                elif min_common == 2:
-                    candidates_for_analysis = ids1.intersection(ids2)
-                else: # min_common == 1
-                    candidates_for_analysis = ids1
-                
-                if len(candidates_for_analysis) == 1:
-                    final_selected_id = list(candidates_for_analysis)[0]
-                    final_reason = f"Unique ID found at level {min_common}."
-                elif len(candidates_for_analysis) > 1:
-                    result, gff_reason_analysis = run_gff_analysis(candidates_for_analysis, gff_df, POS_RANGE_KB)
+                # Step 2: Make the final decision based on the findings
+                if unique_candidate is not None and unique_candidate_level >= min_common:
+                    final_selected_id = unique_candidate
+                    final_reason = f"Finalized with unique ID at level {unique_candidate_level}."
+                elif len(gff_candidates) > 1 and gff_candidate_level >= min_common:
+                    result, gff_reason_analysis = run_gff_analysis(gff_candidates, gff_df, POS_RANGE_KB)
                     if result:
                         final_selected_id = result
-                        final_reason = f"Selected via GFF tie-breaker. Reason: {gff_reason_analysis}"
+                        final_reason = f"Selected via GFF tie-breaker al level {gff_candidate_level}."
                     else:
                         final_reason = gff_reason_analysis
                 else:

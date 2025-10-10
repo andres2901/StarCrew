@@ -27,7 +27,7 @@ function print_help() {
    echo "Syntax: $0 [ -h ] -w <working_directory> [ -c <confidence_level> -t <num_threads> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-l, --length: Minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 500)."
+   echo "-l, --length: Minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 350)."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence [range: 1 - 3] (Default: 2)"
    echo "-m, --mode: Define the data that will be use for the captain identification and phylogeny. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
    echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
@@ -39,8 +39,9 @@ function print_help() {
 Working_directory=""
 hmmprofile_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
+database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
 level="2"
-length="500"
+length="350"
 mode="Cluster"
 threads="1"
 help_flag=false
@@ -144,6 +145,19 @@ else
     # Check the presence of the specific scripts
     if [[ ! -f "${auxiliary_path}/macse.jar" ]]; then
         echo "Error: file '${auxiliary_path}/macse.jar' does not exist."
+        exit 1
+    fi
+fi
+
+# Check if the exon database exist
+if [[ ! -d "$database_path" ]]; then
+    echo "Error: directory '$database_path' does not exist."
+    exit 1
+else
+    database_path=$(realpath $database_path)
+    # Check the presence of the specific scripts
+    if [[ ! -f "${database_path}/Captains_exon.fa" ]]; then
+        echo "Error: file '${database_path}/Captains_exon.fa' does not exist."
         exit 1
     fi
 fi
@@ -398,13 +412,6 @@ Captain_identification() {
     local empty_elements="${working_dir}/EmptyElements.txt"
 
     python ${auxiliary_path}/hmmer_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
-
-    if [ ! -s "${results_path}" ]; then
-        captainless_flag=true
-    else
-        captainless_flag=false
-    fi
-
 }
 
 Alignment() {
@@ -424,13 +431,14 @@ Alignment() {
 
 
     if [ ! -s "${captain_file}" ]; then
-        echo -e "\033[01;31mERROR\033[m:: there is no captain identify in this set of data"
-        return 1
+        echo -e "\033[01;31mWARNING\033[m: there is no captain gene identify in this set of data. Looking for pseudogenes only."
+        cp ${database_path}/Captains_exon.fa ${temp_dir}/Captains_exon.fa
+    else
+        # Select captains that were correctly identify 
+        cat ${exon_path}/*.fa > ${temp_dir}/exon.fa
+        seqkit grep --quiet -f ${captain_file} ${temp_dir}/exon.fa -o ${working_dir}/Captains_exon.fa
+        cat ${database_path}/Captains_exon.fa ${working_dir}/Captains_exon.fa > ${temp_dir}/Captains_exon.fa
     fi
-
-    # Select captains that were correctly identify 
-    cat ${exon_path}/*.fa > ${temp_dir}/exon.fa
-    seqkit grep --quiet -f ${captain_file} ${temp_dir}/exon.fa -o ${working_dir}/Captains_exon.fa
 
     if [ -s "${empty_elements}" ]; then
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] \033[01;31mWARNING\033[m: Not all elements have an identifible captain. Trying to identify a region possibly associated to a captain pseudogene..."
@@ -445,7 +453,7 @@ Alignment() {
 
             makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null
 
-            blastn -query ${working_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+            blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
             BEGIN {
             last_start = -1;
             last_end = -1;
@@ -480,7 +488,7 @@ Alignment() {
                 seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
                 makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
 
-                blastn -query ${working_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+                blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
                 BEGIN {
                 last_start = -1;
                 last_end = -1;
@@ -517,7 +525,6 @@ Alignment() {
                     echo "${line}" >> ${Remove_elements}
                 fi
             else
-
                 seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
 
             fi 
@@ -527,16 +534,35 @@ Alignment() {
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
 
-        if [ ! -s "${pseudoExons}" ]; then
+        if [[ ! -s "${pseudoExons}"  && -s "${captain_file}"  ]]; then
             java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
-        else
+            captainless_flag=false
+        elif [[ -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
             java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+            captainless_flag=false
+        elif [[ -s "${pseudoExons}"  && ! -s "${captain_file}" ]]; then
+            #Select a subset of captain exons from the big database that looks similar to our pseudogenes
+            makeblastdb -in ${database_path}/Captains_exon.fa -dbtype nucl -out ${temp_dir}/blast/Captains_exon_database >/dev/null
+            blastn -query ${pseudoExons} -db ${temp_dir}/blast/Captains_exon_database -task blastn -perc_identity 60 -qcov_hsp_perc 60 -evalue 0 -max_hsps 1 -outfmt "6 sseqid" | sort -u > ${temp_dir}/Selected_captain_exons.txt
+            seqkit grep --quiet -f ${temp_dir}/Selected_captain_exons.txt ${database_path}/Captains_exon.fa -o ${temp_dir}/Selected_captain_exons.fa
+
+            #Perform alignment with this selected sequences
+            java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${temp_dir}/Selected_captain_exons.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
+
+            #Remove sequences from the database
+            seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_exons.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
+            captainless_flag=false
+        elif [[ ! -s "${pseudoExons}" && ! -s "${captain_file}" ]]; then
+            echo -e "\033[01;31mERROR\033[m:: there is no captain gene or pseudogene identify in this set of data"
+            captainless_flag=true
+            return 1
         fi
 
     else
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
 
         java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        captainless_flag=false
 
         rm ${empty_elements}
     fi
@@ -623,7 +649,7 @@ check_clusters() {
         exit 1
     else
         Cluster_number=$(wc -l "$cluster_information" | awk '{print $1}')
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters."
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters.\n"
     fi
 }
 
@@ -674,11 +700,6 @@ then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
     Captain_identification "${Working_directory}"
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
-    if $captainless_flag; then
-        echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
-        exit 1
-    fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
     # ==============================================================================
@@ -687,6 +708,11 @@ then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
     Alignment "${Working_directory}"
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+    if $captainless_flag; then
+        echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
+        exit 1
+    fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
     # ==============================================================================
@@ -730,11 +756,6 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
         Captain_identification "${internal_dir}"
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
-        if $captainless_flag; then
-            echo -e "  \033[01;31mWARNING\033[m: There is no captain identify in this set of data.\n"
-            continue
-        fi
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
         # ==============================================================================
@@ -743,6 +764,11 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
         Alignment "${internal_dir}"
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+        if $captainless_flag; then
+            echo -e "  \033[01;31mWARNING\033[m: There is no captain identify in this set of data.\n"
+            continue
+        fi
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
         # ==============================================================================
