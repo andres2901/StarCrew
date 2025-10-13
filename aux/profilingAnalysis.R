@@ -31,7 +31,8 @@ suppressPackageStartupMessages(library(viridis))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(gggenomes))
 suppressPackageStartupMessages(library(scales))
-  
+suppressPackageStartupMessages(library(factoextra))
+
 if (!requireNamespace("ggplot2", quietly = TRUE)) {
    stop("Package \"ggplot2\" not installed. Please install it to run this script.", call. = FALSE)
 }
@@ -55,6 +56,9 @@ if (!requireNamespace("gggenomes", quietly = TRUE)) {
 }
 if (!requireNamespace("scales", quietly = TRUE)) {
    stop("Package \"scales\" not installed. Please install it to run this script.", call. = FALSE)
+}
+if (!requireNamespace("factoextra", quietly = TRUE)) {
+   stop("Package \"factoextra\" not installed. Please install it to run this script.", call. = FALSE)
 }
 
   
@@ -205,7 +209,7 @@ for( ClusterId in 1:Individual_clusters ) {
       ggsave(final_plot,filename="CargoSynteny.svg", width = min(49, max(16,round(max(ordered_seqs$length)*0.0001)+round(max(tree_sorted$edge.length)*10))), height = min(49, nrow(Cluster_matrix)),limitsize = FALSE)
     }
   } else {
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","WARNING: There are issues with the following elements:",rownames(Cluster_matrix),"\n", sep=""))
+    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","WARNING: There are issues with the following element: ",as.character(rownames(Cluster_matrix)),"\n", sep=""))
   }
   
 }
@@ -220,6 +224,117 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & ! arguments$capta
   for( ClusterId in 1:arguments$subclusters ) {
 
     matrix <- New_dist[grep(ClusterId,fit),] # The number is the number of the cluster that want to analyze
+    Cluster_elements <- rownames(matrix)
+    write.table(Cluster_elements, file =paste("SubCluster",ClusterId,".txt",sep=""), sep = '\t', row.names = F, col.names= F,quote = F)
+
+    if(is.matrix(matrix)) {
+      reduce_matrix <- matrix[,colSums(matrix) < nrow(matrix)*0.97]
+      reduce_matrix <- reduce_matrix[,names(sort(colSums(reduce_matrix), decreasing = F))]
+      if(ncol(reduce_matrix) >= nrow(reduce_matrix) + 2) {
+        reduce_matrix2 <- reduce_matrix[,(nrow(reduce_matrix)+1):ncol(reduce_matrix)]
+        reduce_matrix3 <- reduce_matrix2[rowSums(reduce_matrix2) < ncol(reduce_matrix2)*0.97,]
+        selected_seqs <- c(rownames(reduce_matrix3),colnames(reduce_matrix3))
+
+        OrthoFinder_subcluster <- OrthoFinder2[,selected_seqs]
+        OrthoFinder_subcluster2 <- OrthoFinder_subcluster[rowSums(OrthoFinder_subcluster) > 0,]
+        Gene_movement <- rownames(OrthoFinder_subcluster2[rowSums(OrthoFinder_subcluster2 > 0) >= round(ncol(OrthoFinder_subcluster2)*0.8),])
+
+        if(length(Gene_movement) > 0) {
+          write.table(Gene_movement, file =paste("SubCluster",ClusterId,"_moveOrthologs.txt",sep=""), sep = '\t', row.names = F, col.names= F,quote = F)
+        }
+
+        seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs)
+    
+        genes_filtered <- genes %>%
+        filter(seq_id %in% selected_seqs)
+    
+        links_filtered <- blast_results %>%
+        filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
+        select(
+        seq_id = qseqid,
+        start = qstart,
+        end = qend,
+        seq_id2 = sseqid,
+        start2 = sstart,
+        end2 = send,
+        pident)
+
+        ordered_seqs <- seqs_filtered %>%
+        arrange(match(seq_id, selected_seqs))
+      } else if(ncol(reduce_matrix) > nrow(reduce_matrix)) {
+        reduce_matrix2 <- reduce_matrix[,(nrow(reduce_matrix)+1):ncol(reduce_matrix)]
+        selected_seqs <- c(names(reduce_matrix2[reduce_matrix2 < 1]),tail(colnames(reduce_matrix), n = 1))
+
+        OrthoFinder_subcluster <- OrthoFinder2[,selected_seqs]
+        OrthoFinder_subcluster2 <- OrthoFinder_subcluster[OrthoFinder_subcluster[, ncol(OrthoFinder_subcluster)] > 0,]
+        Gene_movement <- rownames(OrthoFinder_subcluster2[rowSums(OrthoFinder_subcluster2 >=1) >= round(ncol(OrthoFinder_subcluster2)*0.8),])
+
+        if(length(Gene_movement) > 0) {
+          write.table(Gene_movement, file =paste("SubCluster",ClusterId,"_moveOrthologs.txt",sep=""), sep = '\t', row.names = F, col.names= F,quote = F)
+        }
+
+        seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs)
+    
+        genes_filtered <- genes %>%
+        filter(seq_id %in% selected_seqs)
+    
+        links_filtered <- blast_results %>%
+        filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
+        select(
+        seq_id = qseqid,
+        start = qstart,
+        end = qend,
+        seq_id2 = sseqid,
+        start2 = sstart,
+        end2 = send,
+        pident)
+
+        ordered_seqs <- seqs_filtered %>%
+        arrange(match(seq_id, selected_seqs))
+      }
+
+    }
+
+    if(exists("selected_seqs")) {
+      p_genome <- gggenomes(
+      seqs = ordered_seqs,
+      links = links_filtered,
+      genes = genes_filtered,
+      ) +
+      geom_seq(aes(y = y)) +
+      geom_gene(aes(y = y)) +
+      geom_link(aes(y = y, fill = pident), colour = NA ) +
+      geom_bin_label(aes(y = y), x = -10) +
+      scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
+      #scale_fill_gradient(low = "gray80", high = "gray60") +
+      theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm")) # c(top, right, bottom, left)
+
+      ggsave(p_genome,filename=paste("CargoSynteny_SubCluster",ClusterId,".svg",sep=""), width = min(49,max(16,round(max(ordered_seqs$length)*0.0001)/2)), height = min(49, length(selected_seqs)), limitsize = FALSE)
+    } else{
+      cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Subcluster ",ClusterId," can not be analyzed automatically","\n", sep=""))
+    }
+  }
+
+} else if((Individual_clusters == 1) & (arguments$subclusters >= 2) & arguments$captainRemoval) {
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
+
+  New_dist <- as.matrix(distance_mat)
+
+  fviz_output <- fviz_nbclust(New_dist, FUN = hcut, method = "wss", k.max = min(10, nrow(New_dist)-1))
+  wss_data <- fviz_output$data
+  slopes <- diff(wss_data$y)
+  slope_change <- abs(diff(slopes))
+  elbow_point <- which.max(slope_change) + 1
+
+  fit <- cutree(Hierar_cl, k = elbow_point) # k is the number of subclusters from the elbow approach
+
+  Table_fit <- as.data.frame(table(fit))
+
+  for( ClusterId in 1:elbow_point) {
+
+    matrix <- New_dist[grep(ClusterId,fit),] # The number is the number of the cluster that want to analyze
+    Cluster_elements <- rownames(matrix)
+    write.table(Cluster_elements, file =paste("SubCluster",ClusterId,".txt",sep=""), sep = '\t', row.names = F, col.names= F,quote = F)
 
     if(is.matrix(matrix)) {
       reduce_matrix <- matrix[,colSums(matrix) < nrow(matrix)*0.97]
@@ -292,9 +407,139 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & ! arguments$capta
       cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Subcluster ",ClusterId," can not be analyzed automatically","\n", sep=""))
     }
   }
-
 } else{
-  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No subcluster to analyzed","\n", sep=""))
-}
+  cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No subcluster to analyzed","\n", sep=""))
+} 
+
+if((Individual_clusters == 1) & (arguments$subclusters == 1)) {
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are differences between captain and cargo dendograms","\n", sep=""))
+
+  phylo_tree <- read.tree("CaptainPhylogeny.nw")
+  dist_matrix <- cophenetic.phylo(phylo_tree)
+  min_dist <- min(dist_matrix)
+  max_dist <- max(dist_matrix)
+  normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
+  normalized_dist_matrix2 <- scale(normalized_dist_matrix)
+  fviz_output <- fviz_nbclust(normalized_dist_matrix2, FUN = hcut, method = "wss", k.max = min(10, nrow(normalized_dist_matrix2)-1))
+  wss_data <- fviz_output$data
+  slopes <- diff(wss_data$y)
+  slope_change <- abs(diff(slopes))
+  elbow_point <- which.max(slope_change) + 1
+  hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
+  fit_tree <- cutree(hclust_tree, k = elbow_point)
+  fit_tree <- fit_tree[order(names(fit_tree))]
+
+  fit <- cutree(Hierar_cl, k = elbow_point) # k is the number of subclusters from the elbow method
+  fit <- fit[order(names(fit))]
+
+  contingency_table <- table(fit_tree, fit)
+  best_match <- apply(contingency_table, 1, which.max)
+  fit_aligned <- fit
+  for(i in 1:length(best_match)){
+    original_label <- names(best_match)[i]
+    new_label <- best_match[i]
+    fit_aligned[fit == original_label] <- as.numeric(new_label)
+  }
+
+  discordant_indices <- which(fit_tree != fit_aligned)
+  discordant_elements <- names(fit_tree)[discordant_indices]
+
+  if(length(discordant_elements) >= 1) {
+    cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
+    write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
+
+    New_dist <- as.matrix(distance_mat)
+    matrix <- New_dist[discordant_elements,]
+
+    if(is.matrix(matrix)) {
+      reduce_matrix <- matrix[,colSums(matrix) < nrow(matrix)*0.5]
+      reduce_matrix <- reduce_matrix[,names(sort(colSums(reduce_matrix), decreasing = F))]
+      if(ncol(reduce_matrix) >= nrow(reduce_matrix) + 2) {
+        reduce_matrix2 <- reduce_matrix[,(nrow(reduce_matrix)+1):ncol(reduce_matrix)]
+        reduce_matrix3 <- reduce_matrix2[rowSums(reduce_matrix2) < ncol(reduce_matrix2)*0.97,]
+        selected_seqs <- c(rownames(reduce_matrix3),colnames(reduce_matrix3))
+
+        seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs)
+    
+        genes_filtered <- genes %>%
+        filter(seq_id %in% selected_seqs)
+    
+        links_filtered <- blast_results %>%
+        filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
+        select(
+        seq_id = qseqid,
+        start = qstart,
+        end = qend,
+        seq_id2 = sseqid,
+        start2 = sstart,
+        end2 = send,
+        pident)
+
+      } else if(ncol(reduce_matrix) > nrow(reduce_matrix)) {
+        reduce_matrix2 <- reduce_matrix[,(nrow(reduce_matrix)+1):ncol(reduce_matrix)]
+        selected_seqs <- c(names(reduce_matrix2[reduce_matrix2 < 1]),tail(colnames(reduce_matrix), n = 1))
+
+        seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs)
+    
+        genes_filtered <- genes %>%
+        filter(seq_id %in% selected_seqs)
+    
+        links_filtered <- blast_results %>%
+        filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
+        select(
+        seq_id = qseqid,
+        start = qstart,
+        end = qend,
+        seq_id2 = sseqid,
+        start2 = sstart,
+        end2 = send,
+        pident)
+
+      }
+      } else {
+        reduce_matrix <- matrix[ matrix < 0.5]
+
+        if(length(reduce_matrix) > 1) {
+          selected_seqs <- unique(c(discordant_elements, names(sort(matrix[matrix<0.5]))))
+          seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs)
+    
+          genes_filtered <- genes %>%
+          filter(seq_id %in% selected_seqs)
+    
+          links_filtered <- blast_results %>%
+          filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
+          select(
+          seq_id = qseqid,
+          start = qstart,
+          end = qend,
+          seq_id2 = sseqid,
+          start2 = sstart,
+          end2 = send,
+          pident)
+        }
+      }
+
+    if(exists("selected_seqs")) {
+      p_genome <- gggenomes(
+      seqs = seqs_filtered,
+      links = links_filtered,
+      genes = genes_filtered,
+      ) +
+      geom_seq(aes(y = y)) +
+      geom_gene(aes(y = y)) +
+      geom_link(aes(y = y, fill = pident), colour = NA ) +
+      geom_bin_label(aes(y = y), x = -10) +
+      scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
+      #scale_fill_gradient(low = "gray80", high = "gray60") +
+      theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm")) # c(top, right, bottom, left)
+
+      ggsave(p_genome,filename="Captain_discordance.svg", width = min(49,max(16,round(max(ordered_seqs$length)*0.0001)/2)), height = min(49, length(selected_seqs)), limitsize = FALSE)
+    } else{
+      cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","discordances can not be analyzed automatically","\n", sep=""))
+    }
+  } else {
+    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
+  }
+} 
 
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Finished","\n", sep=""))

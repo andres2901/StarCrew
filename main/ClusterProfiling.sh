@@ -203,9 +203,8 @@ check_directory_structure() {
 
     if [[ -z "$exon_dir" ]]; then
         captainremoval_flag=false
-    elif
-        captanremoval_flag=true
-
+    else
+        captainremoval_flag=true
     fi
 }
 
@@ -224,6 +223,8 @@ organize_working_directory() {
 
     local full_gff="${working_dir}/Final_model.gff"
 
+    local captainPhylogeny="${base_dir}/CaptainPhylogeny.nw"
+
     # Create required subdirectories
     mkdir -p ${working_dir}
     mkdir -p ${temp_dir}
@@ -233,6 +234,7 @@ organize_working_directory() {
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
     cp -r ${exon_dir} ${working_dir}
+    cp ${captainPhylogeny} ${working_dir}/
 
     echo "##gff-version 3" > ${full_gff}
 
@@ -255,6 +257,7 @@ run_orthofinder() {
     if [ -f "${results_path}" ]; then
         orthofinder_flag=true
         cp ${results_path} ${working_dir}
+        cp ${output_dir}/Results_profiling/Orthogroups/Orthogroups.txt ${working_dir}
     else
         orthofinder_flag=false
     fi
@@ -264,18 +267,70 @@ run_blast() {
     local base_dir="$1"
 
     local working_dir="${base_dir}/Workspace/ClusterProfiling/"
+    local temp_dir="${working_dir}/temp/"
     local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local output_dir="${working_dir}/Orthofinder"
 
-    cat ${nucleotide_dir}/*.fa > ${working_dir}/sequence.fasta
+    cat ${nucleotide_dir}/*.fa > ${temp_dir}/sequence.fasta
 
-    makeblastdb -dbtype nucl -parse_seqids -in ${working_dir}/sequence.fasta -out ${working_dir}/Cluster &>/dev/null
+    makeblastdb -dbtype nucl -parse_seqids -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
 
-    blastn -query ${working_dir}/sequence.fasta -db ${working_dir}/Cluster -evalue 1e-60 -num_threads 2 -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${working_dir}/blastresults.txt
+    blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads 2 -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
 
-    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${working_dir}/blastresults.txt > ${working_dir}/clean_results.txt
+    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/clean_results.txt
 }
 
+check_movement() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/ClusterProfiling/"
+
+    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+
+    local orthogroups_file="${working_dir}/Orthogroups.txt"
+    local temp_dir="${working_dir}/temp/"
+
+    ls ${working_dir}/*_moveOrthologs.txt > ${temp_dir}/movement_files.txt
+
+    File_number=$(wc -l "${temp_dir}/movement_files.txt" | awk '{print $1}')
+
+    if [[ $File_number -gt 0 ]]; then
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Genes in movement have been identified. Processing..."
+        cat ${protein_dir}/*.fa > ${temp_dir}/Whole_proteins.fa
+
+        cat ${temp_dir}/movement_files.txt | xargs -n 1 basename -s .txt | while read SubCluster
+        do
+            grep -f ${working_dir}/${SubCluster}.txt ${working_dir}/Orthogroups.txt | sed 's/://g' > ${working_dir}/${SubCluster}IDs.txt
+
+            mkdir -p "${working_dir}/${SubCluster}"
+            local OLD_IFS="$IFS"
+            IFS=$' '
+
+            while read -r cluster_id values_string; 
+            do 
+                echo "$values_string" | awk '
+                { 
+                    for (i=1; i<=NF; i++)  {
+                        a[NR,i] = $i
+                    }
+                }
+                NF>p { p = NF }
+                END {    
+                    for(j=1; j<=p; j++) {
+                        str=a[1,j]
+                        for(i=2; i<=NR; i++){
+                            str=str" "a[i,j];
+                        }
+                        print str
+                    }
+                }' > ${temp_dir}/${cluster_id}_IDs.txt
+                seqkit grep --quiet -f ${temp_dir}/${cluster_id}_IDs.txt ${temp_dir}/Whole_proteins.fa > ${working_dir}/${SubCluster}/${cluster_id}.fa
+            done < ${working_dir}/${SubCluster}IDs.txt
+            IFS="$OLD_IFS"
+        done
+    fi
+
+}
 
 # ==============================================================================
 # Start the process
@@ -304,7 +359,7 @@ do
     run_orthofinder "${internal_dir}"
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
     if ! $orthofinder_flag; then
-        echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder with this cluster.\n"
+        echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder in this cluster.\n"
         rm -r "${internal_dir}/Workspace/ClusterProfiling/"
         continue
     fi
@@ -328,6 +383,9 @@ do
     else
         Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}"
     fi
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for identifiable genes that participate in movement..."
+    check_movement "${internal_dir}"
     
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding.\n"
 done

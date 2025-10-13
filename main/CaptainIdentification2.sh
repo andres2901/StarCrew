@@ -27,7 +27,7 @@ function print_help() {
    echo "Syntax: $0 [ -h ] -w <working_directory> [ -c <confidence_level> -t <num_threads> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-l, --length: Minimum length of the protein to be identify as captain [range: 200 - 800] (Default: 350)."
+   echo "-l, --length: Minimum length of the protein to be identify as captain [range: 300 - 800] (Default: 350)."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence [range: 1 - 3] (Default: 2)"
    echo "-m, --mode: Define the data that will be use for the captain identification and phylogeny. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
    echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
@@ -177,7 +177,7 @@ fi
 
 # Check length is within allowed range
 if [[ "$length" =~ ^[0-9]+$ ]]; then
-    if (( $length < 200 || $length > 800 )); then
+    if (( $length < 300 || $length > 800 )); then
         echo "Error: '$length' length is not an accepted value."
         print_help
         exit 1
@@ -453,7 +453,7 @@ Alignment() {
 
             makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null
 
-            blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+            tblastn -query ${database_path}/Captains.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
             BEGIN {
             last_start = -1;
             last_end = -1;
@@ -483,12 +483,12 @@ Alignment() {
 
             local exonNumber=$(wc -l ${temp_dir}/${line}_start.bed | awk '{print $1}')
 
-            if [[ ${exonNumber} -lt 1 ]]; then
+            if [[ ${exonNumber} -lt 3 ]]; then
 
                 seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
                 makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
 
-                blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+                tblastn -query ${database_path}/Captains.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
                 BEGIN {
                 last_start = -1;
                 last_end = -1;
@@ -518,7 +518,7 @@ Alignment() {
 
                 local exonNumber=$(wc -l ${temp_dir}/${line}_end.bed | awk '{print $1}')
 
-                if [[ ${exonNumber} -ge 1 ]]; then
+                if [[ ${exonNumber} -ge 3 ]]; then
                     seqkit subseq --quiet --bed ${temp_dir}/${line}_end.bed ${temp_dir}/blast/${line}_end.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
                 else 
                     echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."
