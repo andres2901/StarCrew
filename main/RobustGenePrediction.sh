@@ -149,7 +149,7 @@ check_directory_structure() {
             echo "Run the module BrakerGenePrediction before this module." >&2
             exit 1
         else
-            braker_file="${Working_dir}/braker/braker.gff3"
+            braker_file="${Working_dir}/PreliminarGenePrediction.gff"
             if [[ ! -f "$braker_file" ]]; then
                 echo "Error: preliminary gene prediction not found in '$Working_dir'." >&2
                 echo "Run the module BrakerGenePrediction before this module." >&2
@@ -265,7 +265,9 @@ merge_models() {
 
     agat_sp_filter_feature_from_keep_list.pl --gff ${temp_dir}/merge.gff --keep_list ${temp_dir}/modelsKeep.txt --output ${temp_dir}/merge_keep.gff &> /dev/null
 
-    agat_sp_keep_longest_isoform.pl --gff ${temp_dir}/merge_keep.gff -o ${out_gff} &> /dev/null
+    agat_sp_keep_longest_isoform.pl --gff ${temp_dir}/merge_keep.gff -o ${temp_dir}/merge_LongIso.gff &> /dev/null
+    
+    agat_sp_filter_by_ORF_size.pl --gff ${temp_dir}/merge_LongIso.gff -s 10 -o ${out_gff} &> /dev/null
 }
 
 gene_stats() {

@@ -290,7 +290,7 @@ check_movement() {
     local orthogroups_file="${working_dir}/Orthogroups.txt"
     local temp_dir="${working_dir}/temp/"
 
-    ls ${working_dir}/*_moveOrthologs.txt > ${temp_dir}/movement_files.txt
+    ls ${working_dir}/*_moveOrthologs.txt > ${temp_dir}/movement_files.txt 2>/dev/null
 
     File_number=$(wc -l "${temp_dir}/movement_files.txt" | awk '{print $1}')
 
