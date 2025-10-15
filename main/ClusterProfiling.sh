@@ -199,12 +199,12 @@ check_directory_structure() {
         exit 1
     fi
 
-    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Captainless_elements" 2>/dev/null)
+    local captainremoval_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Captainless_elements" 2>/dev/null)
 
-    if [[ -z "$exon_dir" ]]; then
-        captainremoval_flag=false
+    if [[ -z "$captainremoval_dir" ]]; then
+        captainremoval_number="0"
     else
-        captainremoval_flag=true
+        captainremoval_number=$(find "$captainremoval_dir" -maxdepth 1 -type f -name "*.gff" | sort -u | wc -l)
     fi
 }
 
@@ -378,11 +378,7 @@ do
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
-    if $captainremoval_flag; then
-        Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c
-    else
-        Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}"
-    fi
+    Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c $captainremoval_number
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for identifiable genes that participate in movement..."
     check_movement "${internal_dir}"

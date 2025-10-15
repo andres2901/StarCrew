@@ -483,7 +483,7 @@ Alignment() {
 
             local exonNumber=$(wc -l ${temp_dir}/${line}_start.bed | awk '{print $1}')
 
-            if [[ ${exonNumber} -lt 1 ]]; then
+            if [[ ${exonNumber} -lt 2 ]]; then
 
                 seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
                 makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
@@ -518,7 +518,7 @@ Alignment() {
 
                 local exonNumber=$(wc -l ${temp_dir}/${line}_end.bed | awk '{print $1}')
 
-                if [[ ${exonNumber} -ge 1 ]]; then
+                if [[ ${exonNumber} -ge 2 ]]; then
                     seqkit subseq --quiet --bed ${temp_dir}/${line}_end.bed ${temp_dir}/blast/${line}_end.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
                 else 
                     echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."

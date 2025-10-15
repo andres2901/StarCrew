@@ -4,7 +4,7 @@ import pandas as pd
 import argparse
 
 # --- Variables that can be easily changed ---
-EXON_RANGE = (1, 11)
+EXON_RANGE = (2, 11)
 POS_RANGE_KB = 20 
 
 def parse_hmm_file(file_path):

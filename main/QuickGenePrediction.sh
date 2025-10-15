@@ -171,7 +171,7 @@ gene_stats() {
 
     awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
     do 
-        echo -e ${line}"\t"$(grep ${line} ${working_dir}/metaeuk_fix.gff | grep -c "gene")"\t"$(grep ${line} ${working_dir}/metaeuk_fix.gff | grep "gene" | awk '{ sum  += $5 - $4 } END { print sum / NR }') >> ${temp_directory}stats_gff3.txt 
+        echo -e ${line}"\t"$(grep -w ${line} ${working_dir}/metaeuk_fix.gff | grep -c "gene")"\t"$(grep -w ${line} ${working_dir}/metaeuk_fix.gff | grep "gene" | awk '{ sum  += $5 - $4 } END { print sum / NR }') >> ${temp_directory}stats_gff3.txt 
     done
 
     awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
@@ -203,7 +203,7 @@ organize_files() {
     awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
     do 
         head -n1 ${working_dir}/metaeuk_fix.gff > ${temp_directory}multiple/${line}.gff
-        grep $line ${working_dir}/metaeuk_fix.gff >> ${temp_directory}multiple/${line}.gff
+        grep -w $line ${working_dir}/metaeuk_fix.gff >> ${temp_directory}multiple/${line}.gff
     done
 
     awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line

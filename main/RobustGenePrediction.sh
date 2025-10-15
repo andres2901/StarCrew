@@ -265,9 +265,7 @@ merge_models() {
 
     agat_sp_filter_feature_from_keep_list.pl --gff ${temp_dir}/merge.gff --keep_list ${temp_dir}/modelsKeep.txt --output ${temp_dir}/merge_keep.gff &> /dev/null
 
-    agat_sp_keep_longest_isoform.pl --gff ${temp_dir}/merge_keep.gff -o ${temp_dir}/merge_LongIso.gff &> /dev/null
-    
-    agat_sp_filter_by_ORF_size.pl --gff ${temp_dir}/merge_LongIso.gff -s 10 -o ${out_gff} &> /dev/null
+    agat_sp_keep_longest_isoform.pl --gff ${temp_dir}/merge_keep.gff -o ${out_gff} &> /dev/null
 }
 
 gene_stats() {
@@ -278,7 +276,7 @@ gene_stats() {
 
     awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
     do 
-        echo -e ${line}"\t"$(grep ${line} ${working_dir}/Final_model.gff | grep -c "gene")"\t"$(grep ${line} ${working_dir}/Final_model.gff | grep "gene" | awk '{ sum  += $5 - $4 } END { print sum / NR }') >> ${temp_directory}stats_gff3.txt 
+        echo -e ${line}"\t"$(grep -w ${line} ${working_dir}/Final_model.gff | grep -c "gene")"\t"$(grep -w ${line} ${working_dir}/Final_model.gff | grep "gene" | awk '{ sum  += $5 - $4 } END { print sum / NR }') >> ${temp_directory}stats_gff3.txt 
     done
 
     awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
@@ -305,7 +303,7 @@ organize_files() {
     awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
     do 
         head -n1 ${working_dir}/Final_model.gff > ${temp_directory}multiple/${line}.gff
-        grep $line ${working_dir}/Final_model.gff >> ${temp_directory}multiple/${line}.gff
+        grep -w $line ${working_dir}/Final_model.gff >> ${temp_directory}multiple/${line}.gff
     done
 
     awk 'NR>1{print $1}' ${working_dir}/Final_model.gff | sort | uniq | while read line
@@ -419,7 +417,7 @@ then
     # Process braker results
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Filtering braker gene prediction.."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: processing braker results..."
     process_braker "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 

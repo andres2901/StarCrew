@@ -249,6 +249,7 @@ generate_database() {
     rm ${working_dir}/metaeuk*
     rm ${working_dir}/ProteinDB*
     rm ${working_dir}/ContigsDB*
+    rm ${working_dir}/database_headers.txt
 }
 
 run_braker() {
@@ -257,6 +258,14 @@ run_braker() {
     local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
 
     braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --alternatives-from-evidence=false --augustus_args "--genemodel=complete --noInFrameStop=true" --threads=8 --workingdir ${working_dir}/braker --useexisting &> /dev/null
+}
+
+run_braker_second() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
+
+    braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --threads=8 --workingdir ${working_dir}/braker --useexisting &> /dev/null
 }
 
 check_braker() {
@@ -350,7 +359,7 @@ then
         check_braker "${internal_dir}"
         if $braker_flag; then
             echo -e "\033[01;31mWARNING\033[m: Braker fails, this cluster needs to be manually checked."
-            rm -r "${internal_dir}/Workspace/RobustGenePrediction/braker/"
+            rm -r "${internal_dir}/Workspace/RobustGenePrediction/"
         else
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker. Storing this cluster for further analysis."
             grep -w ${ClusterId} ${Working_directory}/Clusters/cluster_stats.txt >> ${Working_directory}/Clusters/SelectedClusters.txt
