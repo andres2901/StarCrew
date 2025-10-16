@@ -320,7 +320,7 @@ then
         echo -e "\033[01;31mWARNING\033[m: Braker fails, this cluster needs to be manually checked."
         rm -r "${Working_directory}/Workspace/RobustGenePrediction/braker/"
     else
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker. Storing this cluster for further analysis."
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker."
     fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
     
@@ -358,8 +358,17 @@ then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         check_braker "${internal_dir}"
         if $braker_flag; then
-            echo -e "\033[01;31mWARNING\033[m: Braker fails, this cluster needs to be manually checked."
-            rm -r "${internal_dir}/Workspace/RobustGenePrediction/"
+            echo -e "\033[01;31mWARNING\033[m: Braker fails, trying a second time."
+            rm -r "${internal_dir}/Workspace/RobustGenePrediction/braker/"
+            run_braker_second "${internal_dir}"
+            check_braker "${internal_dir}"
+            if $braker_flag; then
+                echo -e "\033[01;31mWARNING\033[m: Braker fails, this cluster needs to be manually checked."
+                rm -r "${Working_directory}/Workspace/RobustGenePrediction/braker/"
+            else
+                echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker. Storing this cluster for further analysis."
+                grep -w ${ClusterId} ${Working_directory}/Clusters/cluster_stats.txt >> ${Working_directory}/Clusters/SelectedClusters.txt
+            fi
         else
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker. Storing this cluster for further analysis."
             grep -w ${ClusterId} ${Working_directory}/Clusters/cluster_stats.txt >> ${Working_directory}/Clusters/SelectedClusters.txt

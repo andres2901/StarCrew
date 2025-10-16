@@ -378,6 +378,7 @@ do
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
+    echo $captainremoval_number
     Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c $captainremoval_number
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for identifiable genes that participate in movement..."
