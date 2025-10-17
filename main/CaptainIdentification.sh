@@ -10,26 +10,21 @@ function print_help() {
       2.1 Only a match with the catain hmm profile from starfish (\033[01;31mWARNING\033[m: This could lead to false positive identification leading to a bad phylogenetic analysis).
       2.2 Plus a match with the DUF3435 hmm profile.
       2.3 Plus a match with the integrase catalitic core hmm profile.
-   3. Align exonic sequence with MACSE with aminoacid output and preprocess alignment with Clipkit.
-   4. Run maximum-likelihood phylogenetic tree inference.
-   
-   The working directory should have the following structure:
-   WorkingDiretory/
-   ├── *_gff/
-   │   ├── element01.gff
-   │   └── element02.gff
-   │   ︙
-   └── *_protein/
-       ├── element01.fa
-       └── element02.fa
-       ︙"
+   3. For elements without a confident captain gene, it will look for a putative captain pseudogene at the beginning and end of the element.
+   4. Align exonic sequence with MACSE with aminoacid output and preprocess alignment with Clipkit.
+   5. Run maximum-likelihood phylogenetic tree inference.
+   There are three available mode:
+   -Cluster: Analyzed, and perform all of this five steps per cluster and remove elements without a suitable captain gene/pseudogene.
+   -FullAll:Analyzed, and perform all of this five steps in the whole dataset.
+   -AllID: Analyzed and perform the first three step in the whole dataset and and remove elements without a suitable captain gene/pseudogene.
+   "
    echo
-   echo "Syntax: $0 [ -h ] -w <working_directory> [ -c <confidence_level> -t <num_threads> ]"
+   echo "Syntax: SAT CaptainIdentification [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-l, --length: Minimum length of the protein to be identify as captain [range: 200 - 800] (Default: 350)."
-   echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence [range: 1 - 3] (Default: 2)"
-   echo "-m, --mode: Define the data that will be use for the captain identification and phylogeny. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
+   echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 350) [range: 200 - 800]."
+   echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
+   echo "-m, --mode: specified the mode (Default = Cluster) [Available mode: Cluster, FullAll, AllID]."
    echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
    echo "-help: Display this help message."
 }
@@ -189,7 +184,7 @@ else
 fi
 
 # Check if mode parameter is correct
-if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
+if [[ "$mode" != "FullAll" && "$mode" != "AllID"  && "$mode" != "Cluster" ]]; then
     echo "Error: provided mode '$mode' is not accepted."
     print_help
     exit 1
@@ -203,6 +198,16 @@ if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
 fi
 
 # Check for software presence
+if [[ -z "$(which python)" ]]; then
+    echo "Error: Missing python function."
+    exit 1
+fi
+
+if [[ -z "$(which java)" ]]; then
+    echo "Error: Missing java function."
+    exit 1
+fi
+
 if [[ -z "$(which hmmsearch)" ]]; then
     echo "Error: Missing hmmsearch function."
     exit 1
@@ -225,6 +230,11 @@ fi
 
 if [[ -z "$(which clipkit)" ]]; then
     echo "Error: Missing clipkit function."
+    exit 1
+fi
+
+if [[ -z "$(which iqtree3)" ]]; then
+    echo "Error: Missing iqtree3 function."
     exit 1
 fi
 
@@ -414,7 +424,7 @@ Captain_identification() {
     python ${auxiliary_path}/hmmer_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
 }
 
-Alignment() {
+Captain_pseudogene() {
     local base_dir="$1"
 
     local working_dir="${base_dir}/Workspace/CaptainIdentification/"
@@ -531,40 +541,47 @@ Alignment() {
         done
 
         rm ${nucleotide_path}/*seqkit*
-
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
-
-        if [[ ! -s "${pseudoExons}"  && -s "${captain_file}"  ]]; then
-            java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
-            captainless_flag=false
-        elif [[ -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
-            java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
-            captainless_flag=false
-        elif [[ -s "${pseudoExons}"  && ! -s "${captain_file}" ]]; then
-            #Select a subset of captain exons from the big database that looks similar to our pseudogenes
-            makeblastdb -in ${database_path}/Captains_exon.fa -dbtype nucl -out ${temp_dir}/blast/Captains_exon_database >/dev/null
-            blastn -query ${pseudoExons} -db ${temp_dir}/blast/Captains_exon_database -task blastn -perc_identity 60 -qcov_hsp_perc 60 -evalue 0 -max_hsps 1 -outfmt "6 sseqid" | sort -u > ${temp_dir}/Selected_captain_exons.txt
-            seqkit grep --quiet -f ${temp_dir}/Selected_captain_exons.txt ${database_path}/Captains_exon.fa -o ${temp_dir}/Selected_captain_exons.fa
-
-            #Perform alignment with this selected sequences
-            java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${temp_dir}/Selected_captain_exons.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
-
-            #Remove sequences from the database
-            seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_exons.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
-            captainless_flag=false
-        elif [[ ! -s "${pseudoExons}" && ! -s "${captain_file}" ]]; then
-            echo -e "\033[01;31mERROR\033[m:: there is no captain gene or pseudogene identify in this set of data"
-            captainless_flag=true
-            return 1
-        fi
-
     else
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
+        rm ${empty_elements}
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] All elements have a confident captain gene model"
+    fi
+}
 
+Alignment() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/CaptainIdentification/"
+
+    # Locate required subdirectories and define output path
+    
+    local pseudoExons="${working_dir}/Captains_pseudo.fa"
+    local Remove_elements="${working_dir}/Captainless_elements.txt"
+    local temp_dir="${working_dir}/temp/"
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
+
+    if [[ ! -s "${pseudoExons}"  && -s "${captain_file}"  ]]; then
         java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
         captainless_flag=false
+    elif [[ -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
+        java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        captainless_flag=false
+    elif [[ -s "${pseudoExons}"  && ! -s "${captain_file}" ]]; then
+        #Select a subset of captain exons from the big database that looks similar to our pseudogenes
+        makeblastdb -in ${database_path}/Captains_exon.fa -dbtype nucl -out ${temp_dir}/blast/Captains_exon_database >/dev/null
+        blastn -query ${pseudoExons} -db ${temp_dir}/blast/Captains_exon_database -task blastn -perc_identity 60 -qcov_hsp_perc 60 -evalue 0 -max_hsps 1 -outfmt "6 sseqid" | sort -u > ${temp_dir}/Selected_captain_exons.txt
+        seqkit grep --quiet -f ${temp_dir}/Selected_captain_exons.txt ${database_path}/Captains_exon.fa -o ${temp_dir}/Selected_captain_exons.fa
 
-        rm ${empty_elements}
+        #Perform alignment with this selected sequences
+        java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${temp_dir}/Selected_captain_exons.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
+
+        #Remove sequences from the database
+        seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_exons.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
+        captainless_flag=false
+    elif [[ ! -s "${pseudoExons}" && ! -s "${captain_file}" ]]; then
+        echo -e "\033[01;31mERROR\033[m:: there is no captain gene or pseudogene identify in this set of data"
+        captainless_flag=true
+        return 1
     fi
 
     clipkit ${working_dir}/Captain_proteins_aligned.fa -m gappy -g 0.90 -l -q
@@ -674,7 +691,7 @@ echo "  minimum length: ${length}"
 echo "  minimum confidence level: ${level}"
 echo -e "  Mode: ${mode}\n"
 
-if [[ "${mode}" == "All" ]]
+if [[ "${mode}" == "FullAll" ]]
 then
     # ==============================================================================
     # Checking Working directory structure
@@ -702,18 +719,22 @@ then
     Captain_identification "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Identifying if there are pseudogenes..."
+    Captain_pseudogene "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding..."
+
     # ==============================================================================
     # Alignment
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Group captains and performed alignment."
     Alignment "${Working_directory}"
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
     if $captainless_flag; then
         echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
         exit 1
     fi
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
     # ==============================================================================
     # Alignment
@@ -722,6 +743,42 @@ then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
     Tree_inference "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
+elif [[ "${mode}" == "AllID" ]]
+then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${Working_directory}' structure."
+    check_directory_structure "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${Working_directory}' is valid. Proceeding."
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
+    organize_working_directory "${Working_directory}"
+
+    # ==============================================================================
+    # Preprocessing data
+    # ==============================================================================
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+    process_hmmsearch "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+    # ==============================================================================
+    # Identify captains
+    # ==============================================================================
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
+    Captain_identification "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Identifying if there are pseudogenes..."
+    Captain_pseudogene "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding..."
+
+    if [ -s "${Working_directory}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
+        Removed_empty_elements "${Working_directory}"
+        echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
+    else
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
+    fi
 
 elif [[ "${mode}" == "Cluster" ]]
 then
@@ -758,26 +815,30 @@ then
         Captain_identification "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Identifying if there are pseudogenes..."
+        Captain_pseudogene "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding..."
+
         # ==============================================================================
         # Alignment
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Group captains and performed alignment."
         Alignment "${internal_dir}"
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         if $captainless_flag; then
             echo -e "  \033[01;31mWARNING\033[m: There is no captain identify in this set of data.\n"
             continue
         fi
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
         # ==============================================================================
         # Alignment
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Perform phylogenetic tree inference of captains."
         Tree_inference "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished."
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         check_phylogeny "${internal_dir}"

@@ -3,8 +3,8 @@
 # Function to print help message
 
 function print_help() {
-   echo -e "Script to run syntenet pipeline using DIAMOND as sequence similarity search software, and summarize its results.
-   This script perform five steps:
+   echo -e "Script to run syntenet pipeline using DIAMOND as sequence similarity search software, summarize and organize its results.
+   This script perform six steps:
    1. Run preprocessing data from Syntenet.
    2. Run diamond on the preprocess data.
    3. Run interspecies synteny of syntenet that identify regions with collinearity genes.
@@ -13,36 +13,20 @@ function print_help() {
      b. SSP: Return only pairs with strong synteny.
      c. Filter: Return pairs that were filter with a blast approach at the nucleotide level.
    5. Define Clusters of elements and perform a spectral clustering process to identify possible subclusters.
-   
-   The working directory should have the following structure:
-   WorkingDiretory/
-   ├── *_gff/
-   │   ├── element01.gff
-   │   └── element02.gff
-   │   ︙
-   ├── *_nucleotide/
-   │   ├── element01.fasta
-   │   └── element02.fasta
-   │   ︙
-   └── *_protein/
-   │   ├── element01.fa
-   │   └── element02.fa
-   │   ︙
-   └── metadata_updated.csv
-
-   NOTE: the metadata_updated.csv file is optional."
+   6. Organize data for each identified cluster.
+   "
    echo
-   echo "Syntax: SAT SyntenyClustering [ -h ] -w <working_directory> [ -m <mode> -a <anchor_points> -g <gaps> -n <min_nodes> -s <min_size> -t <threshold> ]"
+   echo "Syntax: SAT SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Available mode: Raw, SSP, Filter) (Default = Raw)."
-   echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Integer between 5 and 25) (Default = 8)."
-   echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Integer between 5 and 25) (Default = 8)."
+   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = Raw) [Available mode: Raw, SSP, Filter]."
+   echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
+   echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
    echo "-s, --minSize: The minimum desired size for any final sub-cluster (Default: 2)."
-   echo "-t, --threshold: The minimum modularity score for a split to be accepted. Range [-0.5, 1.0] (Default: 0.05)."
-   echo "-st, --searchThreads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
-   echo "-p, --predictionMode: Mode of the gene prediction performed for the data (Available mode: Quick, Robust) (Default = Quick)"
+   echo "-t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
+   echo "-th, --threshold: The minimum modularity score for a split to be accepted (Default: 0.05) [range: -0.5 - 1.0]."
+   echo "-p, --predictionMode: Mode of the gene prediction performed for the data (Default = Quick) [Available mode: Quick, Robust]"
    echo "-help: Display this help message."
 }
 
@@ -87,11 +71,11 @@ while [[ $# -gt 0 ]]; do
             shift
             minSize="$1"
             ;;
-        -t|--threshold)
+        -th|--threshold)
             shift
             threshold="$1"
             ;;
-        -st|--searchThreads)
+        -t|--threads)
             shift
             threads="$1"
             ;;

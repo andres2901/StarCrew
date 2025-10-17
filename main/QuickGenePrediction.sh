@@ -3,9 +3,14 @@
 # Function to print help message
 
 function print_help() {
-   echo "Script to perform a quick and raw prediction of genes for starships. It determines the statistics of each element prediction, filter the elements based on a minimum gene content (8) and organized it based on family association from the metadata."
+   echo "Script to perform a quick and raw prediction of genes for starships.
+   This script perform four steps:
+   1. Perform a gene prediction using metaEuk.
+   2. Determines the statistics of each element prediction.
+   3. Filter the elements based on a minimum gene content.
+   4. Organized the files in the working directory for future modules."
    echo
-   echo "Syntax: SAT QuickGenePrediction [ -help ] -w <working_directory> -p <protein_db> [ -m <gene_number> ]"
+   echo "Syntax: SAT QuickGenePrediction [ -help ] -w <directory_path> -p <file_path> [ -m <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-p, --proteinDB: protein database fasta file (required)."
@@ -91,6 +96,22 @@ if [[ "$minimum_gene_content" =~ ^[0-9]+$ ]]; then
 else
     echo "Error: '$minimum_gene_content' is not a positive integer."
     print_help
+    exit 1
+fi
+
+# Check for software presence
+if [[ -z "$(which agat_sp_filter_incomplete_gene_coding_models.pl)" ]]; then
+    echo "Error: Missing agat functions."
+    exit 1
+fi
+
+if [[ -z "$(which seqkit)" ]]; then
+    echo "Error: Missing seqkit function."
+    exit 1
+fi
+
+if [[ -z "$(which metaeuk)" ]]; then
+    echo "Error: Missing metaeuk function."
     exit 1
 fi
 

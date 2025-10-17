@@ -3,12 +3,20 @@
 # Function to print help message
 
 function print_help() {
-   echo -e "Script to run the profiling of clusters"
+   echo -e "Script to run the profiling analysis of each selected cluster.
+   This script perform five steps:
+   1. Identify orthogroups through OrthoFinder software.
+   2. Perform all-vs-all Blastn.
+   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count excluding singletons.
+   4. Analyzed Clusters depending on preliminary results:
+     4.1. If had subclusters: Try to identify putative movement between subcluster.
+     4.2. If doesn't had subcluster: Try to identify possible discordant elements between the captain phylogenetic tree and the cargo-base hierarchical tree.
+   "
    echo
-   echo "Syntax: SAT ClusterProfiling [ -help ] -w <working_directory> [ -m <mode> -a <anchor_points> -g <gaps> -n <min_nodes> -s <min_size> -t <threshold> ]"
+   echo "Syntax: SAT ClusterProfiling [ -help ] -w <directory_path> [ -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-t, --Threads: Number of threads for orthofinder (Default: 8)"
+   echo "-t, --threads: Number of threads for orthofinder (Default: 8)"
    echo "-help: Display this help message."
 }
 
@@ -26,7 +34,7 @@ while [[ $# -gt 0 ]]; do
             shift
             Working_directory="$1"
             ;;
-        -t|--Threads)
+        -t|--threads)
             shift
             threads="$1"
             ;;
@@ -80,6 +88,27 @@ fi
 if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     echo "Error: '$threads' is not a positive integer."
     print_help
+    exit 1
+fi
+
+# Check for software presence
+if [[ -z "$(which RScript)" ]]; then
+    echo "Error: Missing RScript function."
+    exit 1
+fi
+
+if [[ -z "$(which blastn)" ]]; then
+    echo "Error: Missing blastn function."
+    exit 1
+fi
+
+if [[ -z "$(which makeblastdb)" ]]; then
+    echo "Error: Missing makeblastdb function."
+    exit 1
+fi
+
+if [[ -z "$(which orthofinder)" ]]; then
+    echo "Error: Missing orthofinder function."
     exit 1
 fi
 
@@ -284,10 +313,7 @@ check_movement() {
     local base_dir="$1"
 
     local working_dir="${base_dir}/Workspace/ClusterProfiling/"
-
-    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-
-    local orthogroups_file="${working_dir}/Orthogroups.txt"
+    local orthogroups_dir="${working_dir}/Orthofinder/Results_profiling/Orthogroup_Sequences/"
     local temp_dir="${working_dir}/temp/"
 
     ls ${working_dir}/*_moveOrthologs.txt > ${temp_dir}/movement_files.txt 2>/dev/null
@@ -296,40 +322,16 @@ check_movement() {
 
     if [[ $File_number -gt 0 ]]; then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Genes in movement have been identified. Processing..."
-        cat ${protein_dir}/*.fa > ${temp_dir}/Whole_proteins.fa
 
         cat ${temp_dir}/movement_files.txt | xargs -n 1 basename -s .txt | while read SubCluster
         do
-            grep -f ${working_dir}/${SubCluster}.txt ${working_dir}/Orthogroups.txt | sed 's/://g' > ${working_dir}/${SubCluster}IDs.txt
-
             mkdir -p "${working_dir}/${SubCluster}"
-            local OLD_IFS="$IFS"
-            IFS=$' '
-
-            while read -r cluster_id values_string; 
+            while read Orthogroup; 
             do 
-                echo "$values_string" | awk '
-                { 
-                    for (i=1; i<=NF; i++)  {
-                        a[NR,i] = $i
-                    }
-                }
-                NF>p { p = NF }
-                END {    
-                    for(j=1; j<=p; j++) {
-                        str=a[1,j]
-                        for(i=2; i<=NR; i++){
-                            str=str" "a[i,j];
-                        }
-                        print str
-                    }
-                }' > ${temp_dir}/${cluster_id}_IDs.txt
-                seqkit grep --quiet -f ${temp_dir}/${cluster_id}_IDs.txt ${temp_dir}/Whole_proteins.fa > ${working_dir}/${SubCluster}/${cluster_id}.fa
-            done < ${working_dir}/${SubCluster}IDs.txt
-            IFS="$OLD_IFS"
+                cp ${orthogroups_dir}/${Orthogroup}.fa ${working_dir}/${SubCluster}/
+            done < ${working_dir}/${SubCluster}.txt
         done
     fi
-
 }
 
 # ==============================================================================

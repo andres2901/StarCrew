@@ -3,13 +3,16 @@
 # Function to print help message
 
 function print_help() {
-   echo "Script to perform a quick and raw prediction of genes for starships. It determines the statistics of each element prediction, filter the elements based on a minimum gene content (8) and organized it based on family association from the metadata."
+   echo "Script to perform braker gene prediction for starships.
+   This script perform two steps:
+   1. Identify proteins that can be produce by the elements trough metaeuk geneprediction and create a smaller protein database from a user-custom protein database.
+   2. Perform braker3 gene prediction using the small protein database."
    echo
-   echo "Syntax: SAT RobustGenePrediction [ -h ] -w <genome_file> [ -m <mode> ]"
+   echo "Syntax: SAT RobustGenePrediction [ -help ] -w <directory_path> -p <file_path> [ -m <string> -ms <integer> -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-p, --proteinDB: protein database fasta file (required)."
-   echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
+   echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Default = Cluster) [Available mode: Cluster, All]."
    echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
    echo "-t, --threads: Number of threads for Braker (Default = 8)"
    echo "-help: Display this help message."
@@ -142,6 +145,23 @@ fi
 if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     echo "Error: '$threads' is not a positive integer."
     print_help
+    exit 1
+fi
+
+# Check for software presence
+if [[ -z "$(which braker)" ]]; then
+    echo "Error: Missing braker function."
+    echo "Make sure that the function name is braker and no braker3, braker.pl or any other variation."
+    exit 1
+fi
+
+if [[ -z "$(which seqkit)" ]]; then
+    echo "Error: Missing seqkit function."
+    exit 1
+fi
+
+if [[ -z "$(which metaeuk)" ]]; then
+    echo "Error: Missing metaeuk function."
     exit 1
 fi
 
@@ -358,13 +378,13 @@ then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         check_braker "${internal_dir}"
         if $braker_flag; then
-            echo -e "\033[01;31mWARNING\033[m: Braker fails, trying a second time."
+            echo -e "\033[01;31mWARNING\033[m: Braker fails, trying a second time..."
             rm -r "${internal_dir}/Workspace/RobustGenePrediction/braker/"
             run_braker_second "${internal_dir}"
             check_braker "${internal_dir}"
             if $braker_flag; then
-                echo -e "\033[01;31mWARNING\033[m: Braker fails, this cluster needs to be manually checked."
-                rm -r "${Working_directory}/Workspace/RobustGenePrediction/braker/"
+                echo -e "\033[01;31mWARNING\033[m: Braker fails for a second time, this cluster needs to be manually checked."
+                rm -r "${internal_dir}/Workspace/RobustGenePrediction/braker/"
             else
                 echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run of Braker. Storing this cluster for further analysis."
                 grep -w ${ClusterId} ${Working_directory}/Clusters/cluster_stats.txt >> ${Working_directory}/Clusters/SelectedClusters.txt
@@ -377,4 +397,3 @@ then
     done
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 fi
-

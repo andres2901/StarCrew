@@ -3,9 +3,16 @@
 # Function to print help message
 
 function print_help() {
-   echo "Script to perform a quick and raw prediction of genes for starships. It determines the statistics of each element prediction, filter the elements based on a minimum gene content (8) and organized it based on family association from the metadata."
+   echo "Script to compact information from a gene prediction.
+   This script perform five steps:
+   1. Filter results from a previous gene prediction analysis of the elements.
+   2. Identify putative captain genes through metaEuk.
+   3. Merge and filter both previous predictions.
+   4. Determines the statistics of each element prediction.
+   - (All mode) Filter the elements based on a minimum gene content
+   5. Organized the files in the working directory for future modules."
    echo
-   echo "Syntax: SAT RobustGenePrediction [ -h ] -w <genome_file> [ -m <mode> ]"
+   echo "Syntax: SAT RobustGenePrediction [ -help ] -w <directory_path> [ -m <string> -mg <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
@@ -114,6 +121,32 @@ if [[ "$minimum_gene_content" =~ ^[0-9]+$ ]]; then
 else
     echo "Error: '$minimum_gene_content' is not a positive integer."
     print_help
+    exit 1
+fi
+
+# Check for software presence
+if [[ -z "$(which python)" ]]; then
+    echo "Error: Missing python function."
+    exit 1
+fi
+
+if [[ -z "$(which hmmsearch)" ]]; then
+    echo "Error: Missing hmmsearch function."
+    exit 1
+fi
+
+if [[ -z "$(which agat_sp_filter_incomplete_gene_coding_models.pl)" ]]; then
+    echo "Error: Missing agat functions."
+    exit 1
+fi
+
+if [[ -z "$(which seqkit)" ]]; then
+    echo "Error: Missing seqkit function."
+    exit 1
+fi
+
+if [[ -z "$(which metaeuk)" ]]; then
+    echo "Error: Missing metaeuk function."
     exit 1
 fi
 
@@ -261,7 +294,7 @@ merge_models() {
 
     agat_sp_merge_annotations.pl --gff ${temp_dir}/LongIso.gff --gff ${metaeuk_results} --out ${temp_dir}/merge.gff &> /dev/null
 
-    python3 ${auxiliary_path}/merge.py ${temp_dir}/merge.gff ${temp_dir}/modelsKeep.txt
+    python ${auxiliary_path}/merge.py ${temp_dir}/merge.gff ${temp_dir}/modelsKeep.txt
 
     agat_sp_filter_feature_from_keep_list.pl --gff ${temp_dir}/merge.gff --keep_list ${temp_dir}/modelsKeep.txt --output ${temp_dir}/merge_keep.gff &> /dev/null
 

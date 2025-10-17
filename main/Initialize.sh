@@ -3,9 +3,9 @@
 # Function to print help message
 
 function print_help() {
-   echo "Script to perform a quick and raw prediction of genes for starships. It determines the statistics of each element prediction, filter the elements based on a minimum gene content (8) and organized it based on family association from the metadata."
+   echo "Script to organize the working directory for the workflow."
    echo
-   echo "Syntax: SAT Initialize [ -help ] -f <genome_file> [ -m <metadata_file> -o <name> ]"
+   echo "Syntax: SAT Initialize [ -help ] -f <filte_path> [ -m <file_path> -o <string> ]"
    echo "options:"
    echo "-f, --fasta:  multifasta file wih the elements to study (required)."
    echo "-m, --metadata: csv file delimited by semicolon without headers with the information of the elements as follows: seqID;species;seqlength (optional)."
@@ -93,6 +93,12 @@ if [[ -d "$out_directory" ]]; then
     exit 1
 else
     mkdir $out_directory
+fi
+
+# Check for software presence
+if [[ -z "$(which seqkit)" ]]; then
+    echo "Error: Missing seqkit function."
+    exit 1
 fi
 
 # ==============================================================================
