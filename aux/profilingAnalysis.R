@@ -183,7 +183,7 @@ analyze_individual_clusters <- function(
     fit_Orthofinder,
     seq_data,
     gene_data,
-    blast_links,
+    blast_links
 ) {
   
   # Initialize the vector to track clusters that were successfully plotted
@@ -239,7 +239,7 @@ analyze_individual_clusters <- function(
       }
       
       # 5. Data Preparation for Synteny Plot
-      tree_sorted <- ggtree::ladderize(my_tree, right = FALSE)
+      tree_sorted <- ladderize(my_tree, right = FALSE)
       selected_seqs <- row.names(Cluster_matrix)
       
       seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs)
@@ -317,13 +317,14 @@ analyze_individual_clusters <- function(
 }
 
 plot_subcluster_synteny <- function(
-    subcluster_number,         # Renamed from 'arguments'
+    subcluster_number,  
     dist_matrix,    
     cluster_fit,    
     ortho_counts,    
     seq_data,        
     gene_data,      
-    blast_links
+    blast_links,
+    Cluster_number = ""
 ) {
   
   # Loop through the number of requested subclusters
@@ -339,11 +340,12 @@ plot_subcluster_synteny <- function(
     }
     
     # Write the cluster elements to a file
-    write.table(Cluster_elements, file = paste("SubCluster", ClusterId, ".txt", sep = ""),
+    write.table(Cluster_elements, file = paste(Cluster_number,"SubCluster", ClusterId, ".txt", sep = ""),
                 sep = '\t', row.names = F, col.names = F, quote = F)
     
     # Initialize flag to track if we successfully selected sequences for plotting
     selected_seqs2_defined <- FALSE
+    multiple_movements <- FALSE
     
     # --- Main Cluster Processing Logic ---
     if (is.matrix(matrix)) {
@@ -362,13 +364,30 @@ plot_subcluster_synteny <- function(
           selected_seqs2_defined <- TRUE
           
           # OrthoFinder analysis
-          OrthoFinder_subcluster <- ortho_counts[, c(tail(rownames(reduce_matrix3), n = 1), head(colnames(reduce_matrix3), n = 1))]
-          OrthoFinder_subcluster2 <- OrthoFinder_subcluster[apply(OrthoFinder_subcluster != 0, 1, all), ]
-          Gene_movement <- rownames(OrthoFinder_subcluster2)
+          elements_cluster <- rownames(reduce_matrix3)
+          elements_other <- colnames(reduce_matrix3)
+
+          OrthoFinder_subcluster_cluster <- ortho_counts[, elements_cluster]
+          OrthoFinder_subcluster_cluster <- OrthoFinder_subcluster_cluster[apply(OrthoFinder_subcluster_cluster!=0, 1, any),]
+          OrthoFinder_subcluster_other <- ortho_counts[, elements_other]
+          OrthoFinder_subcluster_other <- OrthoFinder_subcluster_other[apply(OrthoFinder_subcluster_other!=0, 1, any),]
+
+          Gene_movement <- intersect(rownames(OrthoFinder_subcluster_cluster),rownames(OrthoFinder_subcluster_other))
+          OrthoFinder_subcluster <- ortho_counts[Gene_movement,selected_seqs2]
+          transposase_OrthoFinder <- t(OrthoFinder_subcluster)
+          distance_mat <- dist(transposase_OrthoFinder, method='binary')
+          Hierar_cl <- hclust(distance_mat, method = 'average')
+          test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(transposase_OrthoFinder)-1), index = "ball")
+
+          if(length(unique(test_NbClust$Best.partition)) > 1) {
+            multiple_movements <- TRUE
+          }
           
           if (length(Gene_movement) > 0) {
-            write.table(Gene_movement, file = paste("SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
+            write.table(Gene_movement, file = paste(Cluster_number,"SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
                         sep = '\t', row.names = F, col.names = F, quote = F)
+            write.csv(OrthoFinder_subcluster, file = paste(Cluster_number,"SubCluster", ClusterId, "_moveOrthologsTable.csv", sep = ""),
+                        row.names = T, quote = F)
           }
         }
         
@@ -385,7 +404,7 @@ plot_subcluster_synteny <- function(
         Gene_movement <- rownames(OrthoFinder_subcluster2)
         
         if (length(Gene_movement) > 0) {
-          write.table(Gene_movement, file = paste("SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
+          write.table(Gene_movement, file = paste(Cluster_number,"SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
                       sep = '\t', row.names = F, col.names = F, quote = F)
         }
         
@@ -404,13 +423,30 @@ plot_subcluster_synteny <- function(
             selected_seqs2_defined <- TRUE
             
             # OrthoFinder analysis
-            OrthoFinder_subcluster <- ortho_counts[, c(tail(rownames(reduce_matrix3), n = 1), head(colnames(reduce_matrix3), n = 1))]
-            OrthoFinder_subcluster2 <- OrthoFinder_subcluster[apply(OrthoFinder_subcluster != 0, 1, all), ]
-            Gene_movement <- rownames(OrthoFinder_subcluster2)
-            
+            elements_cluster <- rownames(reduce_matrix3)
+            elements_other <- colnames(reduce_matrix3)
+
+            OrthoFinder_subcluster_cluster <- ortho_counts[, elements_cluster]
+            OrthoFinder_subcluster_cluster <- OrthoFinder_subcluster_cluster[apply(OrthoFinder_subcluster_cluster!=0, 1, any),]
+            OrthoFinder_subcluster_other <- ortho_counts[, elements_other]
+            OrthoFinder_subcluster_other <- OrthoFinder_subcluster_other[apply(OrthoFinder_subcluster_other!=0, 1, any),]
+
+            Gene_movement <- intersect(rownames(OrthoFinder_subcluster_cluster),rownames(OrthoFinder_subcluster_other))
+            OrthoFinder_subcluster <- ortho_counts[Gene_movement,selected_seqs2]
+            transposase_OrthoFinder <- t(OrthoFinder_subcluster)
+            distance_mat <- dist(transposase_OrthoFinder, method='binary')
+            Hierar_cl <- hclust(distance_mat, method = 'average')
+            test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(transposase_OrthoFinder)-1), index = "ball")
+
+            if(length(unique(test_NbClust$Best.partition)) > 1) {
+              multiple_movements <- TRUE
+            }
+          
             if (length(Gene_movement) > 0) {
-              write.table(Gene_movement, file = paste("SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
+              write.table(Gene_movement, file = paste(Cluster_number,"SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
                           sep = '\t', row.names = F, col.names = F, quote = F)
+              write.csv(OrthoFinder_subcluster, file = paste(Cluster_number,"SubCluster", ClusterId, "_moveOrthologsTable.csv", sep = ""),
+                          row.names = T, quote = F)
             }
           }
           
@@ -426,14 +462,14 @@ plot_subcluster_synteny <- function(
           Gene_movement <- rownames(OrthoFinder_subcluster2)
           
           if (length(Gene_movement) > 0) {
-            write.table(Gene_movement, file = paste("SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
+            write.table(Gene_movement, file = paste(Cluster_number,"SubCluster", ClusterId, "_moveOrthologs.txt", sep = ""),
                         sep = '\t', row.names = F, col.names = F, quote = F)
           }
         }
       }
       
       # 4. Data preparation and Plotting (Runs only if sequences were selected)
-      if (selected_seqs2_defined) {
+      if (selected_seqs2_defined & ! multiple_movements) {
         
         # Filtering data
         seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs2)
@@ -460,9 +496,50 @@ plot_subcluster_synteny <- function(
           theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
         
         # Saving the plot
-        ggsave(p_genome, filename = paste("CargoSynteny_SubCluster", ClusterId, ".svg", sep = ""),
+        ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, ".svg", sep = ""),
                width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
                height = min(49, length(selected_seqs2)), limitsize = FALSE)
+      } else if(selected_seqs2_defined & multiple_movements) {
+
+        k_cluster <- unique(test_NbClust$Best.partition[elements_cluster])
+        k_out_cluster <- unique(test_NbClust$Best.partition[elements_other])
+
+        for(i in k_cluster) {
+          for(j in k_out_cluster) {
+            if( i != j) {
+              selected_seqs2 <- c(names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)]),names(test_NbClust$Best.partition[grep(j,test_NbClust$Best.partition)]))
+
+              # Filtering data
+              seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs2)
+              genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs2)
+              links_filtered <- blast_links %>%
+              filter(qseqid %in% selected_seqs2 | sseqid %in% selected_seqs2) %>%
+              select(seq_id = qseqid, start = qstart, end = qend,
+                 seq_id2 = sseqid, start2 = sstart, end2 = send, pident)
+        
+              # Ordering sequences
+              ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, selected_seqs2))
+        
+              # Plotting (Synteny map)
+              p_genome <- gggenomes(
+              seqs = ordered_seqs,
+              links = links_filtered,
+              genes = genes_filtered
+              ) +
+              geom_seq(aes(y = y)) +
+              geom_gene(aes(y = y)) +
+              geom_link(aes(y = y, fill = pident), colour = NA) +
+              geom_bin_label(aes(y = y), x = -10) +
+              scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
+              theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
+        
+              # Saving the plot
+              ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, "-", i,"vs",j,".svg", sep = ""),
+                 width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
+                 height = min(49, length(selected_seqs2)), limitsize = FALSE)
+           }
+          }
+        }
       } else {
         cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Subcluster ", ClusterId, " can not be analyzed automatically", "\n", sep = ""))
       }
@@ -488,7 +565,7 @@ cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Identifying if the
 clustering_data <- perform_initial_clustering()
 
 # Process Clusters
-cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",Individual_clusters," individual cluster(s) identified","\n", sep=""))
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",clustering_data$Individual_clusters," individual cluster(s) identified","\n", sep=""))
 
 # Process each cluster
 Selected_Cluster_ID <- analyze_individual_clusters(
@@ -499,11 +576,11 @@ Selected_Cluster_ID <- analyze_individual_clusters(
     gene_data = data_list$genes,
     blast_links = data_list$blast_results)
 
-if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captainRemoval <= 1)){
+if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captainRemoval <= 1)){
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",arguments$subclusters," subclusters","\n", sep=""))
 
   fit <- cutree(clustering_data$Hierar_cl, k = arguments$subclusters) # k is the number of subclusters from the first approach
-  New_dist <- as.matrix(distance_mat)
+  New_dist <- as.matrix(clustering_data$distance_mat)
 
   plot_subcluster_synteny(
     subcluster_number = arguments$subclusters,
@@ -514,7 +591,7 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captai
     gene_data = data_list$genes,      
     blast_links = data_list$blast_results)
 
-} else if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captainRemoval >= 2)) {
+} else if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captainRemoval >= 2)) {
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
 
   test_NbClust <- NbClust(clustering_data$distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(clustering_data$distance_mat)-1), index = "ball")
@@ -533,7 +610,7 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captai
     gene_data = data_list$genes,      
     blast_links = data_list$blast_results)
 
-} else if((Individual_clusters > 1) & (arguments$subclusters >= 2) & length(Selected_Cluster_ID) == 1) {
+} else if((clustering_data$Individual_clusters > 1) & (arguments$subclusters >= 2) & length(Selected_Cluster_ID) == 1) {
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
 
   Cluster_matrix <- clustering_data$transposed_counts[grep(Selected_Cluster_ID,clustering_data$cluster_fit),]
@@ -543,10 +620,10 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captai
 
   test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(distance_mat)-1), index = "ball")
   test_fit <- cutree(Hierar_cl, h = 0.6)
-  K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(fit)))
-  fit <- cutree(clustering_data$Hierar_cl, k = K_number)
+  K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(test_fit)))
+  fit <- cutree(Hierar_cl, k = K_number)
 
-  New_dist <- as.matrix(clustering_data$distance_mat)
+  New_dist <- as.matrix(distance_mat)
 
   plot_subcluster_synteny(
     subcluster_number = K_number,
@@ -555,25 +632,36 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captai
     ortho_counts = clustering_data$orthofinder_counts,    
     seq_data = data_list$seqs,        
     gene_data = data_list$genes,      
-    blast_links = data_list$blast_results)
+    blast_links = data_list$blast_results,
+    Cluster_number = paste("Cluster", Selected_Cluster_ID, sep=""))
 
-} else if((Individual_clusters > 1) & (arguments$subclusters >= 2) & length(Selected_clusters) > 1) {
+} else if((clustering_data$Individual_clusters > 1) & (arguments$subclusters >= 2) & length(Selected_Cluster_ID) > 1) {
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
 
-  for(MainClusterID in Selected_clusters ) {
+  for(MainClusterID in Selected_Cluster_ID ) {
     Cluster_matrix <- clustering_data$transposed_counts[grep(MainClusterID,clustering_data$cluster_fit),]
-    Cluster_matrix <- Cluster_matrix[,colSums(abs(Cluster_matrix)) > 0]
 
-    if(ncol(Cluster_matrix) < 4) {
+    if(! is.matrix(Cluster_matrix)) {
+      cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Cluster ", MainClusterID, " can not be analyzed automatically", "\n", sep = ""))
       next
     }
 
-    test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(distance_mat)-1), index = "ball")
-    test_fit <- cutree(Hierar_cl, h = 0.6)
-    K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(fit)))
-    fit <- cutree(clustering_data$Hierar_cl, k = K_number)
+    Cluster_matrix <- Cluster_matrix[,colSums(abs(Cluster_matrix)) > 0]
 
-    New_dist <- as.matrix(clustering_data$distance_mat)
+    if(nrow(Cluster_matrix) < 4) {
+      cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Cluster ", MainClusterID, " can not be analyzed automatically", "\n", sep = ""))
+      next
+    }
+
+    distance_mat <- dist(Cluster_matrix, method='binary')
+    Hierar_cl <- hclust(distance_mat, method = 'average')
+
+    test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(Cluster_matrix)-1), index = "ball")
+    test_fit <- cutree(Hierar_cl, h = 0.6)
+    K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(test_fit)))
+    fit <- cutree(Hierar_cl, k = K_number)
+
+    New_dist <- as.matrix(distance_mat)
 
     plot_subcluster_synteny(
     subcluster_number = K_number,
@@ -582,163 +670,129 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captai
     ortho_counts = clustering_data$orthofinder_counts,    
     seq_data = data_list$seqs,        
     gene_data = data_list$genes,      
-    blast_links = data_list$blast_results)
+    blast_links = data_list$blast_results,
+    Cluster_number = paste("Cluster", MainClusterID, sep=""))
   } 
 } else{
   cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No subcluster to analyzed","\n", sep=""))
 } 
 
-if((Individual_clusters == 1) & (arguments$subclusters == 1)) {
+if((clustering_data$Individual_clusters == 1) & (arguments$subclusters == 1)) {
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are differences between captain and cargo dendograms","\n", sep=""))
 
   phylo_tree <- read.tree("CaptainPhylogeny.nw")
-  dist_matrix <- cophenetic.phylo(phylo_tree)
-  min_dist <- min(dist_matrix)
-  max_dist <- max(dist_matrix)
-  normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
-  normalized_dist_matrix2 <- scale(normalized_dist_matrix)
-  hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
+  if(length(phylo_tree$tip.label) > 4){
+    dist_matrix <- cophenetic.phylo(phylo_tree)
+    min_dist <- min(dist_matrix)
+    max_dist <- max(dist_matrix)
+    normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
+    normalized_dist_matrix2 <- scale(normalized_dist_matrix)
+    hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
 
-  test_NbClust <- NbClust(normalized_dist_matrix2, method = "average", min.nc = 2, max.nc = min(6, nrow(distance_mat)-1), index = "ball")
-  test_fit <- cutree(Hierar_cl, h = 0.6)
-  K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(fit)))
-  fit_tree <- cutree(hclust_tree, k = K_number)
-  fit_tree <- fit_tree[order(names(fit_tree))]
+    test_NbClust <- NbClust(normalized_dist_matrix2, method = "average", min.nc = 2, max.nc = min(6, nrow(normalized_dist_matrix2)-1), index = "ball")
+    test_fit <- cutree(hclust_tree, h = 0.5)
+    K_number <- max(length(unique(test_NbClust$Best.partition)),length(unique(test_fit)))
+    fit_tree <- cutree(hclust_tree, k = K_number)
+    fit_tree <- fit_tree[order(names(fit_tree))]
 
-  fit <- cutree(Hierar_cl, k = K_number) 
-  fit <- fit[order(names(fit))]
+    fit <- cutree(clustering_data$Hierar_cl, k = K_number) 
+    fit <- fit[order(names(fit))]
 
-  #First round of discordance - Cargo tree view
-  contingency_table <- table(fit_tree, fit)
-  best_match <- apply(contingency_table, 1, which.max)
-  fit_aligned <- fit_tree
-  for(i in 1:length(best_match)){
-    original_label <- names(best_match)[i]
-    new_label <- best_match[i]
-    fit_aligned[fit_tree == original_label] <- as.numeric(new_label)
-  }
+    #First round of discordance - Cargo tree view
+    contingency_table <- table(fit_tree, fit)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit_tree
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit_tree == original_label] <- as.numeric(new_label)
+    }
 
-  discordant_indices <- which(fit != fit_aligned)
-  discordant_elements <- names(fit)[discordant_indices]
+    discordant_indices <- which(fit != fit_aligned)
+    discordant_elements <- names(fit)[discordant_indices]
 
-  #Second round of discordance - Captain tree view
-  contingency_table <- table(fit, fit_tree)
-  best_match <- apply(contingency_table, 1, which.max)
-  fit_aligned <- fit
-  for(i in 1:length(best_match)){
-    original_label <- names(best_match)[i]
-    new_label <- best_match[i]
-    fit_aligned[fit == original_label] <- as.numeric(new_label)
-  }
+    #Second round of discordance - Captain tree view
+    contingency_table <- table(fit, fit_tree)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit == original_label] <- as.numeric(new_label)
+    }
 
-  discordant_indices <- which(fit_tree != fit_aligned)
-  discordant_elements <- c(discordant_elements,names(fit_tree)[discordant_indices])
+    discordant_indices <- which(fit_tree != fit_aligned)
+    discordant_elements <- unique(c(discordant_elements,names(fit_tree)[discordant_indices]))
 
-  if(length(discordant_elements) >= 1) {
-    cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
-    write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
+    if(length(discordant_elements) >= 1) {
+      cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
+      write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
 
-    dend_list <- dendlist(Hierar_cl, hclust_tree)
-    svg(filename="CaptainVsCargo_tanglegram.svg", width = 16, height = min(49, length(fit)/2))
-    dend_list %>% ladderize %>% 
-      untangle(method = "step1side", k_seq = elbow_point:(length(fit)-1)) %>%
-      set("branches_k_color", k=elbow_point) %>% 
+      dend_list <- dendlist(clustering_data$Hierar_cl, hclust_tree)
+      svg(filename="CaptainVsCargo_tanglegram.svg", width = 16, height = min(49, length(fit)/2))
+      dend_list %>% ladderize %>% 
+      untangle(method = "step1side", k_seq = K_number:(length(fit)-1)) %>%
+      set("branches_k_color", k=K_number) %>% 
       tanglegram(faster = TRUE, main_left = as.character("Cargo Cluster"),main_right = as.character("Captain tree"))
-    dev.off() 
-
-    New_dist <- as.matrix(distance_mat)
-    matrix <- New_dist[discordant_elements,]
-
-    if(is.matrix(matrix)) {
-      reduce_matrix <- matrix[,colSums(matrix) < nrow(matrix)*0.5]
-      if(ncol(reduce_matrix) >= nrow(reduce_matrix) + 2) {
-        reduce_matrix <- reduce_matrix[,names(sort(colSums(reduce_matrix), decreasing = F))]
-        reduce_matrix2 <- reduce_matrix[,(nrow(reduce_matrix)+1):ncol(reduce_matrix)]
-        reduce_matrix3 <- reduce_matrix2[rowSums(reduce_matrix2) < ncol(reduce_matrix2)*0.97,]
-        selected_seqs2 <- c(rownames(reduce_matrix3),colnames(reduce_matrix3))
-
-        seqs_filtered <- data_list$seqs %>% filter(seq_id %in% selected_seqs2)
-    
-        genes_filtered <- data_list$genes %>%
-        filter(seq_id %in% selected_seqs2)
-    
-        links_filtered <- data_list$blast_results %>%
-        filter(qseqid %in% selected_seqs2 | sseqid %in% selected_seqs2) %>%
-        select(
-        seq_id = qseqid,
-        start = qstart,
-        end = qend,
-        seq_id2 = sseqid,
-        start2 = sstart,
-        end2 = send,
-        pident)
-
-      } else if(ncol(reduce_matrix) > nrow(reduce_matrix)) {
-        reduce_matrix <- reduce_matrix[,names(sort(colSums(reduce_matrix), decreasing = F))]
-        reduce_matrix2 <- reduce_matrix[,(nrow(reduce_matrix)+1):ncol(reduce_matrix)]
-        selected_seqs2 <- c(names(reduce_matrix2[reduce_matrix2 < 1]),tail(colnames(reduce_matrix), n = 1))
-
-        seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs2)
-    
-        genes_filtered <- genes %>%
-        filter(seq_id %in% selected_seqs2)
-    
-        links_filtered <- blast_results %>%
-        filter(qseqid %in% selected_seqs2 | sseqid %in% selected_seqs2) %>%
-        select(
-        seq_id = qseqid,
-        start = qstart,
-        end = qend,
-        seq_id2 = sseqid,
-        start2 = sstart,
-        end2 = send,
-        pident)
-
-      }
-      } else {
-        reduce_matrix <- matrix[matrix < 0.5]
-
-        if(length(reduce_matrix) > 1) {
-          selected_seqs2 <- unique(c(discordant_elements, names(sort(matrix[matrix<0.5]))))
-          seqs_filtered <- seqs %>% filter(seq_id %in% selected_seqs2)
-    
-          genes_filtered <- genes %>%
-          filter(seq_id %in% selected_seqs2)
-    
-          links_filtered <- blast_results %>%
-          filter(qseqid %in% selected_seqs2 | sseqid %in% selected_seqs2) %>%
-          select(
-          seq_id = qseqid,
-          start = qstart,
-          end = qend,
-          seq_id2 = sseqid,
-          start2 = sstart,
-          end2 = send,
-          pident)
-        }
-      }
-
-    if(exists("selected_seqs2")) {
-      p_genome <- gggenomes(
-      seqs = seqs_filtered,
-      links = links_filtered,
-      genes = genes_filtered
-      ) +
-      geom_seq(aes(y = y)) +
-      geom_gene(aes(y = y)) +
-      geom_link(aes(y = y, fill = pident), colour = NA ) +
-      geom_bin_label(aes(y = y), x = -10) +
-      scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
-      #scale_fill_gradient(low = "gray80", high = "gray60") +
-      theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm")) # c(top, right, bottom, left)
-
-      ggsave(p_genome,filename="Captain_discordance.svg", width = min(49,max(16,round(max(ordered_seqs$length)*0.0001)/2)), height = min(49, length(selected_seqs2)), limitsize = FALSE)
-    } else{
-      cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","discordances can not be analyzed automatically","\n", sep=""))
+      invisible(dev.off())
+    } else {
+      cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
     }
   } else {
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
-  }
+    dist_matrix <- cophenetic.phylo(phylo_tree)
+    min_dist <- min(dist_matrix)
+    max_dist <- max(dist_matrix)
+    normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
+    normalized_dist_matrix2 <- scale(normalized_dist_matrix)
+    hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
+
+    fit_tree <- cutree(hclust_tree, k = 2)
+    fit_tree <- fit_tree[order(names(fit_tree))]
+
+    fit <- cutree(clustering_data$Hierar_cl, k = 2) 
+    fit <- fit[order(names(fit))]
+
+    #First round of discordance - Cargo tree view
+    contingency_table <- table(fit_tree, fit)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit_tree
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit_tree == original_label] <- as.numeric(new_label)
+    }
+
+    discordant_indices <- which(fit != fit_aligned)
+    discordant_elements <- names(fit)[discordant_indices]
+
+    #Second round of discordance - Captain tree view
+    contingency_table <- table(fit, fit_tree)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit == original_label] <- as.numeric(new_label)
+    }
+
+    discordant_indices <- which(fit_tree != fit_aligned)
+    discordant_elements <- unique(c(discordant_elements,names(fit_tree)[discordant_indices]))
+
+    if(length(discordant_elements) >= 1) {
+      cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
+      write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
+
+      dend_list <- dendlist(clustering_data$Hierar_cl, hclust_tree)
+      svg(filename="CaptainVsCargo_tanglegram.svg", width = 16, height = min(49, length(fit)/2))
+      dend_list %>% ladderize %>% 
+      untangle(method = "step1side", k_seq = 2:(length(fit)-1)) %>%
+      set("branches_k_color", k=2) %>% 
+      tanglegram(faster = TRUE, main_left = as.character("Cargo Cluster"),main_right = as.character("Captain tree"))
+      invisible(dev.off())
+    } else {
+      cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
+    }
+  } 
 } 
 
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Finished","\n", sep=""))

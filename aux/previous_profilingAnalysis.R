@@ -31,7 +31,7 @@ suppressPackageStartupMessages(library(viridis))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(gggenomes))
 suppressPackageStartupMessages(library(scales))
-suppressPackageStartupMessages(library(factoextra))
+#suppressPackageStartupMessages(library(factoextra))
 suppressPackageStartupMessages(library(dendextend))
 suppressPackageStartupMessages(library(NbClust))
 
@@ -253,6 +253,7 @@ if((Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captai
         reduce_matrix2 <- reduce_matrix[,(nrow(reduce_matrix)+1):ncol(reduce_matrix)]
         reduce_matrix3 <- reduce_matrix2[rowSums(reduce_matrix2) < ncol(reduce_matrix2)*0.97,]
         reduce_matrix3 <- reduce_matrix3[,colSums(reduce_matrix3 < 1) > 1]
+        reduce_matrix3 <- reduce_matrix3[names(sort(rowSums(reduce_matrix3), decreasing = T)),]
         
         if(is.matrix(reduce_matrix3)) {
           selected_seqs2 <- c(rownames(reduce_matrix3),colnames(reduce_matrix3))

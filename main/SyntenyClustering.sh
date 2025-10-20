@@ -209,6 +209,43 @@ if [[ "$predictionMode" != "Quick" && "$predictionMode" != "Robust" ]]; then
     exit 1
 fi
 
+# Check for software presence
+if [[ -z "$(which python)" ]]; then
+    echo "Error: Missing python function."
+    exit 1
+fi
+
+if [[ -z "$(which Rscript)" ]]; then
+    echo "Error: Missing RScript function."
+    exit 1
+fi
+
+if [[ -z "$(which diamond)" ]]; then
+    echo "Error: Missing diamond function."
+    exit 1
+fi
+
+if [[ -z "$(which blastn)" ]]; then
+    echo "Error: Missing blastn function."
+    exit 1
+fi
+
+if [[ -z "$(which makeblastdb)" ]]; then
+    echo "Error: Missing makeblastdb function."
+    exit 1
+fi
+
+if [[ -z "$(which blastdb_aliastool)" ]]; then
+    echo "Error: Missing blastdb_aliastool function."
+    exit 1
+fi
+
+if [[ -z "$(which blastdbcmd)" ]]; then
+    echo "Error: Missing blastdbcmd function."
+    exit 1
+fi
+
+
 # ==============================================================================
 # Bash function block
 # ==============================================================================
@@ -620,7 +657,7 @@ process_collinearity() {
         
             # Filter blastn results
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering Blastn results..."
-            python3 ${auxiliary_path}/Blast_CleanUp.py -f "${working_dir}/BlastnResults.out" -o "${working_dir}BlastnClean.out"
+            python ${auxiliary_path}/Blast_CleanUp.py -f "${working_dir}/BlastnResults.out" -o "${working_dir}BlastnClean.out"
         
             # Filter low syntenic pairs
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering False Positive pairs..."
@@ -802,7 +839,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Generating element clusters."
 
-python3 ${auxiliary_path}/Clustering.py -i "${Working_directory}/Workspace/SyntenyClustering/Collinearity_percentage.txt" -o "${Working_directory}/Clusters/" -m "${minSize}" -n "${minNodes}" -t "${threshold}"
+python ${auxiliary_path}/Clustering.py -i "${Working_directory}/Workspace/SyntenyClustering/Collinearity_percentage.txt" -o "${Working_directory}/Clusters/" -m "${minSize}" -n "${minNodes}" -t "${threshold}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 

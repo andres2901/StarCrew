@@ -92,7 +92,7 @@ if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
 fi
 
 # Check for software presence
-if [[ -z "$(which RScript)" ]]; then
+if [[ -z "$(which Rscript)" ]]; then
     echo "Error: Missing RScript function."
     exit 1
 fi
@@ -279,14 +279,27 @@ run_orthofinder() {
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local output_dir="${working_dir}/Orthofinder"
 
-    orthofinder -f ${protein_dir} -A mafft -S diamond -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n profiling &> ${working_dir}/orthofinder.log
+    orthofinder -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n profiling &> ${working_dir}/orthofinder.log
 
     local results_path="${output_dir}/Results_profiling/Orthogroups/Orthogroups.GeneCount.tsv"
 
     if [ -f "${results_path}" ]; then
         orthofinder_flag=true
         cp ${results_path} ${working_dir}
-        cp ${output_dir}/Results_profiling/Orthogroups/Orthogroups.txt ${working_dir}
+        awk 'BEGIN {FS=OFS="\t"} 
+         NR==1 { TOTAL_COLUMNS = NF; 
+         print $0; 
+         next}
+         {ROW_TOTAL = 0;
+         sub(/[[:space:]]+$/, "", $0); 
+         printf "%s", $1; 
+         for (i=2; i<=TOTAL_COLUMNS; i++) {
+         is_present = (i <= NF) ? (($i != "") ? 1 : 0) : 0;
+         ROW_TOTAL += is_present;
+         printf "%s%d", OFS, is_present;
+         }
+         printf "%s%d\n", OFS, ROW_TOTAL;
+        }' ${output_dir}/Results_profiling/Orthogroups/Orthogroups_UnassignedGenes.tsv | sed '1d' >> ${working_dir}/Orthogroups.GeneCount.tsv
     else
         orthofinder_flag=false
     fi
@@ -380,7 +393,6 @@ do
     # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
-    echo $captainremoval_number
     Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c $captainremoval_number
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for identifiable genes that participate in movement..."

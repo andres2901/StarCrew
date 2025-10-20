@@ -16,7 +16,7 @@ function print_help() {
    There are three available mode:
    -Cluster: Analyzed, and perform all of this five steps per cluster and remove elements without a suitable captain gene/pseudogene.
    -FullAll:Analyzed, and perform all of this five steps in the whole dataset.
-   -AllID: Analyzed and perform the first three step in the whole dataset and and remove elements without a suitable captain gene/pseudogene.
+   -AllID: Analyzed and perform the first three step in the whole dataset and remove elements without a suitable captain gene/pseudogene.
    "
    echo
    echo "Syntax: SAT CaptainIdentification [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> ]"
@@ -555,7 +555,7 @@ Alignment() {
     # Locate required subdirectories and define output path
     
     local pseudoExons="${working_dir}/Captains_pseudo.fa"
-    local Remove_elements="${working_dir}/Captainless_elements.txt"
+    local captain_file="${working_dir}/Captains_exon.fa"
     local temp_dir="${working_dir}/temp/"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
