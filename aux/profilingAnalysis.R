@@ -377,7 +377,7 @@ plot_subcluster_synteny <- function(
           transposase_OrthoFinder <- t(OrthoFinder_subcluster)
           distance_mat <- dist(transposase_OrthoFinder, method='binary')
           Hierar_cl <- hclust(distance_mat, method = 'average')
-          test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(transposase_OrthoFinder)-1), index = "ball")
+          test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(transposase_OrthoFinder)-1), index = "ball")
 
           if(length(unique(test_NbClust$Best.partition)) > 1) {
             multiple_movements <- TRUE
@@ -436,7 +436,7 @@ plot_subcluster_synteny <- function(
             transposase_OrthoFinder <- t(OrthoFinder_subcluster)
             distance_mat <- dist(transposase_OrthoFinder, method='binary')
             Hierar_cl <- hclust(distance_mat, method = 'average')
-            test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(transposase_OrthoFinder)-1), index = "ball")
+            test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(transposase_OrthoFinder)-1), index = "ball")
 
             if(length(unique(test_NbClust$Best.partition)) > 1) {
               multiple_movements <- TRUE
@@ -501,13 +501,14 @@ plot_subcluster_synteny <- function(
                height = min(49, length(selected_seqs2)), limitsize = FALSE)
       } else if(selected_seqs2_defined & multiple_movements) {
 
-        k_cluster <- unique(test_NbClust$Best.partition[elements_cluster])
         k_out_cluster <- unique(test_NbClust$Best.partition[elements_other])
+        k_cluster <- unique(test_NbClust$Best.partition[elements_cluster])
 
         for(i in k_cluster) {
           for(j in k_out_cluster) {
-            if( i != j) {
-              selected_seqs2 <- c(names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)]),names(test_NbClust$Best.partition[grep(j,test_NbClust$Best.partition)]))
+              selected_seqs2 <- c(names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)][elements_cluster]),names(test_NbClust$Best.partition[grep(j,test_NbClust$Best.partition)][elements_other]))
+              #selected_seqs2 <- selected_seqs2[!is.na(selected_seqs2)]
+              selected_seqs2 <- selected_seqs2[!is.na(selected_seqs2)]
 
               # Filtering data
               seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs2)
@@ -537,7 +538,6 @@ plot_subcluster_synteny <- function(
               ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, "-", i,"vs",j,".svg", sep = ""),
                  width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
                  height = min(49, length(selected_seqs2)), limitsize = FALSE)
-           }
           }
         }
       } else {
@@ -594,7 +594,7 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (
 } else if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captainRemoval >= 2)) {
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
 
-  test_NbClust <- NbClust(clustering_data$distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(clustering_data$distance_mat)-1), index = "ball")
+  test_NbClust <- NbClust(clustering_data$distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(clustering_data$distance_mat)-1), index = "ball")
   test_fit <- cutree(clustering_data$Hierar_cl, h = 0.6)
   K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(fit)))
   fit <- cutree(clustering_data$Hierar_cl, k = K_number)
@@ -618,7 +618,7 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (
   distance_mat <- dist(Cluster_matrix, method='binary')
   Hierar_cl <- hclust(distance_mat, method = 'average')
 
-  test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(distance_mat)-1), index = "ball")
+  test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(distance_mat)-1), index = "ball")
   test_fit <- cutree(Hierar_cl, h = 0.6)
   K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(test_fit)))
   fit <- cutree(Hierar_cl, k = K_number)
@@ -656,7 +656,7 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (
     distance_mat <- dist(Cluster_matrix, method='binary')
     Hierar_cl <- hclust(distance_mat, method = 'average')
 
-    test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 2, max.nc = min(6, nrow(Cluster_matrix)-1), index = "ball")
+    test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(Cluster_matrix)-1), index = "ball")
     test_fit <- cutree(Hierar_cl, h = 0.6)
     K_number <- max(length(unique(test_NbClust$Best.partition)), length(unique(test_fit)))
     fit <- cutree(Hierar_cl, k = K_number)
@@ -689,7 +689,7 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters == 1)) {
     normalized_dist_matrix2 <- scale(normalized_dist_matrix)
     hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
 
-    test_NbClust <- NbClust(normalized_dist_matrix2, method = "average", min.nc = 2, max.nc = min(6, nrow(normalized_dist_matrix2)-1), index = "ball")
+    test_NbClust <- NbClust(normalized_dist_matrix2, method = "average", min.nc = 1, max.nc = min(6, nrow(normalized_dist_matrix2)-1), index = "ball")
     test_fit <- cutree(hclust_tree, h = 0.5)
     K_number <- max(length(unique(test_NbClust$Best.partition)),length(unique(test_fit)))
     fit_tree <- cutree(hclust_tree, k = K_number)
