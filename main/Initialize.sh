@@ -5,17 +5,22 @@
 function print_help() {
    echo "Script to organize the working directory for the workflow."
    echo
-   echo "Syntax: SAT Initialize [ -help ] -f <filte_path> [ -m <file_path> -o <string> ]"
+   echo "Syntax: SAT Initialize [ -help ] -f <filte_path> [ -m <file_path> -o <string> -g <integer> -r ]"
    echo "options:"
    echo "-f, --fasta:  multifasta file wih the elements to study (required)."
    echo "-m, --metadata: csv file delimited by semicolon without headers with the information of the elements as follows: seqID;species;seqlength (optional)."
+   echo "-g, --gc: integer value of gc content to filter out elements with too low gc content (Default = 0) [range: 20 - 45]"
    echo "-n, --name: Specify working directory  name (Default = WorkingDirectory)."
+   echo "-r, --rip: integer value of the minimum coverage of the element to be possibly affected by RIP to be filter out (Default = 0) [range: 30 - 80]"
    echo "-help: Display this help message."
 }
 
 # Initialize variables
 
 out_directory="WorkingDirectory"
+filter="0"
+auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
+rip="0"
 fasta_path=""
 metadata_path=""
 help_flag=false
@@ -29,6 +34,14 @@ while [[ $# -gt 0 ]]; do
          -m|--metadata)
             shift
             metadata_path="$1"
+            ;;
+        -g|--gc)
+            shift
+            filter="$1"
+            ;;
+        -r|--rip)
+            shift
+            rip="$1"
             ;;
 	    -n|--name)
             shift
@@ -83,6 +96,45 @@ else
         exit 1
     else
     metadata=true
+    fi
+fi
+
+# Check filter parameter
+
+if [[ "$filter" =~ ^[0-9]+$ ]]; then
+    if (( $filter != 0 && ($filter < 20 || $filter > 45) )); then
+        echo "Error: '$filter' gc content is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$filter' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+if [[ "$rip" =~ ^[0-9]+$ ]]; then
+    if (( $rip != 0 && ($rip < 30 || $rip > 80) )); then
+        echo "Error: '$rip' rip coverage is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$rip' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check for rip calculator
+if [[ ! -d "$auxiliary_path" ]]; then
+    echo "Error: directory '$auxiliary_path' does not exist."
+    exit 1
+else
+    auxiliary_path=$(realpath $auxiliary_path)
+    # Check the presence of the specific scripts
+    if [[ ! -f "${auxiliary_path}/rip_calculator.py" ]]; then
+        echo "Error: file '${auxiliary_path}/rip_calculator.py' does not exist."
+        exit 1
     fi
 fi
 
@@ -143,7 +195,50 @@ fi
 
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> No duplicate headers found. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Processing headers, creating sequence header association file, and updating metadata if available."
+# Filter stage
+
+if [[ $rip > 0 ]]
+then
+    if [[ $filter == 0 ]]
+    then
+       echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with more than '${rip}' percent of sequence with RIP-like signal."
+       python ${auxiliary_path}/rip_calculator.py "$fasta_path" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${out_directory}/Elements_filterRIPlike.txt
+       removed_elements=$(wc -l ${out_directory}/Elements_filterRIPlike.txt | awk '{print $1}')
+       echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements based on RIP-like signal"
+       seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterRIPlike.txt "$fasta_path" > ${fasta_path}.filtered.fa
+       fasta_path=$(realpath ${fasta_path}.filtered.fa)
+       echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding."
+    else
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with gc content below '${filter}' percent or with more than '${rip}' percent of sequence with RIP-like signal."
+        seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${out_directory}/Elements_filterGC.txt
+        removed_elements=$(wc -l ${out_directory}/Elements_filterGC.txt | awk '{print $1}')
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements based on gc content"
+        seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
+
+        python ${auxiliary_path}/rip_calculator.py "${fasta_path}.filtered.fa" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${out_directory}/Elements_filterRIPlike.txt
+        removed_elements=$(wc -l ${out_directory}/Elements_filterRIPlike.txt | awk '{print $1}')
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements based on RIP-like signal"
+        seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterRIPlike.txt "${fasta_path}.filtered.fa" > ${fasta_path}.filtered2.fa
+
+        fasta_path=$(realpath ${fasta_path}.filtered2.fa)
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding."
+    fi
+else
+    if [[ $filter == 0 ]]
+    then
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] skipping step 2 of gc content and rip filtering..."
+    else
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with gc content below '${filter}' percent."
+        seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${out_directory}/Elements_filterGC.txt
+        removed_elements=$(wc -l ${out_directory}/Elements_filterGC.txt | awk '{print $1}')
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements"
+        seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
+        fasta_path=$(realpath ${fasta_path}.filtered.fa)
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding."
+    fi
+fi
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Processing headers, creating sequence header association file, and updating metadata if available."
 
 mkdir -p ${out_directory}/Data ${out_directory}/Workspace ${out_directory}/metadata_files
 
