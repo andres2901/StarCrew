@@ -322,6 +322,28 @@ run_blast() {
     awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/clean_results.txt
 }
 
+check_core() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/ClusterProfiling/"
+    local orthogroups_dir="${working_dir}/Orthofinder/Results_profiling/Orthogroup_Sequences/"
+    local temp_dir="${working_dir}/temp/"
+
+    File_number=$(ls ${working_dir}/core_genes*.txt | wc -l)
+
+    if [[ $File_number -gt 0 ]]; then
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Core genes have been identified. Processing..."
+        mkdir -p "${working_dir}/Core_genes"
+
+        cat ${working_dir}/core_genes*.txt | sort -u > ${temp_dir}/Full_core.txt
+
+        while read Orthogroup; 
+        do 
+            cp ${orthogroups_dir}/${Orthogroup}.fa ${working_dir}/Core_genes/
+        done < ${temp_dir}/Full_core.txt
+    fi
+}
+
 check_movement() {
     local base_dir="$1"
 
@@ -394,6 +416,9 @@ do
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
     Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c $captainremoval_number
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for core genes..."
+    check_core "${internal_dir}"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for identifiable genes that participate in movement..."
     check_movement "${internal_dir}"
