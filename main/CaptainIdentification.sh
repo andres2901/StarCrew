@@ -22,7 +22,7 @@ function print_help() {
    echo "Syntax: SAT CaptainIdentification [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 350) [range: 200 - 800]."
+   echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 250) [range: 200 - 800]."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
    echo "-m, --mode: specified the mode (Default = Cluster) [Available mode: Cluster, FullAll, AllID]."
    echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
@@ -36,7 +36,7 @@ hmmprofile_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
 level="2"
-length="350"
+length="250"
 mode="Cluster"
 threads="1"
 help_flag=false
@@ -463,7 +463,7 @@ Captain_pseudogene() {
 
             makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null
 
-            blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+            blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
             BEGIN {
             last_start = -1;
             last_end = -1;
@@ -492,13 +492,15 @@ Captain_pseudogene() {
             }' > ${temp_dir}/${line}_start.bed
 
             local exonNumber=$(wc -l ${temp_dir}/${line}_start.bed | awk '{print $1}')
+            local exon_length=$(awk '{$4 = $3 - $2} {sum += $4} END {print sum}' ${temp_dir}/${line}_start.bed)
 
-            if [[ ${exonNumber} -lt 2 ]]; then
-
+            if [[ ${exonNumber} -ge 2 || ${exon_length} > 600 ]]; then
+                seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
+            else
                 seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
                 makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
 
-                blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | sort -k2 -n -u | awk -F'\t' '
+                blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
                 BEGIN {
                 last_start = -1;
                 last_end = -1;
@@ -527,16 +529,14 @@ Captain_pseudogene() {
                 }' > ${temp_dir}/${line}_end.bed
 
                 local exonNumber=$(wc -l ${temp_dir}/${line}_end.bed | awk '{print $1}')
+                local exon_length=$(awk '{$4 = $3 - $2} {sum += $4} END {print sum}' ${temp_dir}/${line}_end.bed)
 
-                if [[ ${exonNumber} -ge 2 ]]; then
+                if [[ ${exonNumber} -ge 2 || ${exon_length} > 600 ]]; then
                     seqkit subseq --quiet --bed ${temp_dir}/${line}_end.bed ${temp_dir}/blast/${line}_end.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
                 else 
                     echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."
                     echo "${line}" >> ${Remove_elements}
                 fi
-            else
-                seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
-
             fi 
         done
 

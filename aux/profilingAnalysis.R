@@ -321,7 +321,6 @@ core_genes_analysis <- function(
     Cluster,
     Cluster_number = ""
 ) {
-  #core_genes <- vector()
   core_genes2 <- vector()
   #identify the possibility of general core genes
   Whole_core <- ortho_counts[rowSums(ortho_counts < 1 ) <= ncol(ortho_counts)*0.2,]
@@ -340,15 +339,16 @@ core_genes_analysis <- function(
   if(length(unique(fit)) > 1) {
     for(SubClusterId in 1:length(unique(fit))) {
       OrthoFinder_subcluster <- subset(ortho_counts, select = names(fit[grep(SubClusterId,fit)]))
-      OrthoFinder_subcluster <- OrthoFinder_subcluster[rowSums(OrthoFinder_subcluster < 1 ) <= ncol(OrthoFinder_subcluster)*0.2,]
-      #OrthoFinder_subcluster <- OrthoFinder_subcluster %>%  filter(!if_any(everything(), ~ .x == 0))
-      if(nrow(OrthoFinder_subcluster) > 0) {
-        core <- rownames(OrthoFinder_subcluster)
-        core_genes2 <- c(core_genes2,core)
-        write.table(core, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".txt", sep = ""),
+      if(ncol(OrthoFinder_subcluster) > 3) {
+        OrthoFinder_subcluster <- OrthoFinder_subcluster[rowSums(OrthoFinder_subcluster < 1 ) <= ncol(OrthoFinder_subcluster)*0.2,]
+        if(nrow(OrthoFinder_subcluster) > 0) {
+          core <- rownames(OrthoFinder_subcluster)
+          core_genes2 <- c(core_genes2,core)
+          write.table(core, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".txt", sep = ""),
                         sep = '\t', row.names = F, col.names = F, quote = F)
-        write.csv(OrthoFinder_subcluster, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".csv", sep = ""),
+          write.csv(OrthoFinder_subcluster, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".csv", sep = ""),
                         row.names = T, quote = F)
+        }
       }
     }
   }

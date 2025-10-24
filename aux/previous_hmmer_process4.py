@@ -256,7 +256,6 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
 
                 unique_candidate = None
                 unique_candidate_level = 0
-                gff_candidate_level = 0
                 gff_candidates = set()
 
                 common_ids_123 = ids1.intersection(ids2).intersection(ids3)
@@ -310,37 +309,8 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
                     })
                     print(f"Success: Selected ID '{final_selected_id}'. Reason: {final_reason}")
                 else:
-                    #See if giving an step before can identify a putative captain
-                    if unique_candidate_level > min_common:
-                        if len(common_ids_12) > 1:
-                            gff_candidates = common_ids_12
-                            gff_candidate_level = 2
-                        elif len(ids1) > 1:
-                            gff_candidates = ids1
-                            gff_candidate_level = 1
-
-                        if len(gff_candidates) > 1 and gff_candidate_level >= min_common:
-                            result, gff_reason_analysis = run_gff_analysis(gff_candidates, gff_df, POS_RANGE_KB)
-                            if result:
-                                final_selected_id = result
-                                final_reason = f"Selected via GFF tie-breaker al level {gff_candidate_level}."
-                        if final_selected_id:
-                            is_valid, validation_reason = check_filters(final_selected_id, gff_df, EXON_RANGE, POS_RANGE_KB)
-                            if is_valid:
-                                hmm_scores = df1_agg[df1_agg['ID'] == final_selected_id].iloc[0]
-                                # NOTE: Keeping the score data here, but it will be filtered out on save.
-                                all_results.append({
-                                    'ID': final_selected_id,
-                                    'HMM_Min_Score2': hmm_scores['min_score2'],
-                                    'HMM_Max_Score3': hmm_scores['max_score3']
-                                })
-                                print(f"Success: Selected ID '{final_selected_id}'. Reason: {final_reason}")
-                            else:
-                                print(f"No ID could be selected for {base_name}. Reason: {validation_reason}. Writing to empty file.")
-                                empty_f.write(f"{base_name}\n")
-                    else:
-                        print(f"No ID could be selected for {base_name}. Reason: {validation_reason}. Writing to empty file.")
-                        empty_f.write(f"{base_name}\n")
+                    print(f"No ID could be selected for {base_name}. Reason: {validation_reason}. Writing to empty file.")
+                    empty_f.write(f"{base_name}\n")
             else:
                 print(f"No ID could be selected for {base_name}. Reason: {final_reason}. Writing to empty file.")
                 empty_f.write(f"{base_name}\n")
