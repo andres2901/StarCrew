@@ -329,13 +329,15 @@ check_core() {
     local orthogroups_dir="${working_dir}/Orthofinder/Results_profiling/Orthogroup_Sequences/"
     local temp_dir="${working_dir}/temp/"
 
-    File_number=$(ls ${working_dir}/core_genes*.txt | wc -l)
+    ls ${working_dir}/Core_genes*.txt > ${temp_dir}/core_files.txt 2>/dev/null
+
+    File_number=$(wc -l "${temp_dir}/core_files.txt" | awk '{print $1}')
 
     if [[ $File_number -gt 0 ]]; then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Core genes have been identified. Processing..."
         mkdir -p "${working_dir}/Core_genes"
 
-        cat ${working_dir}/core_genes*.txt | sort -u > ${temp_dir}/Full_core.txt
+        cat ${working_dir}/Core_genes*.txt | sort -u > ${temp_dir}/Full_core.txt
 
         while read Orthogroup; 
         do 

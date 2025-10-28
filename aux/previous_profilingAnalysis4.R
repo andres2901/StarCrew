@@ -316,65 +316,6 @@ analyze_individual_clusters <- function(
   return(Selected_clusters)
 }
 
-check_nesting <- function(
-  ortho_counts,   
-  seq_data,        
-  gene_data,      
-  blast_links) {
-
-  for(Element in 1:ncol(ortho_counts)) { 
-    Element_name <- colnames(ortho_counts[Element])
-    Genes_element <- rownames(ortho_counts[Element_name] %>%  filter(!if_all(everything(), ~ .x == 0)))
-    reduced_orthofinder <- ortho_counts[Genes_element,]
-    reduced_orthofinder2 <- reduced_orthofinder[,colSums(reduced_orthofinder < 1) < nrow(reduced_orthofinder) * 0.2]
-    if(is.data.frame(reduced_orthofinder2)){
-      reduced_orthofinder2 <- reduced_orthofinder2 %>% select(-all_of(Element_name))
-      if(is.data.frame(reduced_orthofinder2)){
-        for(comparison in 1:ncol(reduced_orthofinder2)) {
-          Element_compare <- colnames(reduced_orthofinder2[comparison])
-          Genes_compare <- rownames(ortho_counts[Element_compare] %>%  filter(!if_all(everything(), ~ .x == 0)))
-          if(length(Genes_compare) > (length(Genes_element) * 1.5)) {
-            selected_seq <- c(Element_name, Element_compare)
- 
-            seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seq)
-            genes_filtered <- gene_data %>% filter(seq_id %in% selected_seq)
-            links_filtered <- blast_links %>%
-            filter(qseqid %in% selected_seq & sseqid %in% selected_seq) %>%
-            select(seq_id = qseqid, start = qstart, end = qend,
-                 seq_id2 = sseqid, start2 = sstart, end2 = send, pident)
-        
-            # Ordering sequences
-            ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, selected_seq))
-
-            if(any(c(any(links_filtered$start < 1000) && any(links_filtered$start2 < 1000)), TRUE) && ! all(c(any(links_filtered$start < 1000) && any(links_filtered$start2 < 1000)), TRUE)) {
-              cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Element ", Element_name, " is nested in element ", Element_compare, "\n", sep = ""))
-        
-              # Plotting (Synteny map)
-              p_genome <- gggenomes(
-              seqs = ordered_seqs,
-              links = links_filtered,
-              genes = genes_filtered
-              ) +
-              geom_seq(aes(y = y)) +
-              geom_gene(aes(y = y)) +
-              geom_link(aes(y = y, fill = pident), colour = NA) +
-              geom_bin_label(aes(y = y), x = -10) +
-              scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
-              theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
-        
-              # Saving the plot
-              ggsave(p_genome, filename = paste("IndividualNestingEvent-code", Element,comparison, ".svg", sep = ""),
-               width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
-               height = min(49, length(selected_seq)), limitsize = FALSE)
-            }
-          }
-        }
-
-      }
-    }
-  }
-}
-
 core_genes_analysis <- function(    
     ortho_counts,
     Cluster,
@@ -573,7 +514,6 @@ plot_subcluster_synteny <- function(
       # Block 2: Simple reduction (ncol > nrow)
       } else if (ncol(reduce_matrix) > nrow(reduce_matrix)) {
         reduce_matrix <- reduce_matrix[, names(sort(colSums(reduce_matrix), decreasing = F))]
-        reduce_matrix <- reduce_matrix[order(reduce_matrix[,ncol(reduce_matrix)], decreasing = TRUE),]
 
         Movement <- gene_movement_analysis(
           subcluster_number = ClusterId,  
@@ -617,7 +557,6 @@ plot_subcluster_synteny <- function(
           }  
         } else if (ncol(reduce_matrix) > nrow(reduce_matrix)) {
           reduce_matrix <- reduce_matrix[, names(sort(colSums(reduce_matrix), decreasing = F))]
-          reduce_matrix <- reduce_matrix[order(reduce_matrix[,ncol(reduce_matrix)], decreasing = TRUE),]
           
           Movement <- gene_movement_analysis(
           subcluster_number = ClusterId,  
@@ -726,13 +665,6 @@ data_list <- load_and_preprocess_data()
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Identifying if there are separate clusters","\n", sep=""))
 
 clustering_data <- perform_initial_clustering()
-
-cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Checking for nesting events ","\n", sep = ""))
-
-check_nesting(ortho_counts = clustering_data$orthofinder_counts,
-    seq_data = data_list$seqs,
-    gene_data = data_list$genes,
-    blast_links = data_list$blast_results)
 
 # Process Clusters
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",clustering_data$Individual_clusters," individual cluster(s) identified","\n", sep=""))
@@ -885,121 +817,122 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters == 1)) {
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are possible core genes","\n", sep=""))
   
   core_genes <- core_genes_analysis(ortho_counts = clustering_data$orthofinder_counts, Cluster = clustering_data$Hierar_cl)
-}
 
-cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are differences between captain and cargo dendograms","\n", sep=""))
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are differences between captain and cargo dendograms","\n", sep=""))
 
-phylo_tree <- read.tree("CaptainPhylogeny.nw")
-if(length(phylo_tree$tip.label) > 4){
-  dist_matrix <- cophenetic.phylo(phylo_tree)
-  min_dist <- min(dist_matrix)
-  max_dist <- max(dist_matrix)
-  normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
-  normalized_dist_matrix2 <- scale(normalized_dist_matrix)
-  hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
+  phylo_tree <- read.tree("CaptainPhylogeny.nw")
+  if(length(phylo_tree$tip.label) > 4){
+    dist_matrix <- cophenetic.phylo(phylo_tree)
+    min_dist <- min(dist_matrix)
+    max_dist <- max(dist_matrix)
+    normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
+    normalized_dist_matrix2 <- scale(normalized_dist_matrix)
+    hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
 
-  test_NbClust <- NbClust(normalized_dist_matrix2, method = "average", min.nc = 1, max.nc = min(6, nrow(normalized_dist_matrix2)-1), index = "ball")
-  test_fit <- cutree(hclust_tree, h = 0.5)
-  K_number <- round(mean(c(length(unique(test_NbClust$Best.partition)),length(unique(test_fit)))))
-  fit_tree <- cutree(hclust_tree, k = K_number)
-  fit_tree <- fit_tree[order(names(fit_tree))]
+    test_NbClust <- NbClust(normalized_dist_matrix2, method = "average", min.nc = 1, max.nc = min(6, nrow(normalized_dist_matrix2)-1), index = "ball")
+    test_fit <- cutree(hclust_tree, h = 0.5)
+    K_number <- round(mean(c(length(unique(test_NbClust$Best.partition)),length(unique(test_fit)))))
+    fit_tree <- cutree(hclust_tree, k = K_number)
+    fit_tree <- fit_tree[order(names(fit_tree))]
 
-  fit <- cutree(clustering_data$Hierar_cl, k = K_number) 
-  fit <- fit[order(names(fit))]
+    fit <- cutree(clustering_data$Hierar_cl, k = K_number) 
+    fit <- fit[order(names(fit))]
 
-  #First round of discordance - Cargo tree view
-  contingency_table <- table(fit_tree, fit)
-  best_match <- apply(contingency_table, 1, which.max)
-  fit_aligned <- fit_tree
-  for(i in 1:length(best_match)){
-    original_label <- names(best_match)[i]
-    new_label <- best_match[i]
-    fit_aligned[fit_tree == original_label] <- as.numeric(new_label)
-  }
+    #First round of discordance - Cargo tree view
+    contingency_table <- table(fit_tree, fit)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit_tree
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit_tree == original_label] <- as.numeric(new_label)
+    }
 
-  discordant_indices <- which(fit != fit_aligned)
-  discordant_elements <- names(fit)[discordant_indices]
+    discordant_indices <- which(fit != fit_aligned)
+    discordant_elements <- names(fit)[discordant_indices]
 
-  #Second round of discordance - Captain tree view
-  contingency_table <- table(fit, fit_tree)
-  best_match <- apply(contingency_table, 1, which.max)
-  fit_aligned <- fit
-  for(i in 1:length(best_match)){
-    original_label <- names(best_match)[i]
-    new_label <- best_match[i]
-    fit_aligned[fit == original_label] <- as.numeric(new_label)
-  }
-  discordant_indices <- which(fit_tree != fit_aligned)
-  discordant_elements <- unique(c(discordant_elements,names(fit_tree)[discordant_indices]))
+    #Second round of discordance - Captain tree view
+    contingency_table <- table(fit, fit_tree)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit == original_label] <- as.numeric(new_label)
+    }
 
-  if(length(discordant_elements) >= 1) {
-    cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
-    write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
+    discordant_indices <- which(fit_tree != fit_aligned)
+    discordant_elements <- unique(c(discordant_elements,names(fit_tree)[discordant_indices]))
 
-    dend_list <- dendlist(clustering_data$Hierar_cl, hclust_tree)
-    svg(filename="CaptainVsCargo_tanglegram.svg", width = 16, height = min(49, length(fit)/2))
-    dend_list %>% ladderize %>% 
-    untangle(method = "step1side", k_seq = K_number:(length(fit)-1)) %>%
-    set("branches_k_color", k=K_number) %>% 
-    tanglegram(faster = TRUE, main_left = as.character("Cargo Cluster"),main_right = as.character("Captain tree"))
-    invisible(dev.off())
+    if(length(discordant_elements) >= 1) {
+      cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
+      write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
+
+      dend_list <- dendlist(clustering_data$Hierar_cl, hclust_tree)
+      svg(filename="CaptainVsCargo_tanglegram.svg", width = 16, height = min(49, length(fit)/2))
+      dend_list %>% ladderize %>% 
+      untangle(method = "step1side", k_seq = K_number:(length(fit)-1)) %>%
+      set("branches_k_color", k=K_number) %>% 
+      tanglegram(faster = TRUE, main_left = as.character("Cargo Cluster"),main_right = as.character("Captain tree"))
+      invisible(dev.off())
+    } else {
+      cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
+    }
   } else {
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
-  }
-} else {
-  dist_matrix <- cophenetic.phylo(phylo_tree)
-  min_dist <- min(dist_matrix)
-  max_dist <- max(dist_matrix)
-  normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
-  normalized_dist_matrix2 <- scale(normalized_dist_matrix)
-  hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
+    dist_matrix <- cophenetic.phylo(phylo_tree)
+    min_dist <- min(dist_matrix)
+    max_dist <- max(dist_matrix)
+    normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
+    normalized_dist_matrix2 <- scale(normalized_dist_matrix)
+    hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
 
-  fit_tree <- cutree(hclust_tree, k = 2)
-  fit_tree <- fit_tree[order(names(fit_tree))]
+    fit_tree <- cutree(hclust_tree, k = 2)
+    fit_tree <- fit_tree[order(names(fit_tree))]
 
-  fit <- cutree(clustering_data$Hierar_cl, k = 2) 
-  fit <- fit[order(names(fit))]
+    fit <- cutree(clustering_data$Hierar_cl, k = 2) 
+    fit <- fit[order(names(fit))]
 
-  #First round of discordance - Cargo tree view
-  contingency_table <- table(fit_tree, fit)
-  best_match <- apply(contingency_table, 1, which.max)
-  fit_aligned <- fit_tree
-  for(i in 1:length(best_match)){
-    original_label <- names(best_match)[i]
-    new_label <- best_match[i]
-    fit_aligned[fit_tree == original_label] <- as.numeric(new_label)
-  }
+    #First round of discordance - Cargo tree view
+    contingency_table <- table(fit_tree, fit)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit_tree
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit_tree == original_label] <- as.numeric(new_label)
+    }
 
-  discordant_indices <- which(fit != fit_aligned)
-  discordant_elements <- names(fit)[discordant_indices]
+    discordant_indices <- which(fit != fit_aligned)
+    discordant_elements <- names(fit)[discordant_indices]
 
-  #Second round of discordance - Captain tree view
-  contingency_table <- table(fit, fit_tree)
-  best_match <- apply(contingency_table, 1, which.max)
-  fit_aligned <- fit
-  for(i in 1:length(best_match)){
-    original_label <- names(best_match)[i]
-    new_label <- best_match[i]
-    fit_aligned[fit == original_label] <- as.numeric(new_label)
-  }
+    #Second round of discordance - Captain tree view
+    contingency_table <- table(fit, fit_tree)
+    best_match <- apply(contingency_table, 1, which.max)
+    fit_aligned <- fit
+    for(i in 1:length(best_match)){
+      original_label <- names(best_match)[i]
+      new_label <- best_match[i]
+      fit_aligned[fit == original_label] <- as.numeric(new_label)
+    }
 
-  discordant_indices <- which(fit_tree != fit_aligned)
-  discordant_elements <- unique(c(discordant_elements,names(fit_tree)[discordant_indices]))
+    discordant_indices <- which(fit_tree != fit_aligned)
+    discordant_elements <- unique(c(discordant_elements,names(fit_tree)[discordant_indices]))
 
-  if(length(discordant_elements) >= 1) {
-    cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
-    write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
+    if(length(discordant_elements) >= 1) {
+      cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There ",length(discordant_elements)," discordant element(s) identified","\n", sep=""))
+      write.table(discordant_elements, file = "Discordant_elements.txt", sep = '\t', row.names = F, col.names= F,quote = F)
 
-    dend_list <- dendlist(clustering_data$Hierar_cl, hclust_tree)
-    svg(filename="CaptainVsCargo_tanglegram.svg", width = 16, height = min(49, length(fit)/2))
-    dend_list %>% ladderize %>% 
-    untangle(method = "step1side", k_seq = 2:(length(fit)-1)) %>%
-    set("branches_k_color", k=2) %>% 
-    tanglegram(faster = TRUE, main_left = as.character("Cargo Cluster"),main_right = as.character("Captain tree"))
-    invisible(dev.off())
-  } else {
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
-  }
+      dend_list <- dendlist(clustering_data$Hierar_cl, hclust_tree)
+      svg(filename="CaptainVsCargo_tanglegram.svg", width = 16, height = min(49, length(fit)/2))
+      dend_list %>% ladderize %>% 
+      untangle(method = "step1side", k_seq = 2:(length(fit)-1)) %>%
+      set("branches_k_color", k=2) %>% 
+      tanglegram(faster = TRUE, main_left = as.character("Cargo Cluster"),main_right = as.character("Captain tree"))
+      invisible(dev.off())
+    } else {
+      cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No discordance detected","\n", sep=""))
+    }
+  } 
 } 
- 
-cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Finished","\n", sep=""))
+
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Finished","\n", sep=""))
