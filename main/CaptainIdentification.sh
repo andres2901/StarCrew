@@ -1,22 +1,21 @@
 #!/bin/bash
 
 # Function to print help message
-
 function print_help() {
-   echo -e "Script to run captain identification in each element and phylogenetic tree of this captains.
-   This script perform five steps:
-   1. Run hmmsearch against protein database for each element.
-   2. Process the data and identify captains and regions used for phylogenetic analysis. For the captain identification, there are tree level of minimum confidence that can be used:
-      2.1 Only a match with the catain hmm profile from starfish (\033[01;31mWARNING\033[m: This could lead to false positive identification leading to a bad phylogenetic analysis).
-      2.2 Plus a match with the DUF3435 hmm profile.
-      2.3 Plus a match with the integrase catalitic core hmm profile.
-   3. For elements without a confident captain gene, it will look for a putative captain pseudogene at the beginning and end of the element.
-   4. Align exonic sequence with MACSE with aminoacid output and preprocess alignment with Clipkit.
-   5. Run maximum-likelihood phylogenetic tree inference.
+   echo -e "Script to identify captain genes within each element and construct a phylogenetic tree based on these captains.
+   It executes five main steps:
+   1. Run hmmsearch using hmm profiles of captain domains against the proteome of each element.
+   2. Processes the data to identify Captains and regions suitable for phylogenetic analysi. Three minimum confidence levels can be used for Captain identification:
+      2.1 Only a match with the Captain HMM profile from Starfish (\033[01;31mWARNING\033[m: This may lead to false positive identifications and result in an unreliable phylogenetic analysis).
+      2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
+      2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with the Integrase catalytic core HMM profile.
+   3. For elements lacking a confident Captain gene, the script searches for a putative Captain pseudogene at the beginning and end of the element.
+   4. Aligns exonic sequences using MACSE (with amino acid output) and preprocesses the alignment with Clipkit.
+   5. Runs maximum-likelihood phylogenetic tree inference.
    There are three available mode:
-   -Cluster: Analyzed, and perform all of this five steps per cluster and remove elements without a suitable captain gene/pseudogene.
-   -FullAll:Analyzed, and perform all of this five steps in the whole dataset.
-   -AllID: Analyzed and perform the first three step in the whole dataset and remove elements without a suitable captain gene/pseudogene.
+   -Cluster: Analyzes and performs all five steps per cluster, removing elements without a suitable Captain gene or pseudogene..
+   -FullAll: Analyzes and performs all five steps on the whole dataset.
+   -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, removing elements without a suitable Captain gene or pseudogene.
    "
    echo
    echo "Syntax: SAT CaptainIdentification [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> ]"
@@ -197,7 +196,7 @@ if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-# Check for software presence
+# Check for required software
 if [[ -z "$(which python)" ]]; then
     echo "Error: Missing python function."
     exit 1
@@ -290,9 +289,7 @@ check_directory_structure() {
         exit 1
     fi
     
-    # Step 2: Check for consistent filenames across subdirectories
-
-    # Define temporary file paths in the working directory
+    # Check for consistent filenames across subdirectories
     local gff_files="$base_dir/gff_files.txt"
     local protein_files="$base_dir/protein_files.txt"
     local nucleotide_files="$base_dir/nucleotide_files.txt"
@@ -368,7 +365,7 @@ process_hmmsearch() {
 
     local working_dir="${base_dir}/Workspace/CaptainIdentification/"
 
-    # Locate the protein directory based on the pattern *_protein
+    # Locate the protein directory
     local protein_path=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     
     # Define path for the output directory
@@ -377,12 +374,11 @@ process_hmmsearch() {
     local hmmer_results_DUF="${hmmer_results_prefix}DUF"
     local hmmer_results_CAPTAIN="${hmmer_results_prefix}Captain"
 
-    # Create the necessary directoriy
+    # Create the necessary output directory
     mkdir -p "${hmmer_results_CAT}"
     mkdir -p "${hmmer_results_DUF}"
     mkdir -p "${hmmer_results_CAPTAIN}"
 
-    # Step 1: Perform hmmsearch
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing profile searches..."
     
     # Get a list of all species filenames without the .fa extension
@@ -457,6 +453,7 @@ Captain_pseudogene() {
         mkdir -p ${temp_dir}/blast
         cat ${empty_elements} | while read line 
         do 
+            # Search for captain pseudogene at the beginning in the positive strand
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking for captain pseudogene in element '${line}'"
 
             seqkit subseq --quiet -r 1:20000 ${nucleotide_path}/${line}.fa > ${temp_dir}/blast/${line}_start.fa
@@ -497,6 +494,7 @@ Captain_pseudogene() {
             if [[ ${exonNumber} -ge 2 || ${exon_length} > 600 ]]; then
                 seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
             else
+                # Search for captain pseudogene at the end in the negative strand
                 seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
                 makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
 
@@ -553,7 +551,6 @@ Alignment() {
     local working_dir="${base_dir}/Workspace/CaptainIdentification/"
 
     # Locate required subdirectories and define output path
-    
     local pseudoExons="${working_dir}/Captains_pseudo.fa"
     local captain_file="${working_dir}/Captains_exon.fa"
     local temp_dir="${working_dir}/temp/"
@@ -600,12 +597,12 @@ Tree_inference() {
     local outdir="${working_dir}/captainPhylogeny"
     local temp_dir="${working_dir}/temp/"
 
-    # --- Error Handling ---
     if [[ ! -f "$protein_file" ]]; then
         echo "Error: Input file '$protein_file' not found." >&2
         exit 1
     fi
 
+    # Check that all captains are not the same
     seqkit rmdup --quiet -s ${protein_file} -o ${temp_dir}/unique &> /dev/null
 
     local unique_sequences=$(grep -c ">" ${temp_dir}/unique)
@@ -614,6 +611,7 @@ Tree_inference() {
         mkdir -p ${outdir}
         iqtree3 -T ${threads} -m MFP --prefix ${outdir}/Captain_tree -B 1000 --alrt 1000 -s ${protein_file} -quiet --polytomy
 
+        # Collapse near-zero branches and split with low support
         gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_dir}/captainlength.nw
         gotree collapse support -s 80 -i ${temp_dir}/captainlength.nw -o ${temp_dir}/captainsupport.nw
 
@@ -740,9 +738,9 @@ then
     # Alignment
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Perform phylogenetic tree inference of captains."
     Tree_inference "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished."
 elif [[ "${mode}" == "AllID" ]]
 then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${Working_directory}' structure."

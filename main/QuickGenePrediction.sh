@@ -1,14 +1,13 @@
 #!/bin/bash
 
 # Function to print help message
-
 function print_help() {
-   echo "Script to perform a quick and raw prediction of genes for starships.
-   This script perform four steps:
-   1. Perform a gene prediction using metaEuk.
-   2. Determines the statistics of each element prediction.
-   3. Filter the elements based on a minimum gene content.
-   4. Organized the files in the working directory for future modules."
+   echo "Script to perform a quick and raw prediction of genes of all elements.
+   It executes four main steps:
+   1. Uses MetaEuk to perform gene prediction..
+   2. Determines the prediction statistics for each element.
+   3. Filters elements based on a minimum gene content threshold.
+   4. Organizes the resulting files in the working directory for subsequent modules."
    echo
    echo "Syntax: SAT QuickGenePrediction [ -help ] -w <directory_path> -p <file_path> [ -m <integer> ]"
    echo "options:"
@@ -75,7 +74,7 @@ else
     fi
 fi
 
-# check if working directory exist
+# Check if working directory exist
 if [[ ! -d "$Working_directory" ]]; then
     echo "Error: folder '$Working_directory' does not exist."
     exit 1
@@ -99,7 +98,7 @@ else
     exit 1
 fi
 
-# Check for software presence
+# Check for required sofware
 if [[ -z "$(which agat_sp_filter_incomplete_gene_coding_models.pl)" ]]; then
     echo "Error: Missing agat functions."
     exit 1
@@ -129,6 +128,7 @@ check_directory_structure() {
     local fasta_file="${base_dir}/Sequences.fa"
     local metadata_file="${base_dir}/metadata_files/metadata.csv"
 
+    # Check for the presence of required files/folders
     if [[ ! -f $fasta_file ]]; then
         echo "Error: sequence fasta file does not exist in '$base_dir'."
         exit 1
@@ -160,8 +160,8 @@ gene_prediction() {
 
     # Create databases for metaeuk
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating metaeuk database..."
-    metaeuk createdb  $fasta_path ${working_dir}/ContigsDB --dbtype 2 -v 0
 
+    metaeuk createdb  $fasta_path ${working_dir}/ContigsDB --dbtype 2 -v 0
     metaeuk createdb $protein_path ${working_dir}/ProteinDB --dbtype 1 -v 0
 
     # Run metaeuk gene prediction
@@ -190,18 +190,19 @@ gene_stats() {
     local working_dir="${base_dir}/Workspace/QuickGenePrediction/"
     local temp_directory="${base_dir}/Workspace/QuickGenePrediction/temp/"
 
+    # Generate the number of genes and mean length statistic
     awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
     do 
         echo -e ${line}"\t"$(grep -w ${line} ${working_dir}/metaeuk_fix.gff | grep -c "gene")"\t"$(grep -w ${line} ${working_dir}/metaeuk_fix.gff | grep "gene" | awk '{ sum  += $5 - $4 } END { print sum / NR }') >> ${temp_directory}stats_gff3.txt 
     done
 
+    # Generate the mean intergenic length statistic.
     awk 'NR>1{print $1}' ${working_dir}/metaeuk_fix.gff | sort | uniq | while read line
     do 
         grep -E "${line}|gene" ${working_dir}/metaeuk_fix.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = prev_col2 - $4; if (diff > 0) total_sum += diff; prev_col2 = $5} END {print total_sum / (NR - 1)}' >> ${temp_directory}intergenic.txt
     done
 
     echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${base_dir}/Gene_stats.txt
-
     paste ${temp_directory}stats_gff3.txt ${temp_directory}intergenic.txt >> ${base_dir}/Gene_stats.txt
 }
 
@@ -241,7 +242,7 @@ organize_files() {
         # Filtering gff files
         cp ${temp_directory}gff/${line}.gff ${Output_dir}/Gff/
         
-        # Dividing nucleotide of elements
+        # Dividing nucleotide sequence of elements
         echo $line > ${temp_directory}/temp_element.txt
         seqkit grep -n -f ${temp_directory}/temp_element.txt $fasta_path -o ${Output_dir}/Nucleotide/${line}.fa &> /dev/null
 
@@ -290,9 +291,7 @@ mkdir -p ${Working_directory}/Workspace/QuickGenePrediction/temp/
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running metaeuk for gene prediction."
-
 gene_prediction "$Working_directory"
-
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction finished. Proceeding."
 
 # ==============================================================================
@@ -300,9 +299,7 @@ echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction finished. Proceeding."
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Generating statistics of gene prediction."
-
 gene_stats "$Working_directory"
-
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction statistics finished. Proceeding."
 
 # ==============================================================================
@@ -310,7 +307,6 @@ echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction statistics finished. P
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Organizing and filtering results."
-
 organize_files "$Working_directory"
 
 # Clean temporary directory from workspace

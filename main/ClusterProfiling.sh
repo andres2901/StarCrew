@@ -4,13 +4,19 @@
 
 function print_help() {
    echo -e "Script to run the profiling analysis of each selected cluster.
-   This script perform five steps:
+   This script perform eight steps:
    1. Identify orthogroups through OrthoFinder software.
    2. Perform all-vs-all Blastn.
-   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count excluding singletons.
-   4. Analyzed Clusters depending on preliminary results:
-     4.1. If had subclusters: Try to identify putative movement between subcluster.
-     4.2. If doesn't had subcluster: Try to identify possible discordant elements between the captain phylogenetic tree and the cargo-base hierarchical tree.
+   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
+   4. Determine the full conection of the cluster and create a profile heatmap and synteny image for the cluster.
+   5. Identify possible individual nesting events inside the cluster.
+   6. Identify core genes in the cluster in two ways:
+     6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
+     6.2. Specific core:
+       6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
+       6.2.2. If subslusters are generated identify core genes in each one that have at least 5 elements using the same logic of general core.
+   7. If subclusters are present it try to identify putative cargo movement events including the specific orthogroups involve.
+   8. Determine if there are discordances at 'Clade' lavel between CArgo hierarchical clustering and Captain phylogenetic tree.
    "
    echo
    echo "Syntax: SAT ClusterProfiling [ -help ] -w <directory_path> [ -t <integer> ]"
@@ -93,7 +99,7 @@ fi
 
 # Check for software presence
 if [[ -z "$(which Rscript)" ]]; then
-    echo "Error: Missing RScript function."
+    echo "Error: Missing Rscript function."
     exit 1
 fi
 
@@ -418,6 +424,9 @@ do
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
     Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c $captainremoval_number
+
+    mkdir -p "${internal_dir}/Workspace/ClusterProfiling/Images"
+    mv ${internal_dir}/Workspace/ClusterProfiling/*.svg "${internal_dir}/Workspace/ClusterProfiling/Images/"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for core genes..."
     check_core "${internal_dir}"

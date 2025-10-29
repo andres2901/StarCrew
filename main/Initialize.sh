@@ -1,9 +1,8 @@
 #!/bin/bash
 
 # Function to print help message
-
 function print_help() {
-   echo "Script to organize the working directory for the workflow."
+   echo "Script to organize the working directory to run the subsequent commands in the workflow."
    echo
    echo "Syntax: SAT Initialize [ -help ] -f <filte_path> [ -m <file_path> -o <string> -g <integer> -r ]"
    echo "options:"
@@ -16,7 +15,6 @@ function print_help() {
 }
 
 # Initialize variables
-
 out_directory="WorkingDirectory"
 filter="0"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
@@ -60,22 +58,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Print help if requested
-
 if $help_flag; then
     print_help
     exit 0
 fi
 
 # Check for mandatory arguments
-
 if [[ -z "$fasta_path" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
 fi
 
-# check if fasta file exist
-
+# Check if fasta file exist
 if [[ ! -f "$fasta_path" ]]; then
     echo "Error: file '$fasta_path' does not exist."
     exit 1
@@ -86,8 +81,7 @@ else
     fi
 fi
 
-# check if metadata file exist
-
+# Check if metadata file exist
 if [[ -z "$metadata_path" ]]; then
     metadata=false
 else
@@ -100,7 +94,6 @@ else
 fi
 
 # Check filter parameter
-
 if [[ "$filter" =~ ^[0-9]+$ ]]; then
     if (( $filter != 0 && ($filter < 20 || $filter > 45) )); then
         echo "Error: '$filter' gc content is not an accepted value."
@@ -139,7 +132,6 @@ else
 fi
 
 # check if output directory exist
-
 if [[ -d "$out_directory" ]]; then
     echo "Error: directory '$out_directory' already exist."
     exit 1
@@ -147,7 +139,7 @@ else
     mkdir $out_directory
 fi
 
-# Check for software presence
+# Check for required software
 if [[ -z "$(which seqkit)" ]]; then
     echo "Error: Missing seqkit function."
     exit 1
@@ -183,7 +175,6 @@ base62() {
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking for duplicate headers."
 
 # Verify if ther is any header duplicated.
-
 seqkit rmdup -n "$fasta_path" -o /dev/null -d temp_duplicated_headers &> /dev/null
 
 if [ -s temp_duplicated_headers ]; then
@@ -196,7 +187,6 @@ fi
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> No duplicate headers found. Proceeding."
 
 # Filter stage
-
 if [[ $rip > 0 ]]
 then
     if [[ $filter == 0 ]]
@@ -302,7 +292,7 @@ while read -r initials original_header; do
     # Add the new header to the list of used IDs to prevent future collisions
     echo "$new_header" >> "$temp_used_ids"
     
-    # Print to the temporary file for `seqkit`
+    # Print to the temporary file use for renamed
     echo -e "$new_header\t$original_header" >> temp_association.tsv
 done < temp_initials_and_headers.tsv
 
@@ -314,14 +304,10 @@ seqkit replace --kv-file temp_association2.tsv -p "(.*)" -r "{kv}" "$fasta_path"
 sed 's/\t/;/g' temp_association.tsv | sed '1s/^/new_header;original_header\n/' > "$association_csv"
 
 # Create the updated metadata file
-
 if $metadata; then
     metadata_csv="${out_directory}/metadata_files/metadata.csv"
     awk 'BEGIN{FS=OFS=";"}{if($2=="")$2="NA"; else if($3=="")$3="NA"; print}' $metadata_path > temp_metadata.csv
-    #mv  $metadata_path
     join -1 2 -2 1 -t ';' <( sort -t ";" -k2,2 $association_csv) <(sort -t ";" -k1,1 temp_metadata.csv) > $metadata_csv
-    #awk 'BEGIN{FS=OFS=";"}{print $1 OFS $2 OFS $3}'
-    #| awk 'BEGIN {FS=OFS=";"} {for (i=3; i<=5; i++) if ($i == "" || $i == " ") $i = "NA"; print}'
 else
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Skipping metadata file update..."
 fi

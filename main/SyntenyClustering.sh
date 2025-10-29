@@ -1,19 +1,18 @@
 #!/bin/bash
 
 # Function to print help message
-
 function print_help() {
-   echo -e "Script to run syntenet pipeline using DIAMOND as sequence similarity search software, summarize and organize its results.
-   This script perform six steps:
-   1. Run preprocessing data from Syntenet.
-   2. Run diamond on the preprocess data.
-   3. Run interspecies synteny of syntenet that identify regions with collinearity genes.
-   4. Summarize the results of syntenet on three possible modes:
-     a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. \033[01;31mWARNING\033[m: High rate of false positive could be return with this mode.
+   echo -e "Script to run the syntenet pipeline using DIAMOND for sequence similarity search, summarizes the results, and organizes the output data.
+   It executes six main steps:
+   1. Executes the initial data preprocessing step required by the syntenet pipeline.
+   2. Runs DIAMOND using the preprocessed data.
+   3. Runs the interspecies synteny command of syntenet to identify regions with gene collinearity.
+   4. Summarizes the results of syntenet on three possible modes:
+     a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. \033[01;31mWARNING\033[m: This mode may yield a high rate of false positives.
      b. SSP: Return only pairs with strong synteny.
-     c. Filter: Return pairs that were filter with a blast approach at the nucleotide level.
-   5. Define Clusters of elements and perform a spectral clustering process to identify possible subclusters.
-   6. Organize data for each identified cluster.
+     c. Filter: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level.
+   5. Defines initial clusters of elements and performs a spectral clustering process to identify potential subclusters.
+   6. Organizes the final data output for each identified cluster.
    "
    echo
    echo "Syntax: SAT SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> ]"
@@ -31,7 +30,6 @@ function print_help() {
 }
 
 # Initialize variables
-
 Working_directory=""
 mode="Raw"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
@@ -170,7 +168,6 @@ else
 fi
 
 # Check parameters for subclustering
-
 if [[ ! "$minNodes" =~ ^[0-9]+$ ]]; then
     echo "Error: '$minNodes' is not a positive integer."
     print_help
@@ -209,14 +206,14 @@ if [[ "$predictionMode" != "Quick" && "$predictionMode" != "Robust" ]]; then
     exit 1
 fi
 
-# Check for software presence
+# Check for required software
 if [[ -z "$(which python)" ]]; then
     echo "Error: Missing python function."
     exit 1
 fi
 
 if [[ -z "$(which Rscript)" ]]; then
-    echo "Error: Missing RScript function."
+    echo "Error: Missing Rscript function."
     exit 1
 fi
 

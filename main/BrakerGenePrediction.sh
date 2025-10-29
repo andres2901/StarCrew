@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # Function to print help message
-
 function print_help() {
-   echo "Script to perform braker gene prediction for starships.
-   This script perform two steps:
-   1. Identify proteins that can be produce by the elements trough metaeuk geneprediction and create a smaller protein database from a user-custom protein database.
-   2. Perform braker3 gene prediction using the small protein database."
+   echo "Script to perform BRAKER gene prediction for use with the subsequent RobustGenePrediction command.
+   It executes two main steps:
+   1. Identifies potential proteins using MetaEuk gene prediction and creates a smaller, focused protein database from a user-customized input database.Identify proteins that can be produce by the elements trough metaeuk geneprediction and create a smaller protein database from a user-custom protein database.
+   2. Executes BRAKER gene prediction using the newly created, smaller protein database."
    echo
    echo "Syntax: SAT RobustGenePrediction [ -help ] -w <directory_path> -p <file_path> [ -m <string> -ms <integer> -t <integer> ]"
    echo "options:"
@@ -19,7 +18,6 @@ function print_help() {
 }
 
 # Initialize variables
-
 Working_directory=""
 protein_path=""
 mode="Cluster"
@@ -64,21 +62,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Print help if requested
-
 if $help_flag; then
     print_help
     exit 0
 fi
 
 # Check for mandatory arguments
-
 if [[ -z "$Working_directory" || -z "$protein_path" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
 fi
 
-# check if working directory exist
+# Check if working directory exist
 if [[ ! -d "$Working_directory" ]]; then
     echo "Error: folder '$Working_directory' does not exist."
     exit 1
@@ -107,7 +103,7 @@ if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
     exit 1
 fi
 
-# check if python folder exist
+# Check if python folder exist
 if [[ ! -d "$auxiliary_path" ]]; then
     echo "Error: folder '$auxiliary_path' does not exist."
     exit 1
@@ -116,6 +112,7 @@ else
     if [[ ! "${auxiliary_path:0:1}" == "/" ]]; then
         auxiliary_path=$(realpath $auxiliary_path)
     fi
+
     # Check the presence of the specific scripts
     if [[ ! -f "${auxiliary_path}/merge.py" ]]; then
         echo "Error: file '${auxiliary_path}/merge.py' does not exist."
@@ -148,7 +145,7 @@ if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-# Check for software presence
+# Check for required software
 if [[ -z "$(which braker)" ]]; then
     echo "Error: Missing braker function."
     echo "Make sure that the function name is braker and no braker3, braker.pl or any other variation."
@@ -178,6 +175,7 @@ check_directory_structure() {
 
     local fasta_file="${base_dir}/Sequences.fa"
 
+    # Check for the presence of required files/folders
     if [[ ! -f $fasta_file ]]; then
         echo "Error: sequence fasta file does not exist in '$base_dir'."
         exit 1
@@ -222,6 +220,7 @@ organize_working_directory() {
     mkdir -p ${working_dir}
     mkdir -p ${temp_dir}
 
+    # Copy sequence data making sure that is not softmasked
     seqkit seq -u $fasta_path > ${temp_dir}/Sequences.fa
     mv ${temp_dir}/Sequences.fa $fasta_path
 
@@ -242,14 +241,14 @@ generate_database() {
 
     # Create databases for metaeuk
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating metaeuk database..."
-    metaeuk createdb  $fasta_path ${working_dir}/ContigsDB --dbtype 2 -v 0
 
+    metaeuk createdb  $fasta_path ${working_dir}/ContigsDB --dbtype 2 -v 0
     metaeuk createdb $protein_path ${working_dir}/ProteinDB --dbtype 1 -v 0
 
     # Run metaeuk gene prediction
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk..."
-    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --max-seqs 500 --use-all-table-starts 1 --start-sens 7.5 -v 0 &> /dev/null
 
+    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search-filter 1 --filter-msa 1 --chain-alignments 1  --remove-tmp-files 1 --max-seqs 500 --use-all-table-starts 1 --start-sens 7.5 -v 0 &> /dev/null
     metaeuk unitesetstofasta ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/metaeukFinal -v 0
 
     awk '{print $6}' ${working_dir}/metaeukFinal.headersMap.tsv | awk -F '|' '{print $1}' | sort -u > ${working_dir}/selected_headers.txt
@@ -266,6 +265,7 @@ generate_database() {
 
     sed -i -e 's/\///g' -e 's/(//g' -e 's/)//g' -e 's/|//g' -e 's/ //g' ${working_dir}/Selected_database.fa
 
+    #Remove unnecesary files
     rm ${working_dir}/metaeuk*
     rm ${working_dir}/ProteinDB*
     rm ${working_dir}/ContigsDB*

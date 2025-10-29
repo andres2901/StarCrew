@@ -2,7 +2,7 @@ import gffutils
 import sys
 import os
 import argparse
-import collections # Need to import collections for deque
+import collections
 
 def get_maintained_gene_ids(gff_file_path):
     """
