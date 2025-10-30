@@ -219,7 +219,7 @@ analyze_individual_clusters <- function(
         write.tree(phy = my_tree, file = "CargoHC.nwk")
       }
       
-      # 4. Create Profile Plot (Heatmap)
+      # 4. Create Heatmap Plot
       Cluster_melt <- reshape2::melt(Cluster_matrix, as.is = T)
       Profile_plot <- ggplot(data = Cluster_melt, aes(x = reorder(Var2, value), y = Var1, fill = value)) +
         geom_tile() +
@@ -231,10 +231,10 @@ analyze_individual_clusters <- function(
       plot_width <- min(49, ncol(Cluster_matrix) * 0.2 + 2)
       plot_height <- min(49, nrow(Cluster_matrix))
       if (Individual_clusters >= 2) {
-        ggsave(Profile_plot, filename = paste("CargoProfiling_Cluster", ClusterId, ".svg", sep = ""),
+        ggsave(Profile_plot, filename = paste("CargoHeatmap_Cluster", ClusterId, ".svg", sep = ""),
                width = plot_width, height = plot_height)
       } else {
-        ggsave(Profile_plot, filename = "CargoProfiling.svg",
+        ggsave(Profile_plot, filename = "CargoHeatmap.svg",
                width = plot_width, height = plot_height)
       }
       

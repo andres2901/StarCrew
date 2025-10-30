@@ -3,12 +3,12 @@
 # Function to print help message
 
 function print_help() {
-   echo -e "Script to run the profiling analysis of each selected cluster.
+   echo -e "Script to run the characterization of each selected cluster.
    This script perform eight steps:
    1. Identify orthogroups through OrthoFinder software.
    2. Perform all-vs-all Blastn.
    3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
-   4. Determine the full conection of the cluster and create a profile heatmap and synteny image for the cluster.
+   4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny image for the cluster.
    5. Identify possible individual nesting events inside the cluster.
    6. Identify core genes in the cluster in two ways:
      6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
@@ -19,7 +19,7 @@ function print_help() {
    8. Determine if there are discordances at 'Clade' lavel between CArgo hierarchical clustering and Captain phylogenetic tree.
    "
    echo
-   echo "Syntax: SAT ClusterProfiling [ -help ] -w <directory_path> [ -t <integer> ]"
+   echo "Syntax: SAT ClusterCharacterization [ -help ] -w <directory_path> [ -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-t, --threads: Number of threads for orthofinder (Default: 8)"
@@ -85,8 +85,8 @@ else
     auxiliary_path=$(realpath $auxiliary_path)
 fi
 
-if [[ ! -f "${auxiliary_path}/profilingAnalysis.R" ]]; then
-    echo "Error: File '${auxiliary_path}/profilingAnalysis.R' does not exist."
+if [[ ! -f "${auxiliary_path}/ClusterAnalysis.R" ]]; then
+    echo "Error: File '${auxiliary_path}/ClusterAnalysis.R' does not exist."
     exit 1
 fi
 
@@ -253,8 +253,8 @@ organize_working_directory() {
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
-    local working_dir="${base_dir}/Workspace/ClusterProfiling/"
-    local temp_dir="${base_dir}/Workspace/ClusterProfiling/temp/"
+    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local temp_dir="${base_dir}/Workspace/ClusterCharacterization/temp/"
 
     local full_gff="${working_dir}/Final_model.gff"
 
@@ -281,13 +281,13 @@ run_orthofinder() {
 
     local captainPhylogeny="${base_dir}/CaptainPhylogeny.nw"
 
-    local working_dir="${base_dir}/Workspace/ClusterProfiling/"
+    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local output_dir="${working_dir}/Orthofinder"
 
-    orthofinder -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n profiling &> ${working_dir}/orthofinder.log
+    orthofinder -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
 
-    local results_path="${output_dir}/Results_profiling/Orthogroups/Orthogroups.GeneCount.tsv"
+    local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
 
     if [ -f "${results_path}" ]; then
         orthofinder_flag=true
@@ -305,7 +305,7 @@ run_orthofinder() {
          printf "%s%d", OFS, is_present;
          }
          printf "%s%d\n", OFS, ROW_TOTAL;
-        }' ${output_dir}/Results_profiling/Orthogroups/Orthogroups_UnassignedGenes.tsv | sed '1d' >> ${working_dir}/Orthogroups.GeneCount.tsv
+        }' ${output_dir}/Results_characterization/Orthogroups/Orthogroups_UnassignedGenes.tsv | sed '1d' >> ${working_dir}/Orthogroups.GeneCount.tsv
     else
         orthofinder_flag=false
     fi
@@ -314,7 +314,7 @@ run_orthofinder() {
 run_blast() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterProfiling/"
+    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
     local temp_dir="${working_dir}/temp/"
     local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local output_dir="${working_dir}/Orthofinder"
@@ -331,8 +331,8 @@ run_blast() {
 check_core() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterProfiling/"
-    local orthogroups_dir="${working_dir}/Orthofinder/Results_profiling/Orthogroup_Sequences/"
+    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local orthogroups_dir="${working_dir}/Orthofinder/Results_characterization/Orthogroup_Sequences/"
     local temp_dir="${working_dir}/temp/"
 
     ls ${working_dir}/Core_genes*.txt > ${temp_dir}/core_files.txt 2>/dev/null
@@ -355,8 +355,8 @@ check_core() {
 check_movement() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterProfiling/"
-    local orthogroups_dir="${working_dir}/Orthofinder/Results_profiling/Orthogroup_Sequences/"
+    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local orthogroups_dir="${working_dir}/Orthofinder/Results_characterization/Orthogroup_Sequences/"
     local temp_dir="${working_dir}/temp/"
 
     ls ${working_dir}/*_moveOrthologs.txt > ${temp_dir}/movement_files.txt 2>/dev/null
@@ -381,7 +381,7 @@ check_movement() {
 # Start the process
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterProfiling Module."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterCharacterization Module."
 check_clusters "${Working_directory}"
 
 awk '{print $1}' ${Working_directory}/Clusters/ClustersAnalyzed.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
@@ -405,7 +405,7 @@ do
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
     if ! $orthofinder_flag; then
         echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder in this cluster.\n"
-        rm -r "${internal_dir}/Workspace/ClusterProfiling/"
+        rm -r "${internal_dir}/Workspace/ClusterCharacterization/"
         continue
     fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
@@ -419,14 +419,14 @@ do
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
     # ==============================================================================
-    # Running profiling
+    # Running characterization
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running profiling of the cluster..."
-    Rscript ${auxiliary_path}/profilingAnalysis.R -d "${internal_dir}/Workspace/ClusterProfiling/" -s "${subcluster_number}" -c $captainremoval_number
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running characterization of the cluster..."
+    Rscript ${auxiliary_path}/ClusterAnalysis.R -d "${internal_dir}/Workspace/ClusterCharacterization/" -s "${subcluster_number}" -c $captainremoval_number
 
-    mkdir -p "${internal_dir}/Workspace/ClusterProfiling/Images"
-    mv ${internal_dir}/Workspace/ClusterProfiling/*.svg "${internal_dir}/Workspace/ClusterProfiling/Images/"
+    mkdir -p "${internal_dir}/Workspace/ClusterCharacterization/Images"
+    mv ${internal_dir}/Workspace/ClusterCharacterization/*.svg "${internal_dir}/Workspace/ClusterCharacterization/Images/"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for core genes..."
     check_core "${internal_dir}"

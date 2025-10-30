@@ -11,7 +11,7 @@ show_main_help() {
   echo "  BrakerGenePrediction    - Performs gene prediciton with BRAKER."
   echo "  RobustGenePrediction    - Filter the BRAKER gene prediction, Performs a metaeuk captain prediction, and merge both results."
   echo "  CaptainIdentification    - Performs the identification and phylogenetic analysis of Captains of the elements."
-  echo "  ClusterProfiling    - Analyzed and visualized each cluster that had a captain phylogenetic tree."
+  echo "  ClusterCharacterization    - Analyzed and visualized each cluster that had a captain phylogenetic tree."
   echo
   echo "Use '$0 <command> -help' for help on a specific command."
 }

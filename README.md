@@ -51,7 +51,7 @@ conda install -y conda-forge::r-ggplot2=3.5.2
 R
 
 # Install the required R packages
-install.packages(c("ape","reshape2","viridis","dplyr","gggenomes","scales","dendextend","NbClust","svglite"))
+install.packages(c("ape","reshape2","viridis","dplyr","gggenomes","scales","dendextend","NbClust","svglite","optparse"))
 
 #Check installation of all libraries
 
@@ -91,7 +91,7 @@ conda activate SAT
 R
 
 # Install the required R packages
-install.packages(c("ape","reshape2","viridis","dplyr","gggenomes","scales","dendextend","NbClust","svglite"))
+install.packages(c("ape","reshape2","viridis","dplyr","gggenomes","scales","dendextend","NbClust","svglite","optparse"))
 
 #Check installation of all libraries
 
