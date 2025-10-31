@@ -22,7 +22,7 @@ function print_help() {
    echo "Syntax: SAT ClusterCharacterization [ -help ] -w <directory_path> [ -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-t, --threads: Number of threads for orthofinder (Default: 8)"
+   echo "-t, --threads: Number of threads for orthofinder and blast (Default: 8)"
    echo "-help: Display this help message."
 }
 
@@ -285,7 +285,7 @@ run_orthofinder() {
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local output_dir="${working_dir}/Orthofinder"
 
-    orthofinder -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
+    orthofinder -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
 
@@ -323,9 +323,9 @@ run_blast() {
 
     makeblastdb -dbtype nucl -parse_seqids -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
 
-    blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads 2 -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
+    blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
 
-    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/clean_results.txt
+    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
 }
 
 check_core() {
@@ -341,6 +341,9 @@ check_core() {
 
     if [[ $File_number -gt 0 ]]; then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Core genes have been identified. Processing..."
+
+        grep -w ${ClusterId} ${base_dir}/../ClustersAnalyzed.txt >> ${base_dir}/../ClusterCore.txt
+        
         mkdir -p "${working_dir}/Core_genes"
 
         cat ${working_dir}/Core_genes*.txt | sort -u > ${temp_dir}/Full_core.txt
@@ -365,6 +368,8 @@ check_movement() {
 
     if [[ $File_number -gt 0 ]]; then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Genes in movement have been identified. Processing..."
+
+        grep -w ${ClusterId} ${base_dir}/../ClustersAnalyzed.txt >> ${base_dir}/../ClusterMovement.txt
 
         cat ${temp_dir}/movement_files.txt | xargs -n 1 basename -s .txt | while read SubCluster
         do

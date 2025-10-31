@@ -760,6 +760,8 @@ process_cluster_file() {
                     grep -w $value $metadata_file >> $updated_metadata
                 fi        
             done
+
+            grep -w ${cluster_id} ${cluster_dir}/cluster_stats.txt >> ${cluster_dir}/SelectedClusters.txt
         done < "$cluster_path"
     fi
 

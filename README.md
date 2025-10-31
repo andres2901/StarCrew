@@ -3,6 +3,7 @@
 ## Installation
 
 This toolkit was specifically written to be run on Linux and requires the following software and dependencies to be installed and accessible via the system path:
+- python 3.10.
 - java.
 - hmmer.
 - python with the following packages: networkx, biopython, gffutils, pandas, numpy, scikit-learn.
@@ -13,7 +14,7 @@ This toolkit was specifically written to be run on Linux and requires the follow
 - iqtree3.
 - gotree.
 - orthofinder.
-- R v4.4.3 with the following packages: ape, reshape2, viridis, dplyr, gggenomes, scales, dendextend, NbClust, svglite, ggplot2=3.5.2, ggtree, syntenet.
+- R v4.4.3 with the following packages: ape, reshape2, viridis, dplyr, gggenomes, scales, dendextend, NbClust, svglite, ggplot2=3.5.2, ggtree, syntenet, optparse.
 - metaeuk.
 - agat.
 - diamond.
@@ -27,8 +28,8 @@ To run this toolkit, you must first clone this repository locally. Afterward, gr
 A single Conda environment, sufficient for most main commands, can be set up by following this installation process:
 
 ```
-# Create the basic environment with R
-conda create -y -n SAT -c conda-forge r-essentials r-base=4.4.3
+# Create the basic environment with R and python version
+conda create -y -n SAT -c conda-forge r-essentials r-base=4.4.3 python=3.10
 
 # Activate the environment
 conda activate SAT
@@ -36,8 +37,8 @@ conda activate SAT
 #Install bioinformatic tools
 conda install -y -c bioconda -c conda-forge metaeuk
 conda install -y -c bioconda -c conda-forge seqkit agat
-conda install -y -c bioconda -c conda-forge orthofinder
-conda install -c bioconda -c conda-forge gotree hmmer clipkit
+conda install -y -c bioconda -c conda-forge orthofinder=3.1.0
+conda install -y -c bioconda -c conda-forge gotree hmmer clipkit
 
 # Install packages required for auxiliary scripts
 conda install -y conda-forge::openjdk
@@ -45,7 +46,7 @@ conda install -y -c bioconda -c conda-forge networkx biopython gffutils pandas n
 
 # Install R packages required that can be smoothly install with conda
 conda install -y -c bioconda -c conda-forge bioconductor-syntenet bioconductor-ggtree
-conda install -y conda-forge::r-ggplot2=3.5.2
+conda install -y -c conda-forge r-ggplot2=3.5.2
 
 # Start R environment
 R
@@ -53,13 +54,13 @@ R
 # Install the required R packages
 install.packages(c("ape","reshape2","viridis","dplyr","gggenomes","scales","dendextend","NbClust","svglite","optparse"))
 
-#Check installation of all libraries
+## Check installation of all libraries
 
 quit()
 
 # Modify orthofinder config.json file
 
-vi ${Path_to_SAT_environment}/bin/scripts_of/config.json
+vi ${Path_to_SAT_environment}/bin/src/orthofinder/run/config.json
 
 ### Standard orthofinder version:
 
@@ -93,13 +94,13 @@ R
 # Install the required R packages
 install.packages(c("ape","reshape2","viridis","dplyr","gggenomes","scales","dendextend","NbClust","svglite","optparse"))
 
-#Check installation of all libraries
+## Check installation of all libraries
 
 quit()
 
 # Modify orthofinder config.json file
 
-vi ${Path_to_SAT_environment}/bin/scripts_of/config.json
+vi ${Path_to_SAT_environment}/bin/src/orthofinder/run/config.json
 
 ### Standard orthofinder version:
 

@@ -68,7 +68,7 @@ if (!requireNamespace("NbClust", quietly = TRUE)) {
 # Function block
 
 load_and_preprocess_data <- function(
-    blast_file = "clean_results.txt",
+    blast_file = "Blast_CleanResults.txt",
     gff_file = "Final_model.gff",
     min_pident = 70
 ) {
@@ -853,7 +853,7 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (
       next
     }
 
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are possible core genes in",MainClusterID,"Cluster","\n", sep=""))
+    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are possible core genes in Cluster ",MainClusterID,"\n", sep=""))
 
     New_ortho_counts <- clustering_data$orthofinder_counts[,grep(MainClusterID,clustering_data$cluster_fit)]
     distance_mat <- dist(Cluster_matrix, method='binary')
@@ -862,7 +862,7 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (
     core_genes <- core_genes_analysis(ortho_counts = New_ortho_counts, Cluster = Hierar_cl,
       Cluster_number = paste("_Cluster", MainClusterID, sep=""))
 
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters in",MainClusterID,"Cluster","\n", sep=""))
+    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters in Cluster ",MainClusterID,"\n", sep=""))
 
     
 

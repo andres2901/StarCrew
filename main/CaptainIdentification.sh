@@ -772,7 +772,7 @@ then
 
     if [ -s "${Working_directory}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
         Removed_empty_elements "${Working_directory}"
-        echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
+        echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
     else
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
