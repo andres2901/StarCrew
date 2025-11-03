@@ -5,9 +5,10 @@ import argparse
 
 # --- Variables that can be easily changed ---
 EXON_RANGE = (2, 11)
+POS_RANGE_KB = 20 
 
 def parse_hmm_file(file_path):
-    """Parses a single HMMER domtblout file and returns unique IDs"""
+    """Parses a single HMMER domtblout file and returns unique IDs and a dataframe of all scores."""
     parsed_data = []
     if not os.path.exists(file_path):
         return set(), pd.DataFrame(), pd.DataFrame()
@@ -25,12 +26,19 @@ def parse_hmm_file(file_path):
                 parsed_data.append([hmm_id, target_length, score2, score3])
     
     if not parsed_data:
-        return set(), pd.DataFrame()
+        return set(), pd.DataFrame(), pd.DataFrame()
 
     df_raw = pd.DataFrame(parsed_data, columns=['ID', 'Length', 'Score_2', 'Score_3'])
     df_raw['Length'] = pd.to_numeric(df_raw['Length'])
+    df_raw['Score_2'] = pd.to_numeric(df_raw['Score_2'])
+    df_raw['Score_3'] = pd.to_numeric(df_raw['Score_3'])
+
+    df_agg = df_raw.groupby('ID').agg(
+        min_score2=('Score_2', 'min'),
+        max_score3=('Score_3', 'max')
+    ).reset_index()
     
-    return set(df_raw['ID'].values), df_raw
+    return set(df_raw['ID'].values), df_raw, df_agg
 
 def get_fasta_length(fasta_path):
     """Parses a single FASTA file and returns the total sequence length."""
@@ -62,6 +70,7 @@ def get_gff_data(gff_path, fasta_path):
 
     element_start = 1
     element_end = fasta_length
+    """print(f"Using FASTA file for element length: {fasta_length}bp")"""
 
     gff_data = []
     mrna_exons = {}
@@ -194,7 +203,7 @@ def run_gff_analysis(hmm_ids, gff_df, pos_range_kb):
 
     return best_gene, "Success"
 
-def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_folder, output_file, empty_output_file, min_common, min_length, range_kb):
+def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_folder, output_file, empty_output_file, min_common, min_length):
     hmm_files1 = glob.glob(os.path.join(hmm_folder1, '*.txt'))
     
     if not hmm_files1:
@@ -226,7 +235,7 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
                 empty_f.write(f"{base_name}\n")
                 continue
             
-            ids1_full, df1_raw = parse_hmm_file(hmm_path1)
+            ids1_full, df1_raw, df1_agg = parse_hmm_file(hmm_path1)
             
             if df1_raw.empty:
                 final_reason = "First HMM file is empty. Skipping."
@@ -242,8 +251,8 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
             else:
                 hmm_path2 = os.path.join(hmm_folder2, f'{base_name}.txt')
                 hmm_path3 = os.path.join(hmm_folder3, f'{base_name}.txt')
-                ids2, _ = parse_hmm_file(hmm_path2)
-                ids3, _ = parse_hmm_file(hmm_path3)
+                ids2, _, _ = parse_hmm_file(hmm_path2)
+                ids3, _, _ = parse_hmm_file(hmm_path3)
 
                 unique_candidate = None
                 unique_candidate_level = 0
@@ -279,7 +288,7 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
                     final_selected_id = unique_candidate
                     final_reason = f"Finalized with unique ID at level {unique_candidate_level}."
                 elif len(gff_candidates) > 1 and gff_candidate_level >= min_common:
-                    result, gff_reason_analysis = run_gff_analysis(gff_candidates, gff_df, range_kb)
+                    result, gff_reason_analysis = run_gff_analysis(gff_candidates, gff_df, POS_RANGE_KB)
                     if result:
                         final_selected_id = result
                         final_reason = f"Selected via GFF tie-breaker al level {gff_candidate_level}."
@@ -290,10 +299,14 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
             
             # --- FINAL VALIDATION STEP ---
             if final_selected_id:
-                is_valid, validation_reason = check_filters(final_selected_id, gff_df, EXON_RANGE, range_kb)
+                is_valid, validation_reason = check_filters(final_selected_id, gff_df, EXON_RANGE, POS_RANGE_KB)
                 if is_valid:
+                    hmm_scores = df1_agg[df1_agg['ID'] == final_selected_id].iloc[0]
+                    # NOTE: Keeping the score data here, but it will be filtered out on save.
                     all_results.append({
-                        'ID': final_selected_id
+                        'ID': final_selected_id,
+                        'HMM_Min_Score2': hmm_scores['min_score2'],
+                        'HMM_Max_Score3': hmm_scores['max_score3']
                     })
                     print(f"Success: Selected ID '{final_selected_id}'. Reason: {final_reason}")
                 else:
@@ -307,15 +320,19 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
                             gff_candidate_level = 1
 
                         if len(gff_candidates) > 1 and gff_candidate_level >= min_common:
-                            result, gff_reason_analysis = run_gff_analysis(gff_candidates, gff_df, range_kb)
+                            result, gff_reason_analysis = run_gff_analysis(gff_candidates, gff_df, POS_RANGE_KB)
                             if result:
                                 final_selected_id = result
                                 final_reason = f"Selected via GFF tie-breaker al level {gff_candidate_level}."
                         if final_selected_id:
-                            is_valid, validation_reason = check_filters(final_selected_id, gff_df, EXON_RANGE, range_kb)
+                            is_valid, validation_reason = check_filters(final_selected_id, gff_df, EXON_RANGE, POS_RANGE_KB)
                             if is_valid:
+                                hmm_scores = df1_agg[df1_agg['ID'] == final_selected_id].iloc[0]
+                                # NOTE: Keeping the score data here, but it will be filtered out on save.
                                 all_results.append({
-                                    'ID': final_selected_id
+                                    'ID': final_selected_id,
+                                    'HMM_Min_Score2': hmm_scores['min_score2'],
+                                    'HMM_Max_Score3': hmm_scores['max_score3']
                                 })
                                 print(f"Success: Selected ID '{final_selected_id}'. Reason: {final_reason}")
                             else:
@@ -345,10 +362,9 @@ if __name__ == "__main__":
     parser.add_argument('--fasta', dest='fasta_folder', required=True, help='Path to the folder containing FASTA files for element lengths.')
     parser.add_argument('--output', dest='output_file', required=True, help='Path and filename for the single output TSV file.')
     parser.add_argument('--empty', dest='empty_output_file', required=True, help='Path and filename for the file to list empty results.')
-    parser.add_argument('--min_common', type=int, default=2, choices=[1, 2, 3], help='Minimum number of profiles with common results to finalize a selection (default: 2).')
-    parser.add_argument('--min_length', type=int, default=250, help='Minimum length of the protein to be considered a captain (default: 250).')
-    parser.add_argument('--range_kb', type=int, default=20, help=' The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (default: 20).')
+    parser.add_argument('--min_common', type=int, default=1, choices=[1, 2, 3], help='Minimum number of folders with common results to finalize a selection (1, 2, or 3).')
+    parser.add_argument('--min_length', type=int, default=600, help='Minimum value for the third column (Length) of the first HMMER file (default: 600).')
 
     args = parser.parse_args()
     
-    process_hmm_files(args.hmm_folder1, args.hmm_folder2, args.hmm_folder3, args.gff_folder, args.fasta_folder, args.output_file, args.empty_output_file, args.min_common, args.min_length, args.range_kb)
+    process_hmm_files(args.hmm_folder1, args.hmm_folder2, args.hmm_folder3, args.gff_folder, args.fasta_folder, args.output_file, args.empty_output_file, args.min_common, args.min_length)

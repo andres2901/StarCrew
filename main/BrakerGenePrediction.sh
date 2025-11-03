@@ -182,7 +182,7 @@ check_directory_structure() {
     else
         fasta_path=$(realpath $fasta_file)
         local input_size=$(seqkit stats ${fasta_path} | grep "FASTA" | awk '{print $4}')
-        echo -e "Number of input elements: ${input_size}\n"
+        echo -e "  Number of input elements: ${input_size}\n"
     fi
 
     if [[ -z "$workspace_dir" ]]; then

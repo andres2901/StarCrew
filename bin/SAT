@@ -10,6 +10,7 @@ show_main_help() {
   echo "  SyntenyClustering    - Perform the clustering of elements based on collinear regions."
   echo "  BrakerGenePrediction    - Performs gene prediciton with BRAKER."
   echo "  RobustGenePrediction    - Filter the BRAKER gene prediction, Performs a metaeuk captain prediction, and merge both results."
+  echo "  TEPrediction    - Identify putative TEs in elements with EarlGrey approach and Mycomobilome database."
   echo "  CaptainIdentification    - Performs the identification and phylogenetic analysis of Captains of the elements."
   echo "  ClusterCharacterization    - Analyzed and visualized each cluster that had a captain phylogenetic tree."
   echo

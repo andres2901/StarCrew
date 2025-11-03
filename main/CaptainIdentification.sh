@@ -694,7 +694,7 @@ then
     # ==============================================================================
     # Checking Working directory structure
     # ==============================================================================
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${Working_directory}' structure."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
     check_directory_structure "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${Working_directory}' is valid. Proceeding."
 
@@ -705,45 +705,45 @@ then
     # Preprocessing data
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmsearch profile."
     process_hmmsearch "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
     # ==============================================================================
     # Identify captains
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmsearch results."
     Captain_identification "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Identifying if there are pseudogenes..."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
     Captain_pseudogene "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding..."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
 
     # ==============================================================================
     # Alignment
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Group captains and performed alignment."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
     Alignment "${Working_directory}"
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
     if $captainless_flag; then
         echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
         exit 1
     fi
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
     # ==============================================================================
     # Alignment
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Perform phylogenetic tree inference of captains."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
     Tree_inference "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 elif [[ "${mode}" == "AllID" ]]
 then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${Working_directory}' structure."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
     check_directory_structure "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${Working_directory}' is valid. Proceeding."
 
@@ -754,21 +754,21 @@ then
     # Preprocessing data
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmsearch profile."
     process_hmmsearch "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
     # ==============================================================================
     # Identify captains
     # ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmsearch results."
     Captain_identification "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Identifying if there are pseudogenes..."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
     Captain_pseudogene "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding..."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
 
     if [ -s "${Working_directory}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
         Removed_empty_elements "${Working_directory}"
@@ -790,7 +790,7 @@ then
 
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking Working directory '${internal_dir}' structure."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
         check_directory_structure "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${internal_dir}' is valid. Proceeding."
 
@@ -801,42 +801,42 @@ then
         # Preprocessing data
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Perform hmmsearch profile."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmsearch profile."
         process_hmmsearch "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
         # ==============================================================================
         # Identify captains
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying captains from hmmsearch results."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmsearch results."
         Captain_identification "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Identifying if there are pseudogenes..."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
         Captain_pseudogene "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding..."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
 
         # ==============================================================================
         # Alignment
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Group captains and performed alignment."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
         Alignment "${internal_dir}"
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         if $captainless_flag; then
             echo -e "  \033[01;31mWARNING\033[m: There is no captain identify in this set of data.\n"
             continue
         fi
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
         # ==============================================================================
         # Alignment
         # ==============================================================================
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Perform phylogenetic tree inference of captains."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
         Tree_inference "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 6 finished."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         check_phylogeny "${internal_dir}"

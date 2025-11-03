@@ -18,7 +18,7 @@ function print_help() {
    echo "Syntax: SAT SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = Raw) [Available mode: Raw, SSP, Filter]."
+   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = Filter) [Available mode: Raw, SSP, Filter]."
    echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
@@ -31,7 +31,7 @@ function print_help() {
 
 # Initialize variables
 Working_directory=""
-mode="Raw"
+mode="Filter"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 anchorPoints="8"
 gaps="8"
@@ -781,8 +781,8 @@ echo "  Minimum anchor points: $anchorPoints."
 echo "  Maximum allowed gaps: $gaps."
 
 echo "For Subclustering, using the following parameter:"
-echo "  Minimum number of elements in a cluster for subclustering to be attempted: $minSize."
-echo "  Minimum desired size for any final sub-cluster: $minNodes."
+echo "  Minimum number of elements in a cluster for subclustering to be attempted: $minNodes."
+echo "  Minimum desired size for any final sub-cluster: $minSize."
 echo "  Minimum modularity score for a split to be accepted: $threshold."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
@@ -818,7 +818,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running syntenet analysis."
-Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/SyntenyClustering/" -a "${anchorPoints}" -g "${gaps}"
+Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/SyntenyClustering/" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 

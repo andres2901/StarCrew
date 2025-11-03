@@ -3,10 +3,8 @@ from Bio import SeqIO
 import sys
 
 def calculate_consecutive_rip_percentage(sequence, window_size, step_size, comp_thresh, prod_thresh, subst_thresh):
-    """
-    Calculates the percentage of RIP-affected sequence, counting ONLY the overlap 
-    region of THREE consecutive, overlapping windows that satisfy the triple thresholds.
-    """
+    """Calculates the percentage of RIP-affected sequence, counting ONLY the overlap 
+    region of THREE consecutive, overlapping windows that satisfy the triple thresholds."""
     sequence = sequence.upper()
     sequence_length = len(sequence)
     
@@ -100,7 +98,6 @@ def calculate_consecutive_rip_percentage(sequence, window_size, step_size, comp_
     
     return sequence_length, total_affected_bp, rip_percentage
 
-# --- Main Execution Block ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Calculate the percentage of RIP-affected sequence using a triple threshold (Composite, Product, Substrate) and counting ONLY the overlap of THREE consecutive positive windows.")
     

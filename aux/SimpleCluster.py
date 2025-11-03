@@ -5,13 +5,7 @@ import argparse
 import os
 
 def find_clusters(pairs):
-    """
-    Finds weakly connected components (clusters) from a list of UNWEIGHTED pairs (edges).
-    Args:
-        pairs: A list of tuples, where each tuple (u, v) represents a connection.
-    Returns:
-        A list of sets, where each set represents a unique cluster of connected elements.
-    """
+    """Finds weakly connected components (clusters) from a list of UNWEIGHTED pairs (edges)."""
     graph = collections.defaultdict(set)
     all_nodes = set()
     for u, v in pairs:

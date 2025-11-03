@@ -292,7 +292,7 @@ mkdir -p ${Working_directory}/Workspace/QuickGenePrediction/temp/
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running metaeuk for gene prediction."
 gene_prediction "$Working_directory"
-echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction finished. Proceeding."
+echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Step 1 finished. Proceeding."
 
 # ==============================================================================
 # Generate gene prediction statistics
@@ -300,7 +300,7 @@ echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Generating statistics of gene prediction."
 gene_stats "$Working_directory"
-echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction statistics finished. Proceeding."
+echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Step 2 finished. Proceeding."
 
 # ==============================================================================
 # Dividing and organizing results
@@ -308,6 +308,7 @@ echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Gene prediction statistics finished. P
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Organizing and filtering results."
 organize_files "$Working_directory"
+echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Step 3 finished. Proceeding."
 
 # Clean temporary directory from workspace
 rm -r ${Working_directory}/Workspace/QuickGenePrediction/temp/

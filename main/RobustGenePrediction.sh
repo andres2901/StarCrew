@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -mg|--minGene)
             shift
-            mode="$1"
+            minimum_gene_content="$1"
             ;;
         -help)
             help_flag=true
@@ -169,7 +169,7 @@ check_directory_structure() {
     else
         fasta_path=$(realpath $fasta_file)
         local input_size=$(seqkit stats ${fasta_path} | grep "FASTA" | awk '{print $4}')
-        echo -e "Number of input elements: ${input_size}\n"
+        echo -e "  Number of input elements: ${input_size}\n"
     fi
 
     if [[ -z "$workspace_dir" ]]; then
@@ -484,9 +484,9 @@ then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Organizing files.."
     organize_files "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished. All results are store in ${out_directory}."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
 
 elif [[ "${mode}" == "Cluster" ]]
 then

@@ -11,9 +11,7 @@ option_list <- list(
   make_option(c("-a", "--anchors"), type="integer", action = "store", default=8,
               help=" Number of minimum anchor points for syntenet to call a collinear reagions [default %default]", metavar="number"),
   make_option(c("-g", "--gaps"), type="integer", action = "store", default=8,
-              help="Number of maximum allowed gaps between anchor points for syntenet to call a collinear region [default %default]", metavar="number"),
-  make_option(c("-t", "--threads"), type="integer", action = "store", default=1,
-              help="Number of threads for the analysis [default %default]", metavar="number")
+              help="Number of maximum allowed gaps between anchor points for syntenet to call a collinear region [default %default]", metavar="number")
 )
 
 # Parse the command-line arguments
@@ -24,16 +22,9 @@ if (is.null(arguments$directory)) {
   stop("Error: directory must be provided.", call.=FALSE)
 }
 
-# Check for threads multicore
-if (arguments$threads > 1) {
-  suppressPackageStartupMessages(library(future))
-  plan("multicore", workers = arguments$threads)
-}
-
-
 # Check software installation
 suppressPackageStartupMessages(library(syntenet))
-
+  
 if (!requireNamespace("syntenet", quietly = TRUE)) {
    stop("Package \"syntenet\" not installed. Please install it to run this script.", call. = FALSE)
 }

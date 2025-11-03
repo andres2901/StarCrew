@@ -5,11 +5,7 @@ import argparse
 import collections
 
 def get_maintained_gene_ids(gff_file_path):
-    """
-    Identifies and returns the IDs of the genes to be maintained:
-    - All non-overlapping genes.
-    - The longest gene from each group (cluster) of overlapping genes.
-    """
+    """Identifies and returns the IDs of the genes to be maintained"""
     dbfn = 'temp_gff.db'
     
     # --- 1. Create or connect to the gffutils database ---
@@ -106,10 +102,6 @@ def get_maintained_gene_ids(gff_file_path):
     # Return the maintained IDs, sorted for consistent output
     return sorted(maintained_gene_ids)
 
-# -------------------------------------------------------------
-# Main execution block (No changes needed here)
-# -------------------------------------------------------------
-
 def main():
     parser = argparse.ArgumentParser(description="Find the longest gene within overlapping groups and write their IDs to a file.")
     parser.add_argument("input_gff", help="Path to the input GFF file.")
@@ -132,6 +124,4 @@ def main():
         print("No maintained gene IDs found to write.")
 
 if __name__ == "__main__":
-    # Ensure you have the `gffutils` and `collections` (standard library) modules. 
-    # You also noted needing `networkx`, but this specific fix doesn't require it.
     main()

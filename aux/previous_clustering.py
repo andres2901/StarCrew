@@ -268,10 +268,27 @@ def write_cluster_stats(filename, main_clusters, sub_clusters_with_parent_info, 
             
     print(f"Cluster statistics written to '{filename}'.")
 
-def process_clustering(input_file, output_dir, min_final_cluster_size, min_nodes_for_split, modularity_split_threshold):
-    """function to read input, find clusters, sort them, and print formatted output."""
+def main():
+    """Main function to read input, find clusters, sort them, and print formatted output."""
+    # 1. Setup argparse for command-line flags
+    parser = argparse.ArgumentParser(description='Community detection on a weighted graph with iterative spectral clustering.',
+                                     formatter_class=argparse.RawTextHelpFormatter)
+    
+    parser.add_argument('-i', '--input-file', required=True,
+                        help="Path to the input file containing graph edges.")
+    parser.add_argument('-o', '--output-dir', default='./',
+                        help="The directory to store all output files. Default is the current directory.")
+    parser.add_argument('-m', '--min-size', type=int, default=2, dest='min_final_cluster_size',
+                        help="The minimum desired size for any final sub-cluster. Default: 2.")
+    parser.add_argument('-n', '--min-nodes', type=int, default=4, dest='min_nodes_for_split',
+                        help="Minimum number of nodes in a cluster for spectral clustering to be attempted. Default: 4.")
+    parser.add_argument('-t', '--threshold', type=float, default=0.05, dest='modularity_split_threshold',
+                        help="The minimum modularity score for a split to be accepted. Range [-0.5, 1.0]. Default: 0.05.")
+
+    args = parser.parse_args()
 
     # 2. Check and create the output directory
+    output_dir = args.output_dir
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"Created output directory: {output_dir}")
@@ -282,7 +299,7 @@ def process_clustering(input_file, output_dir, min_final_cluster_size, min_nodes
     node_metadata = {}
 
     try:
-        with open(input_file, 'r') as f:
+        with open(args.input_file, 'r') as f:
             lines = f.readlines()
             start_line = 0
 
@@ -334,10 +351,10 @@ def process_clustering(input_file, output_dir, min_final_cluster_size, min_nodes
                     continue
 
     except FileNotFoundError:
-        print(f"Error: Input file '{input_file}' not found.", file=sys.stderr)
+        print(f"Error: Input file '{args.input_file}' not found.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"Error reading file '{input_file}': {e}", file=sys.stderr)
+        print(f"Error reading file '{args.input_file}': {e}", file=sys.stderr)
         sys.exit(1)
 
     # 4. Perform clustering and write output files to the specified directory
@@ -346,9 +363,9 @@ def process_clustering(input_file, output_dir, min_final_cluster_size, min_nodes
     sub_clusters_with_parent_info = find_sub_clusters_spectral(
         all_raw_weighted_edges,
         main_clusters,
-        min_final_cluster_size=min_final_cluster_size,
-        min_nodes_for_meaningful_spectral_split=min_nodes_for_split,
-        modularity_split_threshold=modularity_split_threshold
+        min_final_cluster_size=args.min_final_cluster_size,
+        min_nodes_for_meaningful_spectral_split=args.min_nodes_for_split,
+        modularity_split_threshold=args.modularity_split_threshold
     )
 
     main_clusters_output_file = os.path.join(output_dir, "main_clusters.txt")
@@ -369,17 +386,4 @@ def process_clustering(input_file, output_dir, min_final_cluster_size, min_nodes
     write_cluster_stats(cluster_stats_output_file, main_clusters, sub_clusters_with_parent_info, main_cluster_id_map)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Community detection on a weighted graph with iterative spectral clustering.')
-    parser.add_argument('-i', '--input-file', required=True,
-                        help="Path to the input file containing graph edges.")
-    parser.add_argument('-o', '--output-dir', default='./',
-                        help="The directory to store all output files. Default is the current directory.")
-    parser.add_argument('-m', '--min-size', type=int, default=2, dest='min_final_cluster_size',
-                        help="The minimum desired size for any final sub-cluster. (default: 2).")
-    parser.add_argument('-n', '--min-nodes', type=int, default=4, dest='min_nodes_for_split',
-                        help="Minimum number of nodes in a cluster for spectral clustering to be attempted (default: 4).")
-    parser.add_argument('-t', '--threshold', type=float, default=0.05, dest='modularity_split_threshold',
-                        help="The minimum modularity score for a split to be accepted (default: 0.05) [range: -0.5, 1.0].")
-
-    args = parser.parse_args()
-    process_clustering(args.input_file, args.output_dir, args.min_final_cluster_size, args.min_nodes_for_split, args.modularity_split_threshold)
+    main()

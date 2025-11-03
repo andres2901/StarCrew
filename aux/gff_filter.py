@@ -3,10 +3,7 @@ import sys
 from collections import defaultdict
 
 def parse_attributes(attributes_str):
-    """
-    Parses the key-value pairs from the GFF attributes string.
-    Returns a dictionary of attributes.
-    """
+    """Parses the key-value pairs from the GFF attributes string."""
     attributes = {}
     if attributes_str:
         for part in attributes_str.split(';'):
@@ -16,15 +13,7 @@ def parse_attributes(attributes_str):
     return attributes
 
 def filter_and_extract_gene_ids(input_file, output_file, max_intron_density, max_introns_per_gene):
-    """
-    Filters a GFF file based on a gene's intron density and total intron count.
-    
-    Args:
-        input_file (str): Path to the input GFF file.
-        output_file (str): Path to the output text file.
-        max_intron_density (float): The maximum number of introns per 1000 bp allowed.
-        max_introns_per_gene (int): The maximum number of total introns per gene.
-    """
+    """Filters a GFF file based on a gene's intron density and total intron count."""
     gene_lengths = {}
     mrna_to_gene_map = {}
     intron_counts = defaultdict(int)
@@ -127,8 +116,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Filter GFF files based on a gene's intron density and total intron count.")
     parser.add_argument('-i', '--input', type=str, required=True, help="Path to the input GFF file.")
     parser.add_argument('-o', '--output', type=str, required=True, help="Path to the output text file.")
-    parser.add_argument('-d', '--density', type=float, default=6.0, help="The maximum number of introns per 1000 bp allowed. Default is 6.0.")
-    parser.add_argument('-m', '--max-introns', type=int, default=30, help="The maximum total number of introns per gene. Default is 30.")
+    parser.add_argument('-d', '--density', type=float, default=6.0, help="The maximum number of introns per 1000 bp allowed. (default: 6.0).")
+    parser.add_argument('-m', '--max-introns', type=int, default=30, help="The maximum total number of introns per gene. (default: 30).")
  
     args = parser.parse_args()
     
