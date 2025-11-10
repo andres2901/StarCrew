@@ -1,0 +1,298 @@
+#!/bin/bash
+
+# Function to print help message
+
+function print_help() {
+   echo -e "Script to run a functional annotation for orthogroups.
+   This script perform xxxxx steps:
+   1. Identify orthogroups through OrthoFinder software.
+   2. Perform all-vs-all Blastn.
+   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
+   4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny image for the cluster.
+   5. Identify possible individual nesting events inside the cluster.
+   6. Identify core genes in the cluster in two ways:
+     6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
+     6.2. Specific core:
+       6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
+       6.2.2. If subslusters are generated identify core genes in each one that have at least 5 elements using the same logic of general core.
+   7. If subclusters are present it try to identify putative cargo movement events including the specific orthogroups involve.
+   8. Determine if there are discordances at 'Clade' lavel between CArgo hierarchical clustering and Captain phylogenetic tree.
+   "
+   echo
+   echo "Syntax: SAT ClusterCharacterization [ -help ] -w <directory_path> -c <file_path> [ -t <integer> ]"
+   echo "options:"
+   echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
+   echo "-m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All]."
+   echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID (required)."
+   echo "-t, --threads: Number of threads for all analysis (Default: 8)"
+   echo "-help: Display this help message."
+}
+
+# Initialize variables
+
+Working_directory=""
+mode="All"
+clusters_file=""
+auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
+database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
+DeepFRI_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../DeepFRI/"
+threads="8"
+help_flag=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -w|--workingDirectory)
+            shift
+            Working_directory="$1"
+            ;;
+        -m|--mode)
+            shift
+            mode="$1"
+            ;;
+        -c|--clusters)
+            shift
+            clusters_file="$1"
+            ;;
+        -t|--threads)
+            shift
+            threads="$1"
+            ;;
+        -help)
+            help_flag=true
+            ;;
+        *)
+            echo "Invalid option: $1"
+            print_help
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Print help if requested
+if $help_flag; then
+    print_help
+    exit 0
+fi
+
+# Check for mandatory argument and define the path as absolute
+if [[ -z "$Working_directory" || -z "$clusters_file" ]]; then
+    echo "Error: Missing required arguments."
+    print_help
+    exit 1
+fi
+
+# Check if working directory exists
+if [[ ! -d "$Working_directory" ]]; then
+    echo "Error: Directory '$Working_directory' does not exist."
+    exit 1
+else
+    Working_directory=$(realpath $Working_directory)
+fi
+
+# Check if cluster file exist
+if [[ ! -f "$clusters_file" ]]; then
+    echo "Error: File '$clusters_file' does not exist."
+    exit 1
+else
+    clusters_file=$(realpath $clusters_file)
+fi
+
+# Check if mode parameter is correct
+if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" ]]; then
+    echo "Error: provided mode '$mode' is not accepted."
+    print_help
+    exit 1
+fi
+
+# Check thread parameter
+if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$threads' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# ==============================================================================
+# Bash function block
+# ==============================================================================
+
+check_clusters() {
+    # Modify based on the input file to compare with the current set of Clusters ID 
+    local base_dir="$1"
+    local file="$2"
+
+    local cluster_original="$base_dir/cluster_file.txt"
+    ls -d ${base_dir}/Clusters/*/ | awk -F '/' '{print $(NF - 1)}' > ${cluster_original}
+
+    local diff=$(comm -13 <(sort ${cluster_original}) <(sort ${clusters_file}))
+
+    if [[ $diff != "" ]]; then
+        rm ${cluster_original} 
+        echo "ERROR: there are additional lines no compatible to current ClusterID in ${clusters_file}."
+        echo "Check for this lines: ${diff}"
+        exit 1
+    else
+        rm ${cluster_original}
+    fi
+}
+
+check_directory_structure() {
+    local base_dir="$1"
+    
+    # Locate required subdirectories and file
+    local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+
+    if [[ -z "$workspace_dir" ]]; then
+        echo "Error: Workspace directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+
+    local ClusterCharacterization_dir=$(find "$workspace_dir" -maxdepth 1 -type d -name "ClusterCharacterization" 2>/dev/null)
+
+    if [[ -z "$ClusterCharacterization_dir" ]]; then
+        echo "Error: ClusterCharacterization directory not found in '$workspace_dir'." >&2
+        echo "The ClusterCharacterization command should be run before this analysis" >&2
+        exit 1
+    fi
+    
+    local moveOrthologs_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "*_moveOrthologs" 2>/dev/null)
+    local CoreGenes_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
+    local Orthogroups_dir=$(find "$ClusterCharacterization_dir" -maxdepth 3 -type d -name "Orthogroup_Sequences" 2>/dev/null)
+
+    directory_flag=true
+
+    if [[ $mode == "All" ]]; then
+        if [[ -z "$Orthogroups_dir" ]]; then
+            echo "Error: GFF subdirectory not found in '$data_dir'." >&2
+            directory_flag=false
+        fi
+    elif [[ $mode == "MoveAssociated" ]]; then
+        if [[ -z "$moveOrthologs_dir" ]]; then
+            echo "Orthogroups subdirectory for moving genes not found in '$data_dir'." >&2
+            directory_flag=false
+        fi
+    elif [[ $mode == "Core" ]]; then
+        if [[ -z "$CoreGenes_dir" ]]; then
+            echo "Error: GFF subdirectory not found in '$data_dir'." >&2
+            directory_flag=false
+        fi
+    fi
+}
+
+organize_working_directory() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local ClusterCharacterization_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local Orthogroups_dir="${working_dir}/Orthogroups/"
+    local temp_dir="${working_dir}/temp/"
+
+    mkdir -p ${working_dir}
+    mkdir -p ${Orthogroups_dir}
+    mkdir -p ${temp_dir}
+
+    if [[ $mode == "All" ]]; then
+        local data_dir=$(find "$ClusterCharacterization_dir" -maxdepth 3 -type d -name "Orthogroup_Sequences" 2>/dev/null)
+        cp ${data_dir}/* ${Orthogroups_dir}/
+    elif [[ $mode == "MoveAssociated" ]]; then
+        local moveOrthologs_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "*_moveOrthologs" 2>/dev/null)
+        echo $moveOrthologs_dir | awk '{OFS=RS;$1=$1}1' | while read line; 
+        do 
+            cp ${line}/* ${Orthogroups_dir}/
+        done
+    elif [[ $mode == "Core" ]]; then
+        local CoreGenes_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
+        cp ${CoreGenes_dir}/* ${Orthogroups_dir}/
+    fi
+}
+
+run_deepfri() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local Orthogroups_dir="${working_dir}/Orthogroups/"
+    local temp_dir="${working_dir}/temp/"
+    local DeepFRI_results="${working_dir}/DeepFRI/"
+
+    mkdir -p "${DeepFRI_results}"
+
+    ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
+    do
+        python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont mf -o ${temp_dir}/${OrthogroupID} &>/dev/null
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_MF_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_MF_predictions.csv
+        python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont bp -o ${temp_dir}/${OrthogroupID} &>/dev/null
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_BP_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_BP_predictions.csv
+        python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont cc -o ${temp_dir}/${OrthogroupID} &>/dev/null
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_CC_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_CC_predictions.csv
+        python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont ec -o ${temp_dir}/${OrthogroupID} &>/dev/null
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_EC_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_EC_predictions.csv
+    done
+}
+
+run_foldseek() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local temp_dir="${working_dir}/temp/"
+    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local output_dir="${working_dir}/Orthofinder"
+
+    cat ${nucleotide_dir}/*.fa > ${temp_dir}/sequence.fasta
+
+    makeblastdb -dbtype nucl -parse_seqids -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
+
+    blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
+
+    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
+}
+
+run_hhblits() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local temp_dir="${working_dir}/temp/"
+    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local output_dir="${working_dir}/Orthofinder"
+
+    cat ${nucleotide_dir}/*.fa > ${temp_dir}/sequence.fasta
+
+    makeblastdb -dbtype nucl -parse_seqids -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
+
+    blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
+
+    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
+}
+
+# ==============================================================================
+# Start the process
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterCharacterization Module."
+check_clusters "${Working_directory}" "${clusters_file}"
+
+cat ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
+do
+    internal_dir="${Working_directory}/Clusters/${ClusterId}/"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
+    check_directory_structure "${internal_dir}"
+
+    if $directory_flag; then
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
+    
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
+        organize_working_directory "${internal_dir}"
+
+        # ==============================================================================
+        # Running orthofinder
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running DeepFRI..."
+        run_deepfri "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+    else
+        echo "Cluster $ClusterId do not have the required directory for '$mode' mode"
+    fi
+done
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
