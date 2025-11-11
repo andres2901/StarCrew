@@ -24,6 +24,7 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All]."
    echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID (required)."
+   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = pdb) [Available: pdb, Uniprot]."
    echo "-t, --threads: Number of threads for all analysis (Default: 8)"
    echo "-help: Display this help message."
 }
@@ -36,6 +37,7 @@ clusters_file=""
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
 DeepFRI_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../DeepFRI/"
+foldseekdb="pdb"
 threads="8"
 help_flag=false
 
@@ -56,6 +58,10 @@ while [[ $# -gt 0 ]]; do
         -t|--threads)
             shift
             threads="$1"
+            ;;
+        -f|--foldseekdb)
+            shift
+            foldseekdb="$1"
             ;;
         -help)
             help_flag=true
@@ -112,6 +118,59 @@ if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
+# Check if database directory exists
+if [[ ! -d "$database_path" ]]; then
+    echo "Error: Directory '$database_path' does not exist."
+    exit 1
+else
+    database_path=$(realpath $database_path)
+    if [[ ! -d "${database_path}/Foldseek/" ]]; then
+        echo "Error: Directory 'Foldseek' does not exist in '$database_path'."
+        exit 1
+    else
+        foldseek_path="${database_path}/Foldseek/"
+        if [[ "$foldseekdb" != "pdb" && "$foldseekdb" != "Uniprot" ]]; then
+            echo "Error: '$foldseekdb' is not accepted as a foldseek database."
+            print_help
+            exit 1
+        fi
+
+        if [[ ! -d "$foldseek_path/weights/" ]]; then
+            echo "Error: Directory 'weights' does not exist in '${foldseek_path}'."
+            exit 1
+        fi
+
+        if [[ ! -f "$foldseek_path/${foldseekdb}" ]]; then
+            echo "Error: 'pdb' database does not exist in '${foldseek_path}'."
+            exit 1
+        fi
+
+        if [[ "$foldseekdb" == "pdb" ]]; then
+            if [[ ! -f "$foldseek_path/entries_update.idx" ]]; then
+                echo "Error: 'entries_update.idx' file does not exist in '${foldseek_path}'."
+                exit 1
+            fi
+        fi
+    fi
+
+    if [[ ! -d "${database_path}/hhsuite/" ]]; then
+        echo "Error: Directory 'hhsuite' does not exist in '$database_path'."
+        exit 1
+    else
+        hhsuite_path="${database_path}/hhsuite/"
+        if [[ ! -f "$hhsuite_path/pfam.md5sum" ]]; then
+            echo "Error: 'pfam' database does not exist in '${hhsuite_path}'."
+            exit 1
+        fi
+    fi
+fi
+
+# Check for required software
+if [[ -z "$(which mafft)" ]]; then
+    echo "Error: Missing mafft function."
+    exit 1
+fi
+
 # ==============================================================================
 # Bash function block
 # ==============================================================================
@@ -163,17 +222,17 @@ check_directory_structure() {
 
     if [[ $mode == "All" ]]; then
         if [[ -z "$Orthogroups_dir" ]]; then
-            echo "Error: GFF subdirectory not found in '$data_dir'." >&2
+            echo "Error: GFF subdirectory not found in '$ClusterCharacterization_dir'." >&2
             directory_flag=false
         fi
     elif [[ $mode == "MoveAssociated" ]]; then
         if [[ -z "$moveOrthologs_dir" ]]; then
-            echo "Orthogroups subdirectory for moving genes not found in '$data_dir'." >&2
+            echo "Orthogroups subdirectory for moving genes not found in '$ClusterCharacterization_dir'." >&2
             directory_flag=false
         fi
     elif [[ $mode == "Core" ]]; then
         if [[ -z "$CoreGenes_dir" ]]; then
-            echo "Error: GFF subdirectory not found in '$data_dir'." >&2
+            echo "Error: GFF subdirectory not found in '$ClusterCharacterization_dir'." >&2
             directory_flag=false
         fi
     fi
@@ -232,35 +291,37 @@ run_deepfri() {
 run_foldseek() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local output_dir="${working_dir}/Orthofinder"
+    local foldseek_results="${working_dir}/Foldseek/"
 
-    cat ${nucleotide_dir}/*.fa > ${temp_dir}/sequence.fasta
+    mkdir -p "${foldseek_results}"
 
-    makeblastdb -dbtype nucl -parse_seqids -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
-
-    blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
-
-    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
+    ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
+    do
+        foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/pdb ${temp_dir}/${OrthogroupID}.m8 tmp --prostt5-model ${foldseek_path}/weights --exhaustive-search -e 0.001 -c 0.5 -v 0 &>/dev/null
+        awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[1];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
+        join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/entries_update.idx | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
+    done
 }
 
 run_hhblits() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local output_dir="${working_dir}/Orthofinder"
+    local hhblits_results="${working_dir}/hhblist/"
 
-    cat ${nucleotide_dir}/*.fa > ${temp_dir}/sequence.fasta
+    mkdir -p "${hhblits_results}"
 
-    makeblastdb -dbtype nucl -parse_seqids -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
-
-    blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
-
-    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
+    ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
+    do
+        mafft --maxiterate 1000 --genafpair --thread ${threads} ${Orthogroups_dir}/${OrthogroupID}.fa > ${temp_dir}/${OrthogroupID}_aligned.fa 2>/dev/null
+        hhblits -i ${temp_dir}/${OrthogroupID}_aligned.fa -o ${temp_dir}/${OrthogroupID}.hhr -blasttab ${temp_dir}/${OrthogroupID}.txt -d ${hhsuite_path}/pfam -e 0.001 -n 6 -M 500 -z 2 -Z 10 -add_cons -noprefilt &>/dev/null
+        awk '{FS=OFS="\t"}{if($11<=0.001){print}}' ${temp_dir}/${OrthogroupID}.txt > ${hhblits_results}/${OrthogroupID}.txt
+    done
 }
 
 # ==============================================================================
@@ -285,12 +346,28 @@ do
         organize_working_directory "${internal_dir}"
 
         # ==============================================================================
-        # Running orthofinder
+        # Running DeepFRI
         # ==============================================================================
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running DeepFRI..."
         run_deepfri "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+
+        # ==============================================================================
+        # Running Foldseek
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running foldseek..."
+        run_foldseek "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+        # ==============================================================================
+        # Running hhblits
+        # ==============================================================================
+
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running hhblits..."
+        run_hhblits "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
     else
         echo "Cluster $ClusterId do not have the required directory for '$mode' mode"
     fi
