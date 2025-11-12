@@ -24,7 +24,7 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All]."
    echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID (required)."
-   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = pdb) [Available: pdb, Uniprot]."
+   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = pdb) [Available: pdb, afdb_swissprot]."
    echo "-t, --threads: Number of threads for all analysis (Default: 8)"
    echo "-help: Display this help message."
 }
@@ -129,7 +129,7 @@ else
         exit 1
     else
         foldseek_path="${database_path}/Foldseek/"
-        if [[ "$foldseekdb" != "pdb" && "$foldseekdb" != "Uniprot" ]]; then
+        if [[ "$foldseekdb" != "pdb" && "$foldseekdb" != "afdb_swissprot" ]]; then
             echo "Error: '$foldseekdb' is not accepted as a foldseek database."
             print_help
             exit 1
@@ -148,6 +148,17 @@ else
         if [[ "$foldseekdb" == "pdb" ]]; then
             if [[ ! -f "$foldseek_path/entries_update.idx" ]]; then
                 echo "Error: 'entries_update.idx' file does not exist in '${foldseek_path}'."
+                exit 1
+            fi
+        fi
+
+        if [[ "$foldseekdb" == "afdb_swissprot" ]]; then
+#            if [[ ! -f "$foldseek_path/idmapping_update.tab" ]]; then
+#                echo "Error: 'idmapping_update.tab' file does not exist in '${foldseek_path}'."
+#                exit 1
+#            fi
+            if [[ ! -f "$foldseek_path/shortdes_update.txt" ]]; then
+                echo "Error: 'shortdes_update.txt' file does not exist in '${foldseek_path}'."
                 exit 1
             fi
         fi
@@ -278,14 +289,16 @@ run_deepfri() {
     ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
     do
         python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont mf -o ${temp_dir}/${OrthogroupID} &>/dev/null
-        grep -v "^#" ${temp_dir}/${OrthogroupID}_MF_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_MF_predictions.csv
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_MF_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' | sed 's/,/\t/;s/,/\t/;s/,/\t/' > ${DeepFRI_results}/${OrthogroupID}_MF_predictions.txt
         python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont bp -o ${temp_dir}/${OrthogroupID} &>/dev/null
-        grep -v "^#" ${temp_dir}/${OrthogroupID}_BP_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_BP_predictions.csv
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_BP_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' | sed 's/,/\t/;s/,/\t/;s/,/\t/' > ${DeepFRI_results}/${OrthogroupID}_BP_predictions.txt
         python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont cc -o ${temp_dir}/${OrthogroupID} &>/dev/null
-        grep -v "^#" ${temp_dir}/${OrthogroupID}_CC_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_CC_predictions.csv
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_CC_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' | sed 's/,/\t/;s/,/\t/;s/,/\t/' > ${DeepFRI_results}/${OrthogroupID}_CC_predictions.txt
         python ${DeepFRI_path}/predict.py --fasta_fn ${Orthogroups_dir}/${OrthogroupID}.fa --model_config ${DeepFRI_path}/trained_models/model_config.json -ont ec -o ${temp_dir}/${OrthogroupID} &>/dev/null
-        grep -v "^#" ${temp_dir}/${OrthogroupID}_EC_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' > ${DeepFRI_results}/${OrthogroupID}_EC_predictions.csv
+        grep -v "^#" ${temp_dir}/${OrthogroupID}_EC_predictions.csv | awk '{FS=OFS=","}{if($3 >= 0.5){print $0}}' | sed 's/,/\t/;s/,/\t/;s/,/\t/' > ${DeepFRI_results}/${OrthogroupID}_EC_predictions.txt
     done
+
+    find ${DeepFRI_results} -size 0 -delete
 }
 
 run_foldseek() {
@@ -298,12 +311,25 @@ run_foldseek() {
 
     mkdir -p "${foldseek_results}"
 
-    ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
-    do
-        foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/pdb ${temp_dir}/${OrthogroupID}.m8 tmp --prostt5-model ${foldseek_path}/weights --exhaustive-search -e 0.001 -c 0.5 -v 0 &>/dev/null
-        awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[1];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
-        join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/entries_update.idx | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
-    done
+    if [[ $foldseekdb == "pdb" ]]; then
+        ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
+        do
+            foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/${foldseekdb} ${temp_dir}/${OrthogroupID}.m8 ${temp_dir}/tmp --prostt5-model ${foldseek_path}/weights --exhaustive-search -e 0.001 -c 0.5 -v 0 &>/dev/null
+            awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[1];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
+            join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/entries_update.idx | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
+        done
+    elif [[ $foldseekdb == "afdb_swissprot" ]]; then
+        ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
+        do
+            foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/${foldseekdb} ${temp_dir}/${OrthogroupID}.m8 ${temp_dir}/tmp --prostt5-model ${foldseek_path}/weights --exhaustive-search -e 0.001 -c 0.5 -v 0 &>/dev/null
+            awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[2];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
+            #awk -F '\t' '{print $2}' ${temp_dir}/${OrthogroupID}-2.m8 | sort -u > ${temp_dir}/${OrthogroupID}-Acc.txt
+            #grep -f ${temp_dir}/${OrthogroupID}-Acc.txt ${foldseek_path}/shortdes_update.txt > ${foldseek_results}/${OrthogroupID}_matchShortDesc.txt
+            join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/shortdes_update.txt | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
+        done
+    fi
+
+    find ${foldseek_results} -size 0 -delete
 }
 
 run_hhblits() {
@@ -319,9 +345,30 @@ run_hhblits() {
     ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
     do
         mafft --maxiterate 1000 --genafpair --thread ${threads} ${Orthogroups_dir}/${OrthogroupID}.fa > ${temp_dir}/${OrthogroupID}_aligned.fa 2>/dev/null
-        hhblits -i ${temp_dir}/${OrthogroupID}_aligned.fa -o ${temp_dir}/${OrthogroupID}.hhr -blasttab ${temp_dir}/${OrthogroupID}.txt -d ${hhsuite_path}/pfam -e 0.001 -n 6 -M 500 -z 2 -Z 10 -add_cons -noprefilt &>/dev/null
+        hhblits -i ${temp_dir}/${OrthogroupID}_aligned.fa -o ${hhblits_results}/${OrthogroupID}.hhr -blasttab ${temp_dir}/${OrthogroupID}.txt -d ${hhsuite_path}/pfam -e 0.001 -n 6 -M 50 -z 2 -Z 10 -noprefilt -cpu ${threads} &>/dev/null
         awk '{FS=OFS="\t"}{if($11<=0.001){print}}' ${temp_dir}/${OrthogroupID}.txt > ${hhblits_results}/${OrthogroupID}.txt
     done
+
+    find ${hhblits_results} -size 0 -delete
+}
+
+create_summary_table(){
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local Orthogroups_dir="${working_dir}/Orthogroups/"
+    local temp_dir="${working_dir}/temp/"
+    local hhblits_results="${working_dir}/hhblist/"
+    local foldseek_results="${working_dir}/Foldseek/"
+    local DeepFRI_results="${working_dir}/DeepFRI/"
+
+    ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
+    do
+        mafft --maxiterate 1000 --genafpair --thread ${threads} ${Orthogroups_dir}/${OrthogroupID}.fa > ${temp_dir}/${OrthogroupID}_aligned.fa 2>/dev/null
+        hhblits -i ${temp_dir}/${OrthogroupID}_aligned.fa -o ${temp_dir}/${OrthogroupID}.hhr -blasttab ${temp_dir}/${OrthogroupID}.txt -d ${hhsuite_path}/pfam -e 0.001 -n 6 -M 50 -z 2 -Z 10 -noprefilt -cpu ${threads} &>/dev/null
+        awk '{FS=OFS="\t"}{if($11<=0.001){print}}' ${temp_dir}/${OrthogroupID}.txt > ${hhblits_results}/${OrthogroupID}.txt
+    done
+
 }
 
 # ==============================================================================
@@ -367,9 +414,9 @@ do
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running hhblits..."
         run_hhblits "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding. \n"
     else
-        echo "Cluster $ClusterId do not have the required directory for '$mode' mode"
+        echo -e "Cluster $ClusterId do not have the required directory for '$mode' mode. \n"
     fi
 done
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
