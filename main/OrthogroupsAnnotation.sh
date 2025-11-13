@@ -361,12 +361,60 @@ create_summary_table(){
     local hhblits_results="${working_dir}/hhblist/"
     local foldseek_results="${working_dir}/Foldseek/"
     local DeepFRI_results="${working_dir}/DeepFRI/"
+    local Summary_results="${working_dir}/Summary/"
+
+    mkdir -p "${Summary_results}"
+    echo "OrthogroupID;hhblits_domains;DeepFRI_MF;DeepFRI_BP;DeepFRI_CC;DeepFRI_CC;DeepFRI_EC;Foldseek_Acc" > ${working_dir}/General_summary.csv
+
+    #Create summary for each one
 
     ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
     do
-        mafft --maxiterate 1000 --genafpair --thread ${threads} ${Orthogroups_dir}/${OrthogroupID}.fa > ${temp_dir}/${OrthogroupID}_aligned.fa 2>/dev/null
-        hhblits -i ${temp_dir}/${OrthogroupID}_aligned.fa -o ${temp_dir}/${OrthogroupID}.hhr -blasttab ${temp_dir}/${OrthogroupID}.txt -d ${hhsuite_path}/pfam -e 0.001 -n 6 -M 50 -z 2 -Z 10 -noprefilt -cpu ${threads} &>/dev/null
-        awk '{FS=OFS="\t"}{if($11<=0.001){print}}' ${temp_dir}/${OrthogroupID}.txt > ${hhblits_results}/${OrthogroupID}.txt
+        local ProteinNumber=$(grep -c ">" ${Orthogroups_dir}/${OrthogroupID}.fa)
+
+        echo "ProteinID;DeepFRI_MF;DeepFRI_BP;DeepFRI_CC;DeepFRI_EC;Foldseek_Acc" > ${Summary_results}/${OrthogroupID}.csv
+        grep ">" ${Orthogroups_dir}/${OrthogroupID}.fa | awk -F '>' '{print $2}'> ${temp_dir}/${OrthogroupID}.csv
+
+        if [[ ! -f ${DeepFRI_results}/${OrthogroupID}_MF_predictions.txt ]]; then
+            join -t ";" -a1 ${temp_dir}/${OrthogroupID}.csv <(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $2}' ${DeepFRI_results}/${OrthogroupID}_MF_predictions.txt | sed ':1;$!N;s/^\(\(\S\+\s\+\).*\)\n\2/\1,/;t1;P;D' | sort -k1,1 | sed 's/\t/;/g') | awk 'BEGIN{FS=OFS=";"}{if($2==""){print $0";"}else{print $0}}' > ${temp_dir}/${OrthogroupID}-2.csv
+            MF_general=$(awk 'BEGIN{FS=OFS="\t"}{print $2}' ${DeepFRI_results}/${OrthogroupID}_MF_predictions.txt | sort | uniq -c | sed 's/^ *//g' | awk -v Num=$ProteinNumber '{if($1>=(Num*0.5)){print $2}}')
+        else
+            sed -e 's/$/;/g' ${temp_dir}/${OrthogroupID}.csv > ${temp_dir}/${OrthogroupID}-2.csv
+        fi
+
+        if [[ ! -f ${DeepFRI_results}/${OrthogroupID}_BP_predictions.txt ]]; then
+            join -t ";" -a1 ${temp_dir}/${OrthogroupID}-2.csv <(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $2}' ${DeepFRI_results}/${OrthogroupID}_MF_predictions.txt | sed ':1;$!N;s/^\(\(\S\+\s\+\).*\)\n\2/\1,/;t1;P;D' | sort -k1,1 | sed 's/\t/;/g') | awk 'BEGIN{FS=OFS=";"}{if($2==""){print $0";"}else{print $0}}' > ${temp_dir}/${OrthogroupID}-3.csv
+            BP_general=$(awk 'BEGIN{FS=OFS="\t"}{print $2}' ${DeepFRI_results}/${OrthogroupID}_BP_predictions.txt | sort | uniq -c | sed 's/^ *//g' | awk -v Num=$ProteinNumber '{if($1>=(Num*0.5)){print $2}}')
+        else
+            sed -e 's/$/;/g' ${temp_dir}/${OrthogroupID}-2.csv > ${temp_dir}/${OrthogroupID}-3.csv
+        fi
+
+        if [[ ! -f ${DeepFRI_results}/${OrthogroupID}_CC_predictions.txt ]]; then
+            join -t ";" -a1 ${temp_dir}/${OrthogroupID}-3.csv <(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $2}' ${DeepFRI_results}/${OrthogroupID}_MF_predictions.txt | sed ':1;$!N;s/^\(\(\S\+\s\+\).*\)\n\2/\1,/;t1;P;D' | sort -k1,1 | sed 's/\t/;/g') | awk 'BEGIN{FS=OFS=";"}{if($2==""){print $0";"}else{print $0}}' > ${temp_dir}/${OrthogroupID}-4.csv
+            CC_general=$(awk 'BEGIN{FS=OFS="\t"}{print $2}' ${DeepFRI_results}/${OrthogroupID}_CC_predictions.txt | sort | uniq -c | sed 's/^ *//g' | awk -v Num=$ProteinNumber '{if($1>=(Num*0.5)){print $2}}')
+        else
+            sed -e 's/$/;/g' ${temp_dir}/${OrthogroupID}-3.csv > ${temp_dir}/${OrthogroupID}-4.csv
+        fi
+
+        if [[ ! -f ${DeepFRI_results}/${OrthogroupID}_EC_predictions.txt ]]; then
+            join -t ";" -a1 ${temp_dir}/${OrthogroupID}-4.csv <(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $2}' ${DeepFRI_results}/${OrthogroupID}_MF_predictions.txt | sed ':1;$!N;s/^\(\(\S\+\s\+\).*\)\n\2/\1,/;t1;P;D' | sort -k1,1 | sed 's/\t/;/g') | awk 'BEGIN{FS=OFS=";"}{if($2==""){print $0";"}else{print $0}}' > ${temp_dir}/${OrthogroupID}-5.csv
+            EC_general=$(awk 'BEGIN{FS=OFS="\t"}{print $2}' ${DeepFRI_results}/${OrthogroupID}_EC_predictions.txt | sort | uniq -c | sed 's/^ *//g' | awk -v Num=$ProteinNumber '{if($1>=(Num*0.5)){print $2}}')
+        else
+            sed -e 's/$/;/g' ${temp_dir}/${OrthogroupID}-4.csv > ${temp_dir}/${OrthogroupID}-5.csv
+        fi
+
+        if [[ ! -f ${foldseek_results}/${OrthogroupID}.m8 ]]; then
+            join -t ";" -a1 ${temp_dir}/${OrthogroupID}-5.csv <(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $13}' ${foldseek_results}/${OrthogroupID}.m8 | sort -k1,2 -u |sed ':1;$!N;s/^\(\(\S\+\s\+\).*\)\n\2/\1,/;t1;P;D' | sort -k1,1 | sed 's/\t/;/g') | awk 'BEGIN{FS=OFS=";"}{if($2==""){print $0";"}else{print $0}}' > ${temp_dir}/${OrthogroupID}-6.csv
+            Foldseek_general=$(awk 'BEGIN{FS=OFS="\t"}{print $13}' ${foldseek_results}/${OrthogroupID}.m8 | sort | uniq -c | sed 's/^ *//g' | awk -v Num=$ProteinNumber '{if($1>=(Num*0.5)){print $2}}')
+        else
+            sed -e 's/$/;/g' ${temp_dir}/${OrthogroupID}-5.csv > ${temp_dir}/${OrthogroupID}-6.csv
+        fi
+
+        if [[ ! -f ${hhblits_results}/${OrthogroupID}.txt ]]; then
+            echo $OrthogroupID";"$(awk -F '\t' '{print $2}' ${hhblits_results}/${OrthogroupID}.txt | sort -u | tr -s '\n' ',' | sed 's/,$//g')";"$MF_general";"$BP_general";"$CC_general";"$EC_general";"$Foldseek_general
+        else
+            echo $OrthogroupID";"";"$MF_general";"$BP_general";"$CC_general";"$EC_general";"$Foldseek_general >> ${working_dir}/General_summary.csv
+        fi
     done
 
 }
