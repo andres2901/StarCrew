@@ -774,7 +774,7 @@ process_cluster_file() {
 # Start the process
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running Syntenet module analysis with '${mode}' mode."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running Syntenet module analysis in '${mode}' mode."
 
 echo "For Syntenet analysis, using the following parameter:"
 echo "  Minimum anchor points: $anchorPoints."

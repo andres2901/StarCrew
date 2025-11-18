@@ -4,19 +4,16 @@
 
 function print_help() {
    echo "Script to predict TEs in the sequences based on earlgrey approach and Mycomobilome database.
-   This script perform five steps:
+   This script perform two steps:
    1. Run earlgrey TE prediction.
-   2. Organize the data.
-   3. Merge and filter both previous predictions.
-   4. Determines the statistics of each element prediction.
-   - (All mode) Filter the elements based on a minimum gene content
-   5. Organized the files in the working directory for future modules."
+   2. Organize the results."
    echo
    echo "Syntax: SAT TEPrediction [ -help ] -w <directory_path> -d <file_path> [ -m <string> -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-d, --database: path to Mycomobylome database (required)."
-   echo "-m, --mode: Define the data that will be use for the TE prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
+   echo "-d, --database: Mycomobilome database to be use (Default = allConsensus) [Available type: allConsensus, proteinEvidence, unknown]."
+   echo "-m, --mode: Define the data that will be use for the TE prediction. This can be perform for all the data or for each cluster (Default = Cluster) [Available mode: Cluster, All]."
+   echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID (required in mode Cluster)."
    echo "-t, --threads: Number of threads for earlgrey (Default = 8)"
    echo "-help: Display this help message."
 }
@@ -24,8 +21,10 @@ function print_help() {
 # Initialize variables
 
 Working_directory=""
+clusters_file=""
 mode="Cluster"
-database=""
+database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/MycoMobilome_db/"
+database="allConsensus"
 threads="8"
 help_flag=false
 
@@ -42,6 +41,10 @@ while [[ $# -gt 0 ]]; do
         -d|--database)
             shift
             database="$1"
+            ;;
+        -c|--clusters)
+            shift
+            clusters_file="$1"
             ;;
         -t|--threads)
             shift
@@ -68,7 +71,7 @@ fi
 
 # Check for mandatory arguments
 
-if [[ -z "$Working_directory" || -z "$database" ]]; then
+if [[ -z "$Working_directory" || -z "$clusters_file" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
@@ -85,14 +88,29 @@ else
     fi
 fi
 
-# Check if database file exists
-if [[ ! -f "$database" ]]; then
-    echo "Error: file '$database' does not exist."
+# Check if database directory exists
+if [[ ! -d "$database_path" ]]; then
+    echo "Error: file '$database_path' does not exist."
     exit 1
 else
     # Check if the path is absolute
-    if [[ ! "${database:0:1}" == "/" ]]; then
-        database=$(realpath $database)
+    if [[ ! "${database_path:0:1}" == "/" ]]; then
+        database_path=$(realpath $database_path)
+    fi
+fi
+
+# Check if dabatabase parameter is correct
+if [[ "$database" != "allConsensus" && "$database" != "proteinEvidence" && "$database" != "unknown"  ]]; then
+    echo "Error: provided database type '$database' is not accepted."
+    print_help
+    exit 1
+else
+    # Check if database file exist 
+    if [[ ! -z $(find "$database_path" -maxdepth 1 -type f -name "*${database}*" 2>/dev/null) ]]; then
+        echo "Error: file '$database_path' does not exist."
+        exit 1
+    else
+        database_path=$(realpath $(find "$database_path" -maxdepth 1 -type f -name "*${database}*" 2>/dev/null))
     fi
 fi
 
@@ -101,6 +119,21 @@ if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
     echo "Error: provided mode '$mode' is not accepted."
     print_help
     exit 1
+else
+    if [[ "$mode" != "Cluster" ]]; then
+        if [[ -z "$clusters_file" ]]; then
+            echo "Error: In 'Cluster' mode, a file with Cluster IDs is required."
+            print_help
+            exit 1
+        else
+            if [[ ! -f "$clusters_file" ]]; then
+                echo "Error: File '$clusters_file' does not exist."
+                exit 1
+            else
+                clusters_file=$(realpath $clusters_file)
+            fi
+        fi
+    fi
 fi
 
 # Check thread parameter
@@ -173,7 +206,7 @@ process_earlgrey() {
 
     local working_dir="${base_dir}/Workspace/TEPrediction/"
 
-    earlGreyAnnotationOnly -g "${working_dir}/Sequences.fa" -s TE -o "${working_dir}" -l ${database} -t 16 -m yes &> /dev/null
+    earlGreyAnnotationOnly -g "${working_dir}/Sequences.fa" -s TE -o "${working_dir}" -l ${database_path} -t ${threads} -m yes &> /dev/null
 }
 
 organize_files() {
@@ -199,16 +232,22 @@ organize_files() {
 }
 
 check_clusters() {
+    # Modify based on the input file to compare with the current set of Clusters ID 
     local base_dir="$1"
+    local file="$2"
 
-    local cluster_information="${base_dir}/Clusters/SelectedClusters.txt"
+    local cluster_original="$base_dir/cluster_file.txt"
+    ls -d ${base_dir}/Clusters/*/ | awk -F '/' '{print $(NF - 1)}' > ${cluster_original}
 
-    if [[ ! -f $cluster_information ]]; then
-        echo "Error: SelectedClusters.txt file does not exist in '${base_dir}/Clusters/'."
+    local diff=$(comm -13 <(sort ${cluster_original}) <(sort ${clusters_file}))
+
+    if [[ $diff != "" ]]; then
+        rm ${cluster_original} 
+        echo "ERROR: there are additional lines no compatible to current ClusterID in ${clusters_file}."
+        echo "Check for this lines: ${diff}"
         exit 1
     else
-        Cluster_number=$(wc -l "$cluster_information" | awk '{print $1}')
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters."
+        rm ${cluster_original}
     fi
 }
 
@@ -253,7 +292,7 @@ then
 elif [[ "${mode}" == "Cluster" ]]
 then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode."
-    check_clusters "${Working_directory}"
+    check_clusters "${Working_directory}" "${clusters_file}"
     awk '{print $1}' ${Working_directory}/Clusters/SelectedClusters.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"

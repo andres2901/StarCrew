@@ -4,19 +4,20 @@
 
 function print_help() {
    echo -e "Script to run a functional annotation for orthogroups.
-   This script perform xxxxx steps:
-   1. Identify orthogroups through OrthoFinder software.
-   2. Perform all-vs-all Blastn.
-   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
-   4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny image for the cluster.
-   5. Identify possible individual nesting events inside the cluster.
-   6. Identify core genes in the cluster in two ways:
-     6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
-     6.2. Specific core:
-       6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
-       6.2.2. If subslusters are generated identify core genes in each one that have at least 5 elements using the same logic of general core.
-   7. If subclusters are present it try to identify putative cargo movement events including the specific orthogroups involve.
-   8. Determine if there are discordances at 'Clade' lavel between CArgo hierarchical clustering and Captain phylogenetic tree.
+   This script perform three steps:
+   1. Organize the Orthogroups that are selected base on the mode.
+     1.1 Core: Orthogoups that were identify as core by the ClusterCharacteriation command.
+     1.2 MoveAssociated: Orthogoups that were identify as part of a putative movement event between subclusters by the ClusterCharacterization command.
+     2.3 All: All orthogroups identify by the ClusterCharacterization command
+   2. Perform the characterization of the Orthogroup proteins with four approaches:
+     2.1 InterProScan: Using all default applications except COILS and MOBIDB.
+     2.2 DeepFRI: Identify associated GO and EC for each protein. It use the recommended 0.5 score threshold.
+     2.3 Foldseek: Search for homologs proteins against a database based on the secondary structure.
+     2.4 hhblits: Search domains against PfamA datbase.
+   3. Summarize the results of the previous step:
+     3.1 Internal summary: For each Orthogroups summarize the results per protein in a csv
+     3.2 General summary: Return a summary for the Orthogroup under the assumption that all proteins in each Orthogroups have the same function.
+     It return only those 'chracteristics' that are shared for at least 50% of the proteins in the Orthogroup.
    "
    echo
    echo "Syntax: SAT ClusterCharacterization [ -help ] -w <directory_path> -c <file_path> [ -t <integer> ]"
@@ -24,7 +25,7 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All]."
    echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID (required)."
-   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = pdb) [Available: pdb, afdb_swissprot]."
+   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = afdb_swissprot) [Available: pdb, afdb_swissprot]."
    echo "-t, --threads: Number of threads for all analysis (Default: 8)"
    echo "-help: Display this help message."
 }
@@ -34,11 +35,10 @@ function print_help() {
 Working_directory=""
 mode="All"
 clusters_file=""
-auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
 DeepFRI_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../DeepFRI/"
 Interpro_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../interproscan-5.76-107.0/"
-foldseekdb="pdb"
+foldseekdb="afdb_swissprot"
 threads="8"
 help_flag=false
 
@@ -95,6 +95,22 @@ if [[ ! -d "$Working_directory" ]]; then
     exit 1
 else
     Working_directory=$(realpath $Working_directory)
+fi
+
+# Check if DeepFRI directory exists
+if [[ ! -d "$DeepFRI_path" ]]; then
+    echo "Error: Directory '$DeepFRI_path' does not exist."
+    exit 1
+else
+    DeepFRI_path=$(realpath $DeepFRI_path)
+fi
+
+# Check if InterPro directory exists
+if [[ ! -d "$Interpro_path" ]]; then
+    echo "Error: Directory '$Interpro_path' does not exist."
+    exit 1
+else
+    Interpro_path=$(realpath $Interpro_path)
 fi
 
 # Check if cluster file exist
@@ -230,7 +246,7 @@ check_directory_structure() {
 
     if [[ $mode == "All" ]]; then
         if [[ -z "$Orthogroups_dir" ]]; then
-            echo "Error: GFF subdirectory not found in '$ClusterCharacterization_dir'." >&2
+            echo "Error: Orthogroups subdirectory not found in '$ClusterCharacterization_dir'." >&2
             directory_flag=false
         fi
     elif [[ $mode == "MoveAssociated" ]]; then
@@ -240,7 +256,7 @@ check_directory_structure() {
         fi
     elif [[ $mode == "Core" ]]; then
         if [[ -z "$CoreGenes_dir" ]]; then
-            echo "Error: GFF subdirectory not found in '$ClusterCharacterization_dir'." >&2
+            echo "Error: Orthogroups subdirectory not found in '$ClusterCharacterization_dir'." >&2
             directory_flag=false
         fi
     fi
@@ -341,7 +357,9 @@ run_hhblits() {
     do
         mafft --maxiterate 1000 --genafpair --reorder --thread ${threads} ${Orthogroups_dir}/${OrthogroupID}.fa > ${temp_dir}/${OrthogroupID}_aligned.fa 2>/dev/null
         hhblits -i ${temp_dir}/${OrthogroupID}_aligned.fa -o ${hhblits_results}/${OrthogroupID}.hhr -blasttab ${temp_dir}/${OrthogroupID}.txt -d ${hhsuite_path}/pfam -e 0.001 -n 6 -M 50 -z 2 -Z 10 -realign_old_hits -cov 50 -cpu ${threads} &>/dev/null
-        awk '{FS=OFS="\t"}{if($11<=0.001){print}}' ${temp_dir}/${OrthogroupID}.txt > ${hhblits_results}/${OrthogroupID}.txt
+        if [[ -f ${temp_dir}/${OrthogroupID}.txt ]]; then
+            awk '{FS=OFS="\t"}{if($11<=0.001){print}}' ${temp_dir}/${OrthogroupID}.txt > ${hhblits_results}/${OrthogroupID}.txt
+        fi
     done
 
     find ${hhblits_results} -size 0 -delete
@@ -470,7 +488,11 @@ create_summary_table(){
 # Start the process
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterCharacterization Module."
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterCharacterization Module with the following parameters:"
+echo "  Mode: ${mode}"
+echo "  Foldseek Database: ${foldseekdb}"
+echo -e "  threads: ${threads}\n"
+
 check_clusters "${Working_directory}" "${clusters_file}"
 
 cat ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
