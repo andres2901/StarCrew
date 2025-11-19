@@ -408,8 +408,8 @@ create_summary_table(){
         grep ">" ${Orthogroups_dir}/${OrthogroupID}.fa | awk -F '>' '{print $2}' | sort -n > ${temp_dir}/${OrthogroupID}.csv
 
         if [[ -f ${interpro_results}/${OrthogroupID}.tsv ]]; then
-            join -t ";" -a1 ${temp_dir}/${OrthogroupID}.csv <(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $5"-\""$6"\""}' ${interpro_results}/${OrthogroupID}.tsv | sed 's/[^[:print:]]$//' | sed ':1;$!N;s/^\(\(\S\+\s\+\).*\)\n\2/\1,/;t1;P;D' | sort -k1,1 -n | sed 's/\t/;/g') | awk 'BEGIN{FS=OFS=";"}{if($2==""){print $0";"}else{print $0}}' > ${temp_dir}/${OrthogroupID}-2.csv
-            InterPro_General=$(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $5"-\""$6"\""}' ${interpro_results}/${OrthogroupID}.tsv | sed 's/[^[:print:]]$//' | sort -k1,2 -u | awk -F '\t' '{print $2}'  | sort | uniq -c | sed 's/^ *//g' | awk -v Num=$ProteinNumber '{if($1>=(Num*0.5)){print}}' | cut -d ' ' -f2- | tr -s '\n' ',' | sed 's/,$//')
+            join -t ";" -a1 ${temp_dir}/${OrthogroupID}.csv <(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $5"-\""$6"\""}' ${interpro_results}/${OrthogroupID}.tsv | sed -e 's/[^[:print:]]$//' -e 's/;/,/g' | sed ':1;$!N;s/^\(\(\S\+\s\+\).*\)\n\2/\1,/;t1;P;D' | sort -k1,1 -n | sed 's/\t/;/g') | awk 'BEGIN{FS=OFS=";"}{if($2==""){print $0";"}else{print $0}}' > ${temp_dir}/${OrthogroupID}-2.csv
+            InterPro_General=$(awk 'BEGIN{FS=OFS="\t"}{print $1 OFS $5"-\""$6"\""}' ${interpro_results}/${OrthogroupID}.tsv | sed -e 's/[^[:print:]]$//' -e 's/;/,/g' | sort -k1,2 -u | awk -F '\t' '{print $2}'  | sort | uniq -c | sed 's/^ *//g' | awk -v Num=$ProteinNumber '{if($1>=(Num*0.5)){print}}' | cut -d ' ' -f2- | tr -s '\n' ',' | sed 's/,$//')
             
             awk 'BEGIN{FS=OFS="\t"}{if($14!="-"){print $1 OFS $14}}' ${interpro_results}/${OrthogroupID}.tsv > ${temp_dir}/${OrthogroupID}-IPS.tsv
             if [[ -s ${temp_dir}/${OrthogroupID}-IPS.tsv ]]; then

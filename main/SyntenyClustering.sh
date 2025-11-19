@@ -18,7 +18,7 @@ function print_help() {
    echo "Syntax: SAT SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = Filter) [Available mode: Raw, SSP, Filter]."
+   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = FilterBlast) [Available mode: Raw, SSP, FilterBlast, FilterMetric]."
    echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
@@ -31,7 +31,7 @@ function print_help() {
 
 # Initialize variables
 Working_directory=""
-mode="Filter"
+mode="FilterBlast"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 anchorPoints="8"
 gaps="8"
@@ -115,7 +115,7 @@ else
 fi
 
 # Check if mode parameter is correct
-if [[ "$mode" != "Raw" && "$mode" != "SSP" && "$mode" != "Filter" ]]; then
+if [[ "$mode" != "Raw" && "$mode" != "SSP" && "$mode" != "FilterBlast" && "$mode" != "FilterMetric" ]]; then
     echo "Error: provided mode '$mode' is not accepted."
     print_help
     exit 1
@@ -130,7 +130,7 @@ else
 fi
 
 # Check if python 'Blast_CleanUp.py' and 'Clustering.py' scripts exists in the given path 
-if [[ "${mode}" == "Filter" ]]; then
+if [[ "${mode}" == "FilterBlast" ]]; then
     if [[ ! -f "${auxiliary_path}/Blast_CleanUp.py" ]]; then
         echo "Error: File '${auxiliary_path}/Blast_CleanUp.py' does not exist."
         exit 1
@@ -516,6 +516,7 @@ process_collinearity() {
     local collinearity_path=$(find "$working_dir" -maxdepth 1 -type d -name "Collinearity" 2>/dev/null)
     local gff_path=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
     local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local diamond_results_dir=$(find "$working_dir" -maxdepth 1 -type d -name "DiamondResults" 2>/dev/null)
 
     local temp_dir="${working_dir}/temp/"
     local out_path="$working_dir"
@@ -525,8 +526,8 @@ process_collinearity() {
     fi
 
     # Check that the subdirectories were found
-    if [[ -z "$collinearity_path" || -z "$gff_path" || -z $nucleotide_dir ]]; then
-        echo "Error: Required subdirectories (Collinearity, Gff or Nucleotide) not found in '$working_dir'." >&2
+    if [[ -z "$collinearity_path" || -z "$gff_path" || -z $nucleotide_dir || -z $diamond_results_dir ]]; then
+        echo "Error: Required subdirectories (Collinearity, DiamondResults, Gff or Nucleotide) not found in '$working_dir'." >&2
         exit 1
     fi
 
@@ -629,7 +630,7 @@ process_collinearity() {
             awk '{if(($3 >= 41) || (($4 >= 45 || $5 >= 45) && ($4/$5 >= 1.8 || $4/$5 <= 0.55 ))) print}' | \
             sed -e 's/ /;/g' | sort -t ';' | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
-    elif [[ "${mode}" == "Filter" ]]
+    elif [[ "${mode}" == "FilterBlast" ]]
     then
         # Generate files that will be filter.
         awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
@@ -666,6 +667,44 @@ process_collinearity() {
             mv "${temp_prefix}_Collinearity_percentage_high.txt" "${temp_prefix}_Collinearity_percentage_filter.txt"
         fi   
         
+        # Final stage
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
+        if $metadata_flag; then
+            join -t ';' -a1 "${temp_prefix}_Collinearity_percentage_filter.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
+            join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
+        else
+            cat "${temp_prefix}_Collinearity_percentage_filter.txt" | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
+        fi
+    elif [[ "${mode}" == "FilterMetric" ]]
+    then
+        # Generate files that will be filter.
+        awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
+            "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
+            awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | awk '{if($3 >= 8) print}' | \
+            sed -e 's/ /;/g' | sort -t ';'  >> "${temp_prefix}_Collinearity_percentage.txt"
+
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering results..."
+
+        awk 'BEGIN{FS=";";OFS=" "}{file1=$1"_"$2;file2=$2"_"$1; print file1 OFS file2}' "${temp_prefix}_Collinearity_percentage.txt" | while read line
+        do
+            grep -E "[0-9]*-.*[0-9]*:" ${collinearity_path}/$(echo $line | awk '{print $1}').collinearity | awk 'BEGIN{FS=OFS="\t"}{print $2 OFS $3}' | sort -u > "${temp_prefix}_collinear1.txt"
+            local Max_points=$(($(wc -l "${temp_prefix}_collinear1.txt" | awk '{print $1}') * 2))
+            awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' "${temp_prefix}_collinear1.txt" > "${temp_prefix}_collinear2.txt"
+            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' > "${temp_prefix}_hits1.txt"
+            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100){print}}' > "${temp_prefix}_hits2.txt"
+            local hits1=$(wc -l "${temp_prefix}_hits1.txt" | awk '{print $1}') 
+            local hits2=$(wc -l "${temp_prefix}_hits2.txt" | awk '{print $1}')
+            local bonus1=$(awk -F '\t' '{if($3>95){sum+= 0.1*($4/200)}}END{if(sum!=""){print sum}else{print 0}}' "${temp_prefix}_hits1.txt")
+            local bonus2=$(awk -F '\t' '{if($3>95){sum+= 0.1*($4/200)}}END{if(sum!=""){print sum}else{print 0}}' "${temp_prefix}_hits2.txt")
+            local Metric=$(echo "$hits1 + $hits2 + $bonus1 + $bonus2" | bc)
+            if (( $(bc <<< "$Metric >= $anchorPoints") )); then
+                local Metric_index=$(echo "print(min(round(${Metric}/${Max_points},2),1))" | python)
+                echo $(echo $line | awk '{split($1,array,"_");print array[1]";"array[2]}')";"${Metric_index} >> "${working_dir}/Metrics_selected.out"
+            fi
+        done
+
+        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' > "${temp_prefix}_Collinearity_percentage_filter.txt"
+
         # Final stage
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
         if $metadata_flag; then
