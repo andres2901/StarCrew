@@ -12,7 +12,7 @@ function print_help() {
    5. Identify possible individual nesting events inside the cluster.
    6. Identify core genes in the cluster in two ways:
      6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
-     6.2. Specific core:
+     6.2. Specific core: Orthogroups that are present in at least 80% of the elements for subclusters generated at a 0.8 height of the hierarchical tree of cargo content.
        6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
        6.2.2. If subslusters are generated identify core genes in each one that have at least 5 elements using the same logic of general core.
    7. If subclusters are present it try to identify putative cargo movement events including the specific orthogroups involve.
@@ -325,7 +325,7 @@ run_blast() {
 
     blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
 
-    awk 'begin{fs=ofs="\t"}{if($8>=2000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
+    awk 'begin{fs=ofs="\t"}{if($8>=1000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
 }
 
 check_core() {

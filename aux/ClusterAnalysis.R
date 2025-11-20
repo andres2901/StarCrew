@@ -677,38 +677,66 @@ plot_subcluster_synteny <- function(
 
         for(i in k_cluster) {
           for(j in k_out_cluster) {
+              cluster_seqs <- names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)][elements_cluster])
+              cluster_seqs <- cluster_seqs[!is.na(cluster_seqs)]
+              other_seqs <- names(test_NbClust$Best.partition[grep(j,test_NbClust$Best.partition)][elements_other])
+              other_seqs <- other_seqs[!is.na(other_seqs)]
+
+              OrthoFinder_subcluster_cluster <- subset(ortho_counts, select = cluster_seqs)
+              OrthoFinder_subcluster_cluster <- OrthoFinder_subcluster_cluster %>%  filter(!if_all(everything(), ~ .x == 0))
+              OrthoFinder_subcluster_other <- subset(ortho_counts, select = other_seqs)
+              OrthoFinder_subcluster_other <- OrthoFinder_subcluster_other %>%  filter(!if_all(everything(), ~ .x == 0))
+
+              Gene_movement <- intersect(rownames(OrthoFinder_subcluster_cluster),rownames(OrthoFinder_subcluster_other))
+
               selected_seqs2 <- c(names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)][elements_cluster]),names(test_NbClust$Best.partition[grep(j,test_NbClust$Best.partition)][elements_other]))
-              #selected_seqs2 <- selected_seqs2[!is.na(selected_seqs2)]
               selected_seqs2 <- selected_seqs2[!is.na(selected_seqs2)]
 
-              # Filtering data
+              OrthoFinder_subcluster <- ortho_counts[Gene_movement,selected_seqs2]
+              OrthoFinder_subcluster <- OrthoFinder_subcluster[,colSums(OrthoFinder_subcluster) > 0]
+
+              selected_seq2 <- colnames(OrthoFinder_subcluster)
+              print(length(selected_seq2))
+
+              if(length(selected_seq2) >= 2) {
+                # Filtering data
               seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs2)
               genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs2)
               links_filtered <- blast_links %>%
-              filter(qseqid %in% selected_seqs2 | sseqid %in% selected_seqs2) %>%
+              filter(qseqid %in% selected_seqs2 & sseqid %in% selected_seqs2) %>%
               select(seq_id = qseqid, start = qstart, end = qend,
                  seq_id2 = sseqid, start2 = sstart, end2 = send, pident)
         
               # Ordering sequences
               ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, selected_seqs2))
+
+              if(nrow(links_filtered) >= 1){
+                # Plotting (Synteny map)
+                p_genome <- gggenomes(
+                seqs = ordered_seqs,
+                links = links_filtered,
+                genes = genes_filtered
+                ) +
+                geom_seq(aes(y = y)) +
+                geom_gene(aes(y = y)) +
+                geom_link(aes(y = y, fill = pident), colour = NA) +
+                geom_bin_label(aes(y = y), x = -10) +
+                scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
+                theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
         
-              # Plotting (Synteny map)
-              p_genome <- gggenomes(
-              seqs = ordered_seqs,
-              links = links_filtered,
-              genes = genes_filtered
-              ) +
-              geom_seq(aes(y = y)) +
-              geom_gene(aes(y = y)) +
-              geom_link(aes(y = y, fill = pident), colour = NA) +
-              geom_bin_label(aes(y = y), x = -10) +
-              scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
-              theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
-        
-              # Saving the plot
-              ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, "-", i,"vs",j,".svg", sep = ""),
-                 width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
-                 height = min(49, length(selected_seqs2)), limitsize = FALSE)
+                # Saving the plot
+                ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, "-", i,"vs",j,".svg", sep = ""),
+                  width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
+                  height = min(49, length(selected_seqs2)), limitsize = FALSE)
+              }
+
+              }
+
+              #selected_seqs2 <- c(names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)][elements_cluster]),names(test_NbClust$Best.partition[grep(j,test_NbClust$Best.partition)][elements_other]))
+              #selected_seqs2 <- selected_seqs2[!is.na(selected_seqs2)]
+
+              
+              
           }
         }
       } else {
@@ -907,6 +935,7 @@ if(clustering_data$Individual_clusters == 1) {
     normalized_dist_matrix <- (dist_matrix - min_dist) / (max_dist - min_dist)
     normalized_dist_matrix2 <- scale(normalized_dist_matrix)
     hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
+    hclust_tree$height <- sort(hclust_tree$height)
 
     test_NbClust <- NbClust(normalized_dist_matrix2, method = "average", min.nc = 1, max.nc = min(6, nrow(normalized_dist_matrix2)-1), index = "ball")
     test_fit <- cutree(hclust_tree, h = 0.5)
