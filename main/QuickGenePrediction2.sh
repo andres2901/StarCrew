@@ -166,7 +166,7 @@ gene_prediction() {
 
     # Run metaeuk gene prediction
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk predictexons..."
-    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --chain-alignments 1 --min-length 50 --min-seq-id 0.3 --cov 0.50 --remove-tmp-files 1 --max-seqs 1000 --use-all-table-starts 1 -v 0 &> /dev/null
+    metaeuk predictexons ${working_dir}/ContigsDB ${working_dir}/ProteinDB ${working_dir}/metaeukResults ${working_dir}/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --chain-alignments 1 --min-length 50 --min-seq-id 0.3 --cov-mode 1 -c 0.10 --remove-tmp-files 1 --max-seqs 1000 --use-all-table-starts 1 --filter-hits 1  --min-aln-len 50 --allow-deletion 1
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing redundancy from metaeuk..."
     metaeuk reduceredundancy ${working_dir}/metaeukResults ${working_dir}/metaeukpred ${working_dir}/metaeukgroups -v 0

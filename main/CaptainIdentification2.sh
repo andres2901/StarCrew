@@ -395,9 +395,9 @@ process_hmmsearch() {
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking at element '${species_name}'"
         
         # Perform profile search
-        hmmsearch --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAPTAIN} ${CAPTAIN_hmm} ${query} >/dev/null
-        hmmsearch --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileDUF} ${DUF_hmm} ${query} >/dev/null
-        hmmsearch --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAT} ${CAT_hmm} ${query} >/dev/null
+        hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAPTAIN} ${CAPTAIN_hmm} ${query} >/dev/null
+        hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileDUF} ${DUF_hmm} ${query} >/dev/null
+        hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAT} ${CAT_hmm} ${query} >/dev/null
     done
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Analysis complete. Results stored in '$working_dir'."
@@ -417,7 +417,7 @@ Captain_identification() {
     local results_path="${working_dir}/CaptainsID.txt"
     local empty_elements="${working_dir}/EmptyElements.txt"
 
-    python ${auxiliary_path}/hmmer_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
+    python ${auxiliary_path}/new_hmmer_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}"
 }
 
 Captain_pseudogene() {

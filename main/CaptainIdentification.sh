@@ -395,9 +395,9 @@ process_hmmsearch() {
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking at element '${species_name}'"
         
         # Perform profile search
-        hmmsearch --max --noali --cpu ${threads} --domE 10e-6 --domtblout ${outfileCAPTAIN} ${CAPTAIN_hmm} ${query} >/dev/null
-        hmmsearch --max --noali --cpu ${threads} --domE 10e-6 --domtblout ${outfileDUF} ${DUF_hmm} ${query} >/dev/null
-        hmmsearch --max --noali --cpu ${threads} --domE 10e-6 --domtblout ${outfileCAT} ${CAT_hmm} ${query} >/dev/null
+        hmmsearch --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAPTAIN} ${CAPTAIN_hmm} ${query} >/dev/null
+        hmmsearch --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileDUF} ${DUF_hmm} ${query} >/dev/null
+        hmmsearch --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAT} ${CAT_hmm} ${query} >/dev/null
     done
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Analysis complete. Results stored in '$working_dir'."
