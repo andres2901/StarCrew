@@ -696,7 +696,6 @@ plot_subcluster_synteny <- function(
               OrthoFinder_subcluster <- OrthoFinder_subcluster[,colSums(OrthoFinder_subcluster) > 0]
 
               selected_seq2 <- colnames(OrthoFinder_subcluster)
-              print(length(selected_seq2))
 
               if(length(selected_seq2) >= 2) {
                 # Filtering data

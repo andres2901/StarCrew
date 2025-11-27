@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Function to print help message
 function print_help() {
@@ -19,6 +19,7 @@ function print_help() {
 }
 
 # Initialize variables
+source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 out_directory="WorkingDirectory"
 filter="0"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
@@ -146,15 +147,15 @@ if [[ ! -z "$gff_path" ]]; then
             fi
         fi
 
-#        if [[ ! -f "$captains_path" ]]; then
-#            echo "Error: file '$captains_path' does not exist."
-#            exit 1
-#        else
+        if [[ ! -f "$captains_path" ]]; then
+            echo "Error: file '$captains_path' does not exist."
+            exit 1
+        else
         # Check if the path is absolute
-#            if [[ ! "${captains_path:0:1}" == "/" ]]; then
-#                captains_path=$(realpath $captains_path)
-#            fi
-#        fi
+            if [[ ! "${captains_path:0:1}" == "/" ]]; then
+                captains_path=$(realpath $captains_path)
+            fi
+        fi
 
         impossible_separator=":;|"
         impossible_separator_pattern="[${impossible_separator}]"
@@ -340,8 +341,13 @@ echo "new_header;original_header" > "$association_csv"
 temp_used_ids="temp_used_ids.txt"
 > "$temp_used_ids"
 
+Total_states=$(wc -l ${out_directory}/temp/temp_initials_and_headers.tsv | awk '{print $1}')
+State=0
+
 # Loop through all headers and apply the renaming logic
 while read -r initials original_header; do
+
+    State=$(($State + 1))
     
     # Get the count for the current initial group
     group_count=$(grep -w "^[[:space:]]*[0-9]*[[:space:]]*$initials$" ${out_directory}/temp/temp_initial_counts.tsv | awk '{print $1}')
@@ -376,7 +382,10 @@ while read -r initials original_header; do
     
     # Print to the temporary file use for renamed
     echo -e "$new_header\t$original_header" >> ${out_directory}/temp/temp_association.tsv
+
+    ProgressBar $State $Total_states
 done < ${out_directory}/temp/temp_initials_and_headers.tsv
+echo ""
 
 # Use seqkit to renames headers
 awk 'BEGIN {OFS="\t"} {print $2, $1}' ${out_directory}/temp/temp_association.tsv > ${out_directory}/temp/temp_association2.tsv
@@ -395,16 +404,31 @@ else
 fi
 
 if [[ ! -z "${gff_path}" ]]; then
-    mkdir -p ${out_directory}/Data/Protein/ ${out_directory}/Data/Gff/ ${out_directory}/Data/Nucleotide/ ${out_directory}/Data/Exon/ ${out_directory}/temp/exon/
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating coordinate file..."
-    awk -v s="$separator" 'BEGIN{FS=OFS="\t"}NR>1{split($1,array,s);print $2 OFS array[2] OFS $4 OFS $5 OFS $7 OFS array[1]}' ${boundaries_path} > ${out_directory}/temp/coordinate_file.txt
+    mkdir -p ${out_directory}/Data/Protein/ ${out_directory}/Data/Gff/ ${out_directory}/Data/Nucleotide/ ${out_directory}/Data/Exon/ ${out_directory}/temp/exon/ ${out_directory}/temp/gff/
 
-    cat ${out_directory}/temp/temp_association.tsv | while read line; do     A=$(echo $line | awk '{print $2}' | awk -F '|' '{print $1}'); B=$(echo $line | awk '{print $1}'); grep $A ${out_directory}/temp/coordinate_file.txt | sed s/$A/$B/ >> ${out_directory}/Coordinate_file.txt; done
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating coordinate file..."
+    Total_states=$(wc -l ${out_directory}/temp/temp_association.tsv | awk '{print $1}')
+    State=0
+
+    awk -v s="$separator" 'BEGIN{FS=OFS="\t"}NR>1{split($1,array,s);print $2 OFS array[2] OFS $4 OFS $5 OFS $7 OFS array[1]}' ${boundaries_path} > ${out_directory}/temp/coordinate_file.txt
     
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff files..."
-    mkdir ${out_directory}/temp/gff/
+
+    cat ${out_directory}/temp/temp_association.tsv | while read line
+    do
+        State=$(($State + 1))     
+        A=$(echo $line | awk '{print $2}' | awk -F '|' '{print $1}')
+        B=$(echo $line | awk '{print $1}')
+        grep $A ${out_directory}/temp/coordinate_file.txt | sed s/$A/$B/ >> ${out_directory}/Coordinate_file.txt
+        ProgressBar $State $Total_states
+    done
+    
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff files..." 
+    Total_states=$(wc -l ${gff_path} | awk '{print $1}')
+    State=0
+
     cat ${gff_path} | while read line
     do
+        State=$(($State + 1))
         GFF_FILE=$(grep -w "${line}" ${gff_path} | awk '{print $2}')
         if [[ -f ${GFF_FILE} ]]; then
             sed -e s/${separator}//g $(echo $line | awk '{print $2}') > ${out_directory}/temp/gff/$(grep -w "${line}" ${gff_path} | awk '{print $1}').gff
@@ -412,35 +436,94 @@ if [[ ! -z "${gff_path}" ]]; then
             echo "ERROR: Do not find GFF file for $(grep "${line}" ${gff_path} | awk '{print $1}') genome"
             exit 1
         fi
-    done
-        
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff file per element..."
-    awk '{print $NF}' ${out_directory}/Coordinate_file.txt | sort -u | while read line 
-    do
-        grep -w $line ${out_directory}/Coordinate_file.txt | cut -d$'\t' -f 1-5 > ${out_directory}/temp/temp_coordinate_file.txt
-        python ${auxiliary_path}/gff_slicer.py -c ${out_directory}/temp/temp_coordinate_file.txt -i ${out_directory}/temp/gff/${line}.gff -o ${out_directory}/Data/Gff/
+        ProgressBar $State $Total_states
     done
 
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing info..."
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff file per element..."
+    Total_states=$(awk '{print $NF}' ${out_directory}/Coordinate_file.txt | sort -u | wc -l)
+    State=0
+    
+    awk '{print $NF}' ${out_directory}/Coordinate_file.txt | sort -u | while read line 
+    do
+        State=$(($State + 1))
+        grep -w $line ${out_directory}/Coordinate_file.txt | cut -d$'\t' -f 1-5 > ${out_directory}/temp/temp_coordinate_file.txt
+        python ${auxiliary_path}/gff_slicer.py -c ${out_directory}/temp/temp_coordinate_file.txt -i ${out_directory}/temp/gff/${line}.gff -o ${out_directory}/Data/Gff/ &> /dev/null
+        ProgressBar $State $Total_states
+    done
+
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Performing Captain identification based on Starfish output captain database using metaeuk..."
+
+    metaeuk createdb  $output_fasta ${out_directory}/temp/ContigsDB --dbtype 2 -v 0
+    metaeuk createdb $captains_path ${out_directory}/temp/ProteinDB --dbtype 1 -v 0
+
+    # Run metaeuk gene prediction
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk predictexons..."
+    metaeuk predictexons ${out_directory}/temp/ContigsDB ${out_directory}/temp/ProteinDB  ${out_directory}/temp/metaeukResults ${out_directory}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 1 --remove-tmp-files 1 --use-all-table-starts 1 --metaeuk-tcov 1
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing redundancy from metaeuk..."
+    metaeuk reduceredundancy ${out_directory}/temp/metaeukResults ${out_directory}/temp/metaeukpred ${out_directory}/temp/metaeukgroups -v 0
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating gff file from metaeuk results..."
+    metaeuk unitesetstofasta ${out_directory}/temp/ContigsDB ${out_directory}/temp/ProteinDB ${out_directory}/temp/metaeukpred ${out_directory}/temp/metaeukFinal -v 0
+
+    sed -e 's/Target_ID=.*;TCS_//g' ${out_directory}/temp/metaeukFinal.gff > ${out_directory}/temp/metaeuk.gff
+
+    agat_sp_filter_incomplete_gene_coding_models.pl --gff ${out_directory}/temp/metaeuk.gff --fasta ${output_fasta} -o ${out_directory}/temp/metaeuk_fix.gff &> /dev/null
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Merging gff files..."
+    Total_states=$(grep -v "#" ${out_directory}/temp/metaeuk_fix.gff | awk '{print $1}' | sort -u | wc -l)
+    State=0
+
+    grep -v "#" ${out_directory}/temp/metaeuk_fix.gff | awk '{print $1}' | sort -u | while read line 
+    do
+        grep -w "^${line}" ${out_directory}/temp/metaeuk_fix.gff > ${out_directory}/temp/temp_captain.txt
+        State=$(($State + 1))
+
+        agat_sp_merge_annotations.pl --gff ${out_directory}/Data/Gff/${line}.gff --gff ${out_directory}/temp/temp_captain.txt --out ${out_directory}/temp/merge.gff &> /dev/null
+
+        python ${auxiliary_path}/merge.py ${out_directory}/temp/merge.gff ${out_directory}/temp/modelsKeep.txt
+
+        agat_sp_filter_feature_from_keep_list.pl --gff ${out_directory}/temp/merge.gff --keep_list ${out_directory}/temp/modelsKeep.txt --output ${out_directory}/temp/merge_keep.gff &> /dev/null
+
+        rm ${out_directory}/Data/Gff/${line}.gff
+
+        agat_sp_keep_longest_isoform.pl --gff ${out_directory}/temp/merge_keep.gff -o ${out_directory}/Data/Gff/${line}.gff &> /dev/null
+
+        ProgressBar $State $Total_states
+    done
+
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing info..."
+
+    Total_states=$(grep ">" $output_fasta | awk -F '>' '{print $2}' | wc -l)
+    State=0
 
     grep ">" $output_fasta | awk -F '>' '{print $2}' | while read line 
     do
+        State=$(($State + 1))
         # Dividing nucleotide sequence of elements
         echo $line > ${out_directory}/temp/temp_element.txt
         seqkit grep -n -f ${out_directory}/temp/temp_element.txt $output_fasta -o ${out_directory}/Data/Nucleotide/${line}.fa &> /dev/null
 
         # Creating Exome
-        agat_sp_extract_sequences.pl --gff ${out_directory}/Data/Gff/${line}.gff --fasta $output_fasta -t cds --merge -o ${out_directory}/temp/exon/${line}.fa &> /dev/null
+        if [[ $(grep -i -c "cds" ${out_directory}/Data/Gff/${line}.gff) -ge 1 ]]; then
+            agat_sp_extract_sequences.pl --gff ${out_directory}/Data/Gff/${line}.gff --fasta ${out_directory}/Data/Nucleotide/${line}.fa -t cds --merge -o ${out_directory}/temp/exon/${line}.fa &> /dev/null
+        else
+            agat_sp_extract_sequences.pl --gff ${out_directory}/Data/Gff/${line}.gff --fasta ${out_directory}/Data/Nucleotide/${line}.fa -t cds --merge -o ${out_directory}/temp/exon/${line}.fa &> /dev/null
+        fi
+
         awk '{if($2){$1=">"$2} print $1}' ${out_directory}/temp/exon/${line}.fa| sed 's/gene=//g' > ${out_directory}/Data/Exon/${line}.fa
 
         # Creating proteome
         seqkit translate ${out_directory}/Data/Exon/${line}.fa --trim > ${out_directory}/Data/Protein/${line}.fa
+        Sequence_number=$(($Sequence_number + 1))
+        ProgressBar $State $Total_states
     done
 
+    echo ""
 fi
 
 # Cleanup temporary file
-#rm -r ${out_directory}/temp/
+rm -r ${out_directory}/temp/
 
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Processing complete. Output files created:"
 echo "     - New FASTA file: $output_fasta"
