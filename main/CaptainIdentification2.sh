@@ -491,7 +491,7 @@ Captain_pseudogene() {
             local exonNumber=$(wc -l ${temp_dir}/${line}_start.bed | awk '{print $1}')
             local exon_length=$(awk '{$4 = $3 - $2} {sum += $4} END {print sum}' ${temp_dir}/${line}_start.bed)
 
-            if [[ ${exonNumber} -ge 2 || ${exon_length} > 600 ]]; then
+            if [[ ${exonNumber} -ge 2 && ${exon_length} -ge 600 ]]; then
                 seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
             else
                 # Search for captain pseudogene at the end in the negative strand
@@ -529,7 +529,7 @@ Captain_pseudogene() {
                 local exonNumber=$(wc -l ${temp_dir}/${line}_end.bed | awk '{print $1}')
                 local exon_length=$(awk '{$4 = $3 - $2} {sum += $4} END {print sum}' ${temp_dir}/${line}_end.bed)
 
-                if [[ ${exonNumber} -ge 2 || ${exon_length} > 600 ]]; then
+                if [[ ${exonNumber} -ge 2 && ${exon_length} -ge 600 ]]; then
                     seqkit subseq --quiet --bed ${temp_dir}/${line}_end.bed ${temp_dir}/blast/${line}_end.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
                 else 
                     echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."

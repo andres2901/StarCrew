@@ -13,7 +13,7 @@ function print_help() {
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-p, --proteinDB: protein database fasta file (required)."
-   echo "-m, --minGene: Minimum number of genes in an element to be include in the dataset (Default: 8) [range: 5 - 100]"
+   echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset (Default: 8) [range: 5 - 100]"
    echo "-help: Display this help message."
 }
 
@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
             shift
             protein_path="$1"
             ;;
-        -m|--minGene)
+        -mg|--minGene)
             shift
             minimum_gene_content="$1"
             ;;

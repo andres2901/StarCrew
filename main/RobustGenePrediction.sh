@@ -15,7 +15,7 @@ function print_help() {
    echo "Syntax: SAT RobustGenePrediction [ -help ] -w <directory_path> [ -m <string> -mg <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Available mode: Cluster, All) (Default = Cluster)."
+   echo "-m, --mode: Define the data that will be use for the gene prediction. This can be perform for all the data or for each cluster (Default = Cluster) [Available mode: Cluster, All]."
    echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset when running the 'All' mode (Default: 8) [range: 5 - 100]"
    echo "-help: Display this help message."
 }

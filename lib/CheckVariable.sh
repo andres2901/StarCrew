@@ -25,6 +25,131 @@ check_threads() {
     fi
 }
 
+check_fasta_dna() {
+	local fasta_path="$1"
+
+	if [[ ! -f "$fasta_path" ]]; then
+        echo "Error: file '$fasta_path' does not exist."
+        exit 1
+    else
+    	# Check if fasta file is valid
+    	local Fasta_check=$(seqkit seq --quiet -t dna -v $fasta_path)
+    	if [[ ! -s "$Fasta_check" ]]; then
+    		echo "Check input fasta file"
+    		exit 1
+    	fi
+        # Check if the path is absolute
+        if [[ ! "${fasta_path:0:1}" == "/" ]]; then
+            fasta_path=$(realpath $fasta_path)
+        fi
+
+    fi
+    return $fasta_path
+}
+
+check_fasta_protein() {
+	local fasta_path="$1"
+
+	if [[ ! -f "$fasta_path" ]]; then
+        echo "Error: file '$fasta_path' does not exist."
+        exit 1
+    else
+    	# Check if fasta file is valid
+    	local Fasta_check=$(seqkit seq --quiet -t protein -v $fasta_path)
+    	if [[ ! -s "$Fasta_check" ]]; then
+    		echo "Check input fasta file"
+    		exit 1
+    	fi
+        # Check if the path is absolute
+        if [[ ! "${fasta_path:0:1}" == "/" ]]; then
+            fasta_path=$(realpath $fasta_path)
+        fi
+
+    fi
+    return $fasta_path
+}
+
+check_gff() {
+	local gff_path="$1"
+
+	if [[ ! -f "$gff_path" ]]; then
+        echo "Error: file '$gff_path' does not exist."
+        exit 1
+    else
+    	# Check if fasta file is valid
+    	local gff_check=$(grep -v "^#" $gff_path | awk -F '\t' '{print NF}' | sort -u)
+
+    	if [[ $gff_check -eq 9 ]]; then
+    		local gff_check2=$(grep -v "^#" $gff_path | awk -F '\t' '{print $7}' | egrep -v -c "+|-|\.")
+
+    		if [[ $gff_check2 -eq 0 ]]; then
+    			local gff_check3$(grep -v "^#" $gff_path | egrep -v -c "ID=")
+
+    			if [[ $gff_check3 -eq 0 ]]; then
+
+                    # Check if the path is absolute
+                    if [[ ! "${gff_path:0:1}" == "/" ]]; then
+                        gff_path=$(realpath $gff_path)
+                    fi
+
+                    return $gff_path
+                else
+                	echo "Error: There are lines without ID in the gff file"
+            	    exit 1
+                fi
+            else
+            	echo "Error: Check gff file due to inconsistencies in the strand column"
+            	exit 1
+            fi
+        else
+        	echo "Error: Check gff file due to inconsistencies in the number of columns"
+        	exit 1
+        fi
+    fi
+}
+
+check_metadata_file () {
+	local metadata_path=$1
+	local fasta_path=$2
+
+    if [[ ! -f "$metadata_path" ]]; then
+        echo "Error: file '$metadata_path' does not exist."
+        exit 1
+    else
+        if [[ ! "${metadata_path:0:1}" == "/" ]]; then
+            metadata_path=$(realpath $metadata_path)
+        fi
+
+        if [[ -s $metadata_path ]]; then
+        	if [[ $(awk 'NR==1{print $0}' $metadata_path | grep -c "ElementID") -eq 1 ]]; then
+
+        	    local Column_number=$(awk -F ';' '{print NF}' $metadata_path | sort -u)
+        	    local Columns=$(awk -F ';' '{print NF}' $metadata_path | sort -u | wc -l)
+
+            	if [[ $Columns -ge 2 ]]; then
+            		echo "Error: There are discordances in the number of columns in the metadata file"
+            		exit
+        	    else
+                    if [[ $Column_number -eq 1 ]]; then
+        	            echo "Error: There's only one column in metadata file"
+            	        exit 1
+                    else
+            	        local Headers_name=$(grep "^>" $fasta_path | awk -F '>' '{print $2}' | tr '\n' '|' | sed 's/|$//')
+        	            local Headers_count=$(grep -c "^>" $fasta_path)
+        	            local Metadata_count=$(egrep $Headers_name $metadata_path | wc -l)
+        	            if [[ $Metadata_count -eq 0 ]]; then
+        	        	    echo "Error: Metadata do not contain the elements in the fasta file"
+        	        	    exit 1
+            	        fi
+        	        fi
+        	    fi
+        	fi
+        fi
+    fi
+
+    return $metadata_path
+}
+
 check_auxiliary_scripts() {
 	local auxiliary_path="$1"
 	local command="$2"
@@ -41,7 +166,7 @@ check_auxiliary_scripts() {
             echo "Error: file '${auxiliary_path}/rip_calculator.py' does not exist."
             exit 1
         fi
-        
+
         if [[ ! -f "${auxiliary_path}/gff_slicer.py" ]]; then
             echo "Error: file '${auxiliary_path}/gff_slicer.py' does not exist."
             exit 1
@@ -83,6 +208,11 @@ check_auxiliary_scripts() {
             echo "Error: file '${auxiliary_path}/macse.jar' does not exist."
             exit 1
         fi
+    elif [[ $command == "ClusterCharacterization" ]]; then
+    	if [[ ! -f "${auxiliary_path}/ClusterAnalysis.R" ]]; then
+            echo "Error: file '${auxiliary_path}/ClusterAnalysis.R' does not exist."
+            exit 1
+        fi
     fi
 
     return $auxiliary_path
@@ -108,7 +238,13 @@ check_mode_parameter() {
 	local mode="$1"
 	local command="$2"
 
-	if [[ $command == "SyntenyClustering" ]]; then
+	if [[ $command == "Initialize" ]]; then
+		if [[ "$mode" != "Simple" && "$mode" != "Full" && "$mode" != "Starfish" ]]; then
+            echo "Error: provided mode '$mode' is not accepted."
+            print_help
+            exit 1
+        fi
+	elif [[ $command == "SyntenyClustering" ]]; then
 		if [[ "$mode" != "Raw" && "$mode" != "SSP" && "$mode" != "FilterBlast" && "$mode" != "FilterMetric" ]]; then
             echo "Error: provided mode '$mode' is not accepted."
             print_help

@@ -7,11 +7,12 @@ function print_help() {
    echo "Syntax: SAT Initialize [ -help ] -f <filte_path> [ -m <file_path> -o <string> -g <integer> -r ]"
    echo "options:"
    echo "-f, --fasta:  multifasta file wih the elements to study (required)."
-   echo "-m, --metadata: csv file delimited by semicolon without headers with the information of the elements as follows: seqID;species;seqlength (optional)."
+   echo "-M, --Metadata: csv file delimited by semicolon without headers with the information of the elements as follows: seqID;species;seqlength (optional)."
+   echo "-m, --mode: Mode of the input to initialize (Defaul = Simple) [Available mode: Simple, Full, Starfish]"
    echo "-g, --gff: 2 column tsv: genome code, path to GFF. The path should be to the original gff files and not the ones formatted to run starfish (Optional)."
-   echo "-b, --boundaries: *.elements.feat file output of 'starfish summary' command (Optional, Mandatory if used the -g/--gff parameter)."
-   echo "-s, --separator: character separating genomeID from featureID that was used for starfish run (Optional, Mandatory if used the -g/--gff parameter)."
-   echo "-c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command (Optional, Mandatory if used the -g/--gff parameter)."
+   echo "-b, --boundaries: *.elements.feat file output of 'starfish summary' command (Optional, Mandatory Mandatory in 'Starfish' mode)."
+   echo "-s, --separator: character separating genomeID from featureID that was used for starfish run (Optional, Mandatory in 'Starfish' mode)."
+   echo "-c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command (Optional, Mandatory in 'Starfish' mode)."
    echo "-gc, --gc: integer value of gc content to filter out elements with too low gc content (Default = 0) [range: 20 - 45]"
    echo "-o, --outDirectory: Specify working directory  name (Default = WorkingDirectory)."
    echo "-r, --rip: integer value of the minimum coverage of the element to be possibly affected by RIP to be filter out (Default = 0) [range: 30 - 80]"
@@ -20,7 +21,10 @@ function print_help() {
 
 # Initialize variables
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
+source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/CheckVariable.sh"
+
 out_directory="WorkingDirectory"
+mode="Simple"
 filter="0"
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 rip="0"
@@ -38,9 +42,13 @@ while [[ $# -gt 0 ]]; do
 	        shift
 	        fasta_path="$1"
 	        ;;
-         -m|--metadata)
+        -M|--Metadata)
             shift
             metadata_path="$1"
+            ;;
+        -m|--mode)
+            shift
+            mode="$1"
             ;;
         -g|--gff)
             shift
@@ -159,7 +167,7 @@ if [[ ! -z "$gff_path" ]]; then
 
         impossible_separator=":;|"
         impossible_separator_pattern="[${impossible_separator}]"
-        if [[ "s${separator}" == "${impossible_separator_pattern}" ]]; then
+        if [[ "${separator}" == "${impossible_separator_pattern}" ]]; then
             echo "Error: '$separator' is not accepted."
             exit 1
         fi
@@ -223,6 +231,21 @@ else
     mkdir $out_directory
     mkdir ${out_directory}/temp/
 fi
+
+# ==============================================================================
+# Function block
+# ==============================================================================
+
+gene_stats() {
+    local base_dir="$1"
+
+    # Generate the number of genes and mean length statistic
+    echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${base_dir}/Gene_stats.txt
+    ls ${base_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line
+    do 
+        echo -e ${line}"\t"$(grep -c "gene" ${base_dir}/Data/Gff/${line}.gff)"\t"$(grep "gene" ${base_dir}/Data/Gff/${line}.gff | awk '{ sum  += $5 - $4 } END { if(NR > 0) {print sum / NR} else {print $0}')"\t"$(grep "gene" ${base_dir}/Data/Gff/${line}.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = $4 - prev_col2; prev_col2 = $5; if (diff > 0) total_sum += diff} END {if((NR - 1) > 0) {print total_sum / (NR - 1)} else {print 0}') >> ${base_dir}/Gene_stats.txt 
+    done
+}
 
 # ==============================================================================
 # Check and prepare fasta file
@@ -453,51 +476,68 @@ if [[ ! -z "${gff_path}" ]]; then
 
     echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Performing Captain identification based on Starfish output captain database using metaeuk..."
 
-    metaeuk createdb  $output_fasta ${out_directory}/temp/ContigsDB --dbtype 2 -v 0
-    metaeuk createdb $captains_path ${out_directory}/temp/ProteinDB --dbtype 1 -v 0
+    metaeuk createdb  $output_fasta ${out_directory}/temp/ContigsDB --dbtype 2 -v 0 &> /dev/null
+    metaeuk createdb $captains_path ${out_directory}/temp/ProteinDB --dbtype 1 -v 0 &> /dev/null
 
     # Run metaeuk gene prediction
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running metaeuk predictexons..."
-    metaeuk predictexons ${out_directory}/temp/ContigsDB ${out_directory}/temp/ProteinDB  ${out_directory}/temp/metaeukResults ${out_directory}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 1 --remove-tmp-files 1 --use-all-table-starts 1 --metaeuk-tcov 1
+    metaeuk predictexons ${out_directory}/temp/ContigsDB ${out_directory}/temp/ProteinDB  ${out_directory}/temp/metaeukResults ${out_directory}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 1 --remove-tmp-files 1 --use-all-table-starts 1 --metaeuk-tcov 1 &> /dev/null
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing redundancy from metaeuk..."
-    metaeuk reduceredundancy ${out_directory}/temp/metaeukResults ${out_directory}/temp/metaeukpred ${out_directory}/temp/metaeukgroups -v 0
+    metaeuk reduceredundancy ${out_directory}/temp/metaeukResults ${out_directory}/temp/metaeukpred ${out_directory}/temp/metaeukgroups -v 0 &> /dev/null
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating gff file from metaeuk results..."
-    metaeuk unitesetstofasta ${out_directory}/temp/ContigsDB ${out_directory}/temp/ProteinDB ${out_directory}/temp/metaeukpred ${out_directory}/temp/metaeukFinal -v 0
+    metaeuk unitesetstofasta ${out_directory}/temp/ContigsDB ${out_directory}/temp/ProteinDB ${out_directory}/temp/metaeukpred ${out_directory}/temp/metaeukFinal -v 0 &> /dev/null
 
     sed -e 's/Target_ID=.*;TCS_//g' ${out_directory}/temp/metaeukFinal.gff > ${out_directory}/temp/metaeuk.gff
 
-    agat_sp_filter_incomplete_gene_coding_models.pl --gff ${out_directory}/temp/metaeuk.gff --fasta ${output_fasta} -o ${out_directory}/temp/metaeuk_fix.gff &> /dev/null
+    #agat_sp_filter_incomplete_gene_coding_models.pl --gff ${out_directory}/temp/metaeuk.gff --fasta ${output_fasta} -o ${out_directory}/temp/metaeuk_fix.gff &> /dev/null
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Merging gff files..."
-    Total_states=$(grep -v "#" ${out_directory}/temp/metaeuk_fix.gff | awk '{print $1}' | sort -u | wc -l)
+    Total_states=$(grep -v "#" ${out_directory}/temp/metaeuk.gff | awk '{print $1}' | sort -u | wc -l)
     State=0
 
-    grep -v "#" ${out_directory}/temp/metaeuk_fix.gff | awk '{print $1}' | sort -u | while read line 
+    rm ${out_directory}/temp/gff/*
+    mkdir ${out_directory}/temp/modelsKeep/
+
+    grep -v "#" ${out_directory}/temp/metaeuk.gff | awk '{print $1}' | sort -u | while read line 
     do
-        grep -w "^${line}" ${out_directory}/temp/metaeuk_fix.gff > ${out_directory}/temp/temp_captain.txt
+        grep -w "^${line}" ${out_directory}/temp/metaeuk.gff > ${out_directory}/temp/gff/temp_captain_${line}.gff
         State=$(($State + 1))
 
-        agat_sp_merge_annotations.pl --gff ${out_directory}/Data/Gff/${line}.gff --gff ${out_directory}/temp/temp_captain.txt --out ${out_directory}/temp/merge.gff &> /dev/null
+        cat ${out_directory}/Data/Gff/${line}.gff ${out_directory}/temp/gff/temp_captain_${line}.gff > ${out_directory}/temp/gff/${line}_merge.gff 
+        #agat_sp_merge_annotations.pl --gff ${out_directory}/Data/Gff/${line}.gff --gff ${out_directory}/temp/temp_captain.gff --out ${out_directory}/temp/merge.gff &> /dev/null
 
-        python ${auxiliary_path}/merge.py ${out_directory}/temp/merge.gff ${out_directory}/temp/modelsKeep.txt
+        python ${auxiliary_path}/merge.py ${out_directory}/temp/gff/${line}_merge.gff ${out_directory}/temp/modelsKeep/${line}.txt &> /dev/null
 
-        agat_sp_filter_feature_from_keep_list.pl --gff ${out_directory}/temp/merge.gff --keep_list ${out_directory}/temp/modelsKeep.txt --output ${out_directory}/temp/merge_keep.gff &> /dev/null
+        agat_sp_filter_feature_from_keep_list.pl --gff ${out_directory}/temp/gff/${line}_merge.gff  --keep_list ${out_directory}/temp/modelsKeep/${line}.txt --output ${out_directory}/temp/gff/${line}_mergeKeep.gff &> /dev/null
 
         rm ${out_directory}/Data/Gff/${line}.gff
 
-        agat_sp_keep_longest_isoform.pl --gff ${out_directory}/temp/merge_keep.gff -o ${out_directory}/Data/Gff/${line}.gff &> /dev/null
+        agat_sp_keep_longest_isoform.pl --gff ${out_directory}/temp/gff/${line}_mergeKeep.gff -o ${out_directory}/Data/Gff/${line}.gff &> /dev/null
 
         ProgressBar $State $Total_states
     done
 
-    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing info..."
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Performing gene statistic and removing elements with low gene models..."
 
-    Total_states=$(grep ">" $output_fasta | awk -F '>' '{print $2}' | wc -l)
+    gene_stats "${out_directory}"
+
+    awk -v min="8" 'NR>1{if($2>=min){print $1}}' ${out_directory}/Gene_stats.txt | sed $'s/[^[:print:]\t]//g' > ${out_directory}/temp/Good_elements.txt
+
+    ls ${out_directory}/Data/Gff/ | xargs -n 1 basename -s .gff > ${out_directory}/temp/All_elements.txt
+
+    grep -v -f ${out_directory}/temp/Good_elements.txt ${out_directory}/temp/All_elements.txt | while read line
+    do
+        rm ${out_directory}/Data/Gff/${line}.gff
+    done
+
+    echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing info..."
+
+    Total_states=$(ls ${out_directory}/Data/Gff/ | xargs -n 1 basename -s .gff | wc -l)
     State=0
 
-    grep ">" $output_fasta | awk -F '>' '{print $2}' | while read line 
+    ls ${out_directory}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line 
     do
         State=$(($State + 1))
         # Dividing nucleotide sequence of elements
@@ -515,10 +555,11 @@ if [[ ! -z "${gff_path}" ]]; then
 
         # Creating proteome
         seqkit translate ${out_directory}/Data/Exon/${line}.fa --trim > ${out_directory}/Data/Protein/${line}.fa
-        Sequence_number=$(($Sequence_number + 1))
+
+        rm ${out_directory}/Data/Nucleotide/${line}.fa.index* &> /dev/null
+
         ProgressBar $State $Total_states
     done
-
     echo ""
 fi
 
