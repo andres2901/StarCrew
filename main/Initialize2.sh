@@ -243,7 +243,7 @@ gene_stats() {
     echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${base_dir}/Gene_stats.txt
     ls ${base_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line
     do 
-        echo -e ${line}"\t"$(grep -c "gene" ${base_dir}/Data/Gff/${line}.gff)"\t"$(grep "gene" ${base_dir}/Data/Gff/${line}.gff | awk '{ sum  += $5 - $4 } END { if(NR > 0) {print sum / NR} else {print $0}')"\t"$(grep "gene" ${base_dir}/Data/Gff/${line}.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = $4 - prev_col2; prev_col2 = $5; if (diff > 0) total_sum += diff} END {if((NR - 1) > 0) {print total_sum / (NR - 1)} else {print 0}') >> ${base_dir}/Gene_stats.txt 
+        echo -e ${line}"\t"$(grep -c "gene" ${base_dir}/Data/Gff/${line}.gff)"\t"$(grep "gene" ${base_dir}/Data/Gff/${line}.gff | awk '{ sum  += $5 - $4 } END { if(NR > 0) {print sum / NR} else {print $0}}')"\t"$(grep "gene" ${base_dir}/Data/Gff/${line}.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = $4 - prev_col2; prev_col2 = $5; if (diff > 0) total_sum += diff} END {if((NR - 1) > 0) {print total_sum / (NR - 1)} else {print 0}}') >> ${base_dir}/Gene_stats.txt 
     done
 }
 
