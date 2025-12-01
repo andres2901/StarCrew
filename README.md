@@ -1,8 +1,8 @@
-# Starship analysis toolkit
+# StarClust: STARship CLUSTering tool
 
 ## Installation
 
-This toolkit was specifically written to be run on Linux and requires the following software and dependencies to be installed and accessible via the system path:
+This tool was specifically written to be run on Linux and requires the following software and dependencies to be installed and accessible via the system path:
 - python 3.10.
 - java.
 - hmmer.
@@ -29,10 +29,10 @@ A single Conda environment, sufficient for most main commands, can be set up by 
 
 ```
 # Create the basic environment with R and python version
-conda create -y -n SAT -c conda-forge r-essentials r-base=4.4.3 python=3.10
+conda create -y -n StarClust -c conda-forge r-essentials r-base=4.4.3 python=3.10
 
 # Activate the environment
-conda activate SAT
+conda activate StarClust
 
 #Install bioinformatic tools
 conda install -y -c bioconda -c conda-forge metaeuk
@@ -60,7 +60,7 @@ quit()
 
 # Modify orthofinder config.json file
 
-vi ${Path_to_SAT_environment}/bin/src/orthofinder/run/config.json
+vi ${Path_to_StarClust_environment}/bin/src/orthofinder/run/config.json
 
 ### Standard orthofinder version:
 
@@ -83,10 +83,10 @@ Alternatively, the environment can be set up using the YAML file provided in thi
 
 ```
 # Create environment
-conda env create -f SAT_environment.yml
+conda env create -f StarClust_environment.yml
 
 # Activate the environment
-conda activate SAT
+conda activate StarClust
 
 # Start R environment
 R
@@ -100,7 +100,7 @@ quit()
 
 # Modify orthofinder config.json file
 
-vi ${Path_to_SAT_environment}/bin/src/orthofinder/run/config.json
+vi ${Path_to_StarClust_environment}/bin/src/orthofinder/run/config.json
 
 ### Standard orthofinder version:
 
@@ -121,12 +121,16 @@ vi ${Path_to_SAT_environment}/bin/src/orthofinder/run/config.json
 
 The aligner MACSE (Multiple Alignment of Coding SEquences Accounting for Frameshifts and Stop Codons) must be manually downloaded and copied into the `aux/` folder, using the specific file name `macse.jar`.
 
-For the command `SAT BrakerGenePrediction`, a separate Conda environment must be set up due to Perl dependency conflicts between BRAKER, AGAT, and recent MetaEuk versions. To set up this environment, follow the instructions provided in the BRAKER repository (https://github.com/Gaius-Augustus/BRAKER). Additionally, ensure that MetaEuk is reachable in the system path, which may require installing an older, compatible version.
+For the command `StarClust BrakerGenePrediction`, a separate Conda environment must be set up due to Perl dependency conflicts between BRAKER, AGAT, and recent MetaEuk versions. To set up this environment, follow the instructions provided in the BRAKER repository (https://github.com/Gaius-Augustus/BRAKER). Additionally, ensure that MetaEuk is reachable in the system path, which may require installing an older, compatible version.
 
-## Citing SAT and software called by SAT
+## Citing StarClust and software called by StarClust
 
-SAT is a toolkit that calls different bioinformatic tools, for that reason any publication of results obtained by SAT required the citation of the tools that were called.
-- **My own publication when available**.
-- Always site seqkit since almost all main commands used it: Wei Shen, Botond Sipos, and Liuyang Zhao. 2024. SeqKit2: A Swiss Army Knife for Sequence and Alignment Processing. iMeta e191. doi:10.1002/imt2.191.
-- When using QuickGenePrediction module:
-- For robust gene prediction using Braker check the `what-to-cite.txt` file in the braker output directory.
+StarClust is a toolkit that calls different bioinformatic tools, for that reason any publication of results obtained by StarClust required the citation of the tools that were called.
+
+| Command | Dependency | Citation |
+|:---:|:---:|:---|
+|`Initialize`| `metaeuk` | [Karin et al. 2020](https://pubmed.ncbi.nlm.nih.gov/32245390/) |
+|`SyntenyClustering`| `` | [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Marcais et al 2018](https://pubmed.ncbi.nlm.nih.gov/29373581/) |
+|`CaptainIdentification`| `` | |
+|`ClusterCharacterization`| `` |  |
+|`OrthogroupsAnnotation`| `` |  |

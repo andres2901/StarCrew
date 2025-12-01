@@ -219,7 +219,7 @@ check_clusters() {
     fi
 }
 
-check_directory_structure() {
+check_directory_information() {
     local base_dir="$1"
     
     # Locate required subdirectories and file
@@ -500,7 +500,7 @@ do
     internal_dir="${Working_directory}/Clusters/${ClusterId}/"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
-    check_directory_structure "${internal_dir}"
+    check_directory_information "${internal_dir}"
 
     if $directory_flag; then
 

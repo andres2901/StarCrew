@@ -1,26 +1,429 @@
 #!/usr/bin/env bash
 
+# ==============================================================================
+# Software check block
+# ==============================================================================
+
+source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
+source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
+
+auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
+if [[ ! -d "$auxiliary_path" ]]; then
+    echo "Error: directory '$auxiliary_path' does not exist."
+    exit 1
+else
+    auxiliary_path=$(realpath $auxiliary_path)
+fi
+
+# ==============================================================================
+# Function block
+# ==============================================================================
+
 # Function to print help message
 function print_help() {
    echo "Script to organize the working directory to run the subsequent commands in the workflow."
-   echo
-   echo "Syntax: SAT Initialize [ -help ] -f <filte_path> [ -m <file_path> -o <string> -g <integer> -r ]"
-   echo "options:"
-   echo "-f, --fasta:  multifasta file wih the elements to study (required)."
-   echo "-m, --metadata: csv file delimited by semicolon without headers with the information of the elements as follows: seqID;species;seqlength (optional)."
-   echo "-g, --gc: integer value of gc content to filter out elements with too low gc content (Default = 0) [range: 20 - 45]"
-   echo "-n, --name: Specify working directory  name (Default = WorkingDirectory)."
+   echo ""
+   echo "Syntax: SAT $(basename -s .sh "$0" ) [ -help ] -f <filte_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -g <file_path> -b <file_path> -s <character> -c <file_path> -M <file_path> ]"
+   echo ""
+   echo "Required args:"
+   echo "-f, --fasta:  multifasta file wih the elements to study."
+   echo ""
+   echo "Required args with Default:"
+   echo "-m, --mode: Mode of the input to initialize (Defaul = Simple) [Available mode: Simple, Starfish]"
+   echo "-gc, --gc: integer value of gc content to filter out elements with too low gc content (Default = 0) [range: 20 - 45]"
    echo "-r, --rip: integer value of the minimum coverage of the element to be possibly affected by RIP to be filter out (Default = 0) [range: 30 - 80]"
+   echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset (Default: 8) [range: 5 - 100]"
+   echo "-o, --outDirectory: Specify working directory  name (Default = WorkingDirectory)."
+   echo ""
+   echo "Required args in 'Starfish' mode:"
+   echo "-g, --gff: 2 column tsv: genome code, path to GFF. The path should be to the original gff files and not the ones formatted to run starfish."
+   echo "-b, --boundaries: *.elements.feat file output of 'starfish summary' command."
+   echo "-s, --separator: character separating genomeID from featureID that was used for starfish run."
+   echo "-c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command."
+   echo ""
+   echo "Required args in 'Simple' mode:"
+   echo "-g, --gff: Path to the GFF file containing gene predictions with element-relative coordinates for all elements in the fasta file."
+   echo ""
+   echo "Optional args:"
+   echo "-M, --Metadata: csv file delimited by semicolon without headers with the information of the elements as follows: seqID;species;seqlength (optional)."
    echo "-help: Display this help message."
 }
 
-# Initialize variables
-out_directory="WorkingDirectory"
-filter="0"
-auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
-rip="0"
+# Function to check duplicates headers
+check_duplicates() {
+    local fasta_path="$1"
+    local working_dir="$2"
+
+    seqkit rmdup -n "$fasta_path" -o /dev/null -d ${working_dir}/temp/temp_duplicated_headers &> /dev/null
+
+    if [ -s ${working_dir}/temp/temp_duplicated_headers ]; then
+        echo "Error: Duplicated headers found. Script terminated." >&2
+        echo "Duplicate headers and their counts:" >&2
+        echo "$duplicated_headers" >&2
+        exit 1
+    fi
+}
+
+# Filter script
+Filter_input() {
+    local fasta_path="$1"
+    local working_dir="$2"
+    local filter_option="$3"
+
+    if [[ "$filter_option" == 1 ]]
+    then
+       echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on RIP-like signal"
+       python ${auxiliary_path}/rip_calculator.py "$fasta_path" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${working_dir}/Elements_filterRIPlike.txt
+       removed_elements=$(wc -l ${working_dir}/Elements_filterRIPlike.txt | awk '{print $1}')
+       echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove based on RIP-like signal"
+       seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterRIPlike.txt "$fasta_path" > ${fasta_path}.filtered.fa
+       fasta_path=$(realpath ${fasta_path}.filtered.fa)
+    elif [[ "$filter_option" == 2 ]]
+    then
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on gc content"
+        seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${working_dir}/Elements_filterGC.txt
+        removed_elements=$(wc -l ${working_dir}/Elements_filterGC.txt | awk '{print $1}')
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove based on gc content"
+        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
+
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on RIP-like signal"
+        python ${auxiliary_path}/rip_calculator.py "${fasta_path}.filtered.fa" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${working_dir}/Elements_filterRIPlike.txt
+        removed_elements=$(wc -l ${working_dir}/Elements_filterRIPlike.txt | awk '{print $1}')
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove based on RIP-like signal"
+        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterRIPlike.txt "${fasta_path}.filtered.fa" > ${fasta_path}.filtered2.fa
+
+        fasta_path=$(realpath ${fasta_path}.filtered2.fa)
+    elif [[ "$filter_option == 3" ]]
+    then
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on gc content"
+        seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${working_dir}/Elements_filterGC.txt
+        removed_elements=$(wc -l ${working_dir}/Elements_filterGC.txt | awk '{print $1}')
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove base on gc content."
+        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
+        fasta_path=$(realpath ${fasta_path}.filtered.fa)
+    fi
+}
+
+# Function to convert a number to a base-62 string for unique IDs
+base62() {
+    local n=$1
+    local base62_chars="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    local result=""
+    if [ "$n" -eq 0 ]; then
+        echo "0"
+        return
+    fi
+    while [ "$n" -gt 0 ]; do
+        local rem=$((n % 62))
+        local char=${base62_chars:$rem:1}
+        result="$char$result"
+        n=$((n / 62))
+    done
+    printf '%s\n' "$result"
+}
+
+# Function to process headers for syntenet analysis
+Header_processing() {
+    local fasta_path="$1"
+    local working_dir="$2"
+
+    local output_fasta="${working_dir}/Sequences.fa"
+    local association_csv="${working_dir}/metadata_files/sequence_head.csv"
+
+    local max_initial_count=25
+    local ID_COUNTER=0
+
+    # Create a temporary file with initials and original headers
+    seqkit fx2tab --name "$fasta_path" | awk -F'\t' '
+    {
+        original_header = $1
+        cleaned_header = original_header
+        gsub(/[^a-zA-Z0-9_]/, "", cleaned_header)
+        initials = substr(cleaned_header, 1, 5)
+        print initials, original_header
+    }
+    ' > ${working_dir}/temp/temp_initials_and_headers.tsv
+
+    # Count the occurrences of each 5-char initial group
+    awk '{ print $1 }' ${working_dir}/temp/temp_initials_and_headers.tsv | sort | uniq -c > ${working_dir}/temp/temp_initial_counts.tsv
+
+    # Reset output files to ensure a clean start
+    > "$output_fasta"
+    echo "new_header;original_header" > "$association_csv"
+
+    # Create a temporary file to track used IDs to prevent collisions
+    temp_used_ids="temp_used_ids.txt"
+    > "$temp_used_ids"
+
+    Total_states=$(wc -l ${working_dir}/temp/temp_initials_and_headers.tsv | awk '{print $1}')
+    State=0
+
+    # Loop through all headers and apply the renaming logic
+    while read -r initials original_header; do
+        State=$(($State + 1))
+    
+        # Get the count for the current initial group
+        group_count=$(grep -w "^[[:space:]]*[0-9]*[[:space:]]*$initials$" ${working_dir}/temp/temp_initial_counts.tsv | awk '{print $1}')
+    
+        # Clean the header for processing
+        cleaned_header=$(echo "$original_header" | sed 's/[^a-zA-Z0-9_]//g')
+    
+        new_header=""
+    
+        # Check if this header belongs to an over-threshold group
+        if [ "$group_count" -gt "$max_initial_count" ]; then
+            # Check if the header's own last 5 characters can be used
+            current_last5=$(echo "$cleaned_header" | tail -c 6)
+        
+            # Check if the last 5 chars are a valid length and not already used
+            if [ "${#current_last5}" -eq 5 ] && ! grep -q "^$current_last5$" "$temp_used_ids"; then
+                new_header="$current_last5"
+            else
+                # Fallback to generating a unique ID
+                UNIQUE_ID=$(base62 "$ID_COUNTER")
+                PADDED_ID=$(printf "%05s" "$UNIQUE_ID" | sed 's/ /0/g')
+                new_header="$PADDED_ID"
+                ID_COUNTER=$((ID_COUNTER + 1))
+            fi
+        else
+            # The group is within the limit, use the cleaned header
+            new_header="$cleaned_header"
+        fi
+    
+        # Add the new header to the list of used IDs to prevent future collisions
+        echo "$new_header" >> "$temp_used_ids"
+    
+        # Print to the temporary file use for renamed
+        echo -e "$new_header\t$original_header" >> ${working_dir}/temp/temp_association.tsv
+
+        ProgressBar $State $Total_states
+    done < ${working_dir}/temp/temp_initials_and_headers.tsv
+    echo ""
+
+    # Use seqkit to renames headers
+    echo "    [$(date "+%Y-%m-%d %H:%M:%S")] Updating headers..."
+    awk 'BEGIN {OFS="\t"} {print $2, $1}' ${working_dir}/temp/temp_association.tsv > ${working_dir}/temp/temp_association2.tsv
+    seqkit replace --kv-file ${working_dir}/temp/temp_association2.tsv -p "(.*)" -r "{kv}" "$fasta_path" | seqkit seq --quiet -u > "$output_fasta"
+
+    # Create the final CSV association file
+    sed 's/\t/;/g' ${working_dir}/temp/temp_association.tsv | sed '1s/^/new_header;original_header\n/' > "$association_csv"
+
+    # Create the updated metadata file
+    if $metadata; then
+        local metadata_csv="${working_dir}/metadata_files/metadata.csv"
+        head -n1 $metadata_path > $metadata_csv
+        sed -i -e 's/ElementID/ElemenID;ElementID_updated/' $metadata_csv
+        awk 'BEGIN{FS=OFS=";"}{if($2=="")$2="NA"; else if($3=="")$3="NA"; print}' $metadata_path > ${working_dir}/temp/temp_metadata.csv
+        join -1 2 -2 1 -t ';' <( sort -t ";" -k2,2 $association_csv) <(sort -t ";" -k1,1 ${working_dir}/temp/temp_metadata.csv) >> $metadata_csv
+    else
+        echo "    [$(date "+%Y-%m-%d %H:%M:%S")] Skipping metadata file update..."
+    fi
+}
+
+# Function for gene stats
+gene_stats() {
+    local working_dir="$1"
+
+    # Generate the number of genes and mean length statistic
+    echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${working_dir}/Gene_stats.txt
+    ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line
+    do 
+        echo -e ${line}"\t"$(grep -c "gene" ${working_dir}/Data/Gff/${line}.gff)"\t"$(grep "gene" ${working_dir}/Data/Gff/${line}.gff | awk '{ sum  += $5 - $4 } END { if(NR > 0) {print sum / NR} else {print $0}}')"\t"$(grep "gene" ${working_dir}/Data/Gff/${line}.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = $4 - prev_col2; prev_col2 = $5; if (diff > 0) total_sum += diff} END {if((NR - 1) > 0) {print total_sum / (NR - 1)} else {print 0}}') >> ${working_dir}/Gene_stats.txt 
+    done
+}
+
+organize_info() {
+    local working_dir="$1"
+    local CDS_flag="$2"
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing gene statistic and removing elements with low gene models..."
+    gene_stats "${working_dir}"
+
+    awk -v min="$minimum_gene_content" 'NR>1{if($2>=min){print $1}}' ${working_dir}/Gene_stats.txt | sed $'s/[^[:print:]\t]//g' > ${working_dir}/temp/Good_elements.txt
+    ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff > ${working_dir}/temp/All_elements.txt
+
+    grep -v -f ${working_dir}/temp/Good_elements.txt ${working_dir}/temp/All_elements.txt | while read line
+    do
+        rm ${working_dir}/Data/Gff/${line}.gff
+    done
+
+    echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing info..."
+
+    Total_states=$(ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | wc -l)
+    echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Processing '$Total_states' elements that have at least 8 genes."
+    State=0
+
+    ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line 
+    do
+        State=$(($State + 1))
+        # Dividing nucleotide sequence of elements
+        echo $line > ${working_dir}/temp/temp_element.txt
+        seqkit grep -n -f ${working_dir}/temp/temp_element.txt ${working_dir}/Sequences.fa -o ${working_dir}/Data/Nucleotide/${line}.fa &> /dev/null
+
+        # Creating Exome
+        if $CDS_flag; then
+            agat_sp_extract_sequences.pl --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
+        else
+            agat_sp_extract_sequences.pl --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
+        fi
+
+        awk '{if($2){$1=">"$2} print $1}' ${working_dir}/temp/exon/${line}.fa| sed 's/gene=//g' > ${working_dir}/Data/Exon/${line}.fa
+
+        # Creating proteome
+        seqkit translate ${working_dir}/Data/Exon/${line}.fa --trim > ${working_dir}/Data/Protein/${line}.fa
+
+        rm ${working_dir}/Data/Nucleotide/${line}.fa.index* &> /dev/null
+        ProgressBar $State $Total_states
+    done
+    echo ""
+}
+
+# Function to process 'Simple' input
+Process_simple() {
+    local working_dir="$1"
+    local gff_file="$3"
+    local CDS_flag=false
+
+    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff file..."
+
+    if [[ $(grep -i -c "cds" "${gff_file}") -ge 1 ]]; then
+        CDS_flag=true
+    fi
+
+    cat ${working_dir}/temp/temp_association.tsv | while read line
+    do
+        State=$(($State + 1))     
+        A=$(echo $line | awk '{print $2}')
+        B=$(echo $line | awk '{print $1}')
+        grep $A ${gff_file} | sed s/$A/$B/ >> ${working_dir}/temp/gff_file.gff
+        ProgressBar $State $Total_states
+    done
+
+    gff_file="${working_dir}/temp/gff_file.gff"
+
+    echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff file per element..."
+    local Total_states=$(grep -v "^#" ${gff_file} | sort | uniq | wc -l)
+    local State=0
+
+    grep -v "^#" ${gff_file} | sort | uniq | while read line
+    do
+        State=$(($State + 1))
+        grep "^#" ${gff_file} > ${working_dir}/Data/Gff/${line}.gff
+        grep -w $line ${gff_file} >> ${working_dir}/Data/Gff/${line}.gff
+        ProgressBar $State $Total_states
+    done
+
+    organize_info "$working_dir" "$CDS_flag"
+}
+
+# Function to process 'Starfish' input
+Process_starfish() {
+    local working_dir="$1"
+    local boundaries_path="$2"
+    local gff_path="$3"
+    local CDS_flag=false
+
+    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/ ${working_dir}/temp/gff/
+
+    Total_states=$(wc -l ${working_dir}/temp/temp_association.tsv | awk '{print $1}')
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] processing '$Total_states' elements."
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Creating coordinate file..."
+    State=0
+
+    awk -v s="$separator" 'BEGIN{FS=OFS="\t"}NR>1{split($1,array,s);print $2 OFS array[2] OFS $4 OFS $5 OFS $7 OFS array[1]}' ${boundaries_path} > ${working_dir}/temp/coordinate_file.txt
+    cat ${working_dir}/temp/temp_association.tsv | while read line
+    do
+        State=$(($State + 1))     
+        A=$(echo $line | awk '{print $2}' | awk -F '|' '{print $1}')
+        B=$(echo $line | awk '{print $1}')
+        grep $A ${working_dir}/temp/coordinate_file.txt | sed s/$A/$B/ >> ${working_dir}/Coordinate_file.txt
+        ProgressBar $State $Total_states
+    done
+    
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff files..." 
+    Total_states=$(wc -l ${gff_path} | awk '{print $1}')
+    State=0
+
+    cat ${gff_path} | while read line
+    do
+        State=$(($State + 1))
+        GFF_FILE=$(grep -w "${line}" ${gff_path} | awk '{print $2}')
+        check_gff_file "$(echo $line | awk '{print $2}')"
+        sed -e s/${separator}//g $(echo $line | awk '{print $2}') > ${working_dir}/temp/gff/$(grep -w "${line}" ${gff_path} | awk '{print $1}').gff
+        ProgressBar $State $Total_states
+    done
+
+    if [[ $(grep -i -c "cds" ${working_dir}/temp/gff/$(ls ${working_dir}/temp/gff/ | head -n1)) -ge 1 ]]; then
+        CDS_flag=true
+    fi
+
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff file per element..."
+    Total_states=$(awk '{print $NF}' ${working_dir}/Coordinate_file.txt | sort -u | wc -l)
+    State=0
+    
+    awk '{print $NF}' ${working_dir}/Coordinate_file.txt | sort -u | while read line 
+    do
+        State=$(($State + 1))
+        grep -w $line ${working_dir}/Coordinate_file.txt | cut -d$'\t' -f 1-5 > ${working_dir}/temp/temp_coordinate_file.txt
+        python ${auxiliary_path}/gff_slicer.py -c ${working_dir}/temp/temp_coordinate_file.txt -i ${working_dir}/temp/gff/${line}.gff -o ${working_dir}/Data/Gff/ &> /dev/null
+        ProgressBar $State $Total_states
+    done
+
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Performing Captain identification based on Starfish output captain database using metaeuk..."
+
+    metaeuk createdb ${working_dir}/Sequences.fa ${working_dir}/temp/ContigsDB --dbtype 2 -v 0 &> /dev/null
+    metaeuk createdb $captains_path ${working_dir}/temp/ProteinDB --dbtype 1 -v 0 &> /dev/null
+
+    # Run metaeuk gene prediction
+    metaeuk predictexons ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB  ${working_dir}/temp/metaeukResults ${working_dir}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 0.95 --remove-tmp-files 1 --use-all-table-starts 1 --metaeuk-tcov 0.95 --disk-space-limit 100G &> /dev/null
+    metaeuk reduceredundancy ${working_dir}/temp/metaeukResults ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukgroups -v 0 &> /dev/null
+    metaeuk unitesetstofasta ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukFinal -v 0 &> /dev/null
+
+    sed -e 's/Target_ID=.*;TCS_//g' ${working_dir}/temp/metaeukFinal.gff > ${working_dir}/temp/metaeuk.gff
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Merging gff files..."
+    Total_states=$(grep -v "#" ${working_dir}/temp/metaeuk.gff | awk '{print $1}' | sort -u | wc -l)
+    State=0
+
+    rm ${working_dir}/temp/gff/*
+    mkdir ${working_dir}/temp/modelsKeep/
+
+    grep -v "#" ${working_dir}/temp/metaeuk.gff | awk '{print $1}' | sort -u | while read line 
+    do
+        State=$(($State + 1))
+
+        grep -w "^${line}" ${working_dir}/temp/metaeuk.gff > ${working_dir}/temp/gff/temp_captain_${line}.gff
+        cat ${working_dir}/Data/Gff/${line}.gff ${working_dir}/temp/gff/temp_captain_${line}.gff > ${working_dir}/temp/gff/${line}_merge.gff 
+        python ${auxiliary_path}/merge.py ${working_dir}/temp/gff/${line}_merge.gff ${working_dir}/temp/modelsKeep/${line}.txt &> /dev/null
+        agat_sp_filter_feature_from_keep_list.pl --gff ${working_dir}/temp/gff/${line}_merge.gff  --keep_list ${working_dir}/temp/modelsKeep/${line}.txt --output ${working_dir}/temp/gff/${line}_mergeKeep.gff &> /dev/null
+        rm ${working_dir}/Data/Gff/${line}.gff
+        agat_sp_keep_longest_isoform.pl --gff ${working_dir}/temp/gff/${line}_mergeKeep.gff -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
+
+        ProgressBar $State $Total_states
+    done
+    echo ""
+
+    organize_info "$working_dir" "$CDS_flag"
+}
+
+# ==============================================================================
+# Variables block
+# ==============================================================================
+
 fasta_path=""
+mode="Simple"
 metadata_path=""
+filter="0"
+rip="100"
+minimum_gene_content="8"
+out_directory="WorkingDirectory"
+gff_path=""
+boundaries_path=""
+captains_path=""
+separator=""
 help_flag=false
 
 while [[ $# -gt 0 ]]; do
@@ -29,11 +432,15 @@ while [[ $# -gt 0 ]]; do
 	        shift
 	        fasta_path="$1"
 	        ;;
-         -m|--metadata)
+        -m|--mode)
+            shift
+            mode="$1"
+            ;;
+        -M|--Metadata)
             shift
             metadata_path="$1"
             ;;
-        -g|--gc)
+        -gc|--gc)
             shift
             filter="$1"
             ;;
@@ -41,10 +448,30 @@ while [[ $# -gt 0 ]]; do
             shift
             rip="$1"
             ;;
-	    -n|--name)
+        -mg|--minGene)
             shift
-	        out_directory="$1"
+            minimum_gene_content="$1"
             ;;
+        -o|--outDirectory)
+            shift
+            out_directory="$1"
+            ;;
+        -g|--gff)
+            shift
+            gff_path="$1"
+            ;;
+        -b|--boundaries)
+            shift
+            boundaries_path="$1"
+            ;;
+        -c|--captains)
+            shift
+            captains_path="$1"
+            ;;
+        -s|--separator)
+            shift
+            separator="$1"
+            ;; 
         -help)
             help_flag=true
             ;;
@@ -63,37 +490,90 @@ if $help_flag; then
     exit 0
 fi
 
-# Check for mandatory arguments
-if [[ -z "$fasta_path" ]]; then
-    echo "Error: Missing required arguments."
-    print_help
-    exit 1
-fi
+# ==============================================================================
+# Script start block
+# ==============================================================================
 
-# Check if fasta file exist
-if [[ ! -f "$fasta_path" ]]; then
-    echo "Error: file '$fasta_path' does not exist."
-    exit 1
-else
-    # Check if the path is absolute
-    if [[ ! "${fasta_path:0:1}" == "/" ]]; then
+echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
+echo "  Fasta file: " "$fasta_path"
+echo "  Mode: " "$mode"
+echo "  Minimum %gc: " "$filter"
+echo "  Maximum %RIP-like signal: " "$rip"
+echo "  Minumum gene content: " "$minimum_gene_content"
+echo "  Output directory name: " "$out_directory"
+echo "  Gff file: " "$gff_path"
+echo "  Starfish boundary file: " "$boundaries_path"
+echo "  Starfish captain file: " "$captains_path"
+echo "  Separator used during starfish run: " "$separator"
+echo "  Metadata file: " "$metadata_path" 
+echo ""
+
+# ==============================================================================
+# Check variables block
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
+
+# Check for mandatory arguments
+check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
+if [[ "$mode" == "Simple" ]]; then
+    if [[ -z "$fasta_path" ]]; then
+        echo "Error: Missing required argument(s)."
+        print_help
+        exit 1
+    else
+        check_fasta_dna "$fasta_path"
         fasta_path=$(realpath $fasta_path)
+    fi
+elif [[ "$mode" == "Full" ]]; then
+    if [[ -z "$fasta_path" || -z "$gff_path" ]]; then
+        echo "Error: Missing required argument(s)."
+        print_help
+        exit 1
+    else
+        check_fasta_dna "$fasta_path"
+        fasta_path=$(realpath $fasta_path)
+
+        check_gff_file "$gff_path"
+        gff_path=$(realpath $gff_path)
+    fi
+elif [[ "$mode" == "Starfish" ]]; then
+    if [[ -z "$fasta_path" || -z "$gff_path" || -z "$boundaries_path" || -z "$captains_path" || -z "$separator" ]]; then
+        echo "Error: Missing required argument(s)."
+        print_help
+        exit 1
+    else
+        check_fasta_dna "$fasta_path"
+        fasta_path=$(realpath $fasta_path)
+
+        check_gff_paths "$gff_path"
+        gff_path=$(realpath $gff_path)
+
+        check_boundaries_file "$boundaries_path"
+        boundaries_path=$(realpath $boundaries_path)
+
+        check_fasta_protein "$captains_path"
+        captains_path=$(realpath $captains_path)
+
+        impossible_separator=":;|"
+        impossible_separator_pattern="[${impossible_separator}]"
+        if [[ "${separator}" == "${impossible_separator_pattern}" ]]; then
+            echo "Error: '$separator' is not accepted."
+            exit 1
+        fi
     fi
 fi
 
-# Check if metadata file exist
+# Check metadata file
 if [[ -z "$metadata_path" ]]; then
     metadata=false
 else
-    if [[ ! -f "$metadata_path" ]]; then
-        echo "Error: file '$metadata_path' does not exist."
-        exit 1
-    else
+    check_metadata_file "$metadata_path"
     metadata=true
-    fi
+    metadata_path=$(realpath $metadata_path)
 fi
 
-# Check filter parameter
+# Check filter parameters
 if [[ "$filter" =~ ^[0-9]+$ ]]; then
     if (( $filter != 0 && ($filter < 20 || $filter > 45) )); then
         echo "Error: '$filter' gc content is not an accepted value."
@@ -107,7 +587,7 @@ else
 fi
 
 if [[ "$rip" =~ ^[0-9]+$ ]]; then
-    if (( $rip != 0 && ($rip < 30 || $rip > 80) )); then
+    if (( $rip != 100 && ($rip < 30 || $rip > 80) )); then
         echo "Error: '$rip' rip coverage is not an accepted value."
         print_help
         exit 1
@@ -118,24 +598,11 @@ else
     exit 1
 fi
 
-# Check for rip calculator
-if [[ ! -d "$auxiliary_path" ]]; then
-    echo "Error: directory '$auxiliary_path' does not exist."
-    exit 1
-else
-    auxiliary_path=$(realpath $auxiliary_path)
-    # Check the presence of the specific scripts
-    if [[ ! -f "${auxiliary_path}/rip_calculator.py" ]]; then
-        echo "Error: file '${auxiliary_path}/rip_calculator.py' does not exist."
-        exit 1
-    fi
-fi
+# Check for auxiliary scripts
+check_auxiliary_scripts "$auxiliary_path" "$(basename -s .sh "$0" )"
 
 # Check for required software
-if [[ -z "$(which seqkit)" ]]; then
-    echo "Error: Missing seqkit function."
-    exit 1
-fi
+check_required_software "$(basename -s .sh "$0" )"
 
 # check if output directory exist
 if [[ -d "$out_directory" ]]; then
@@ -143,47 +610,16 @@ if [[ -d "$out_directory" ]]; then
     exit 1
 else
     mkdir $out_directory
+    mkdir -p ${out_directory}/Data ${out_directory}/Workspace ${out_directory}/metadata_files ${out_directory}/temp/ 
 fi
 
 # ==============================================================================
-# Check and prepare fasta file
+# Main Block
 # ==============================================================================
 
-# Character set for generating unique 5-character IDs
-# Using base62 for a wide range of short IDs
-base62_chars="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-id_counter=0
-max_initial_count=25 # Threshold for assigning a new ID
-
-# Function to convert a number to a base-62 string for unique IDs
-base62() {
-    local n=$1
-    local result=""
-    if [ "$n" -eq 0 ]; then
-        echo "0"
-        return
-    fi
-    while [ "$n" -gt 0 ]; do
-        local rem=$((n % 62))
-        local char=${base62_chars:$rem:1}
-        result="$char$result"
-        n=$((n / 62))
-    done
-    printf '%s\n' "$result"
-}
-
+# Check input stage
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking for duplicate headers."
-
-# Verify if ther is any header duplicated.
-seqkit rmdup -n "$fasta_path" -o /dev/null -d temp_duplicated_headers &> /dev/null
-
-if [ -s temp_duplicated_headers ]; then
-    echo "Error: Duplicated headers found. Script terminated." >&2
-    echo "Duplicate headers and their counts:" >&2
-    echo "$duplicated_headers" >&2
-    exit 1
-fi
-
+check_duplicates "$fasta_path" "$out_directory"
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> No duplicate headers found. Proceeding."
 
 # Filter stage
@@ -192,26 +628,12 @@ then
     if [[ $filter == 0 ]]
     then
        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with more than '${rip}' percent of sequence with RIP-like signal."
-       python ${auxiliary_path}/rip_calculator.py "$fasta_path" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${out_directory}/Elements_filterRIPlike.txt
-       removed_elements=$(wc -l ${out_directory}/Elements_filterRIPlike.txt | awk '{print $1}')
-       echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements based on RIP-like signal"
-       seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterRIPlike.txt "$fasta_path" > ${fasta_path}.filtered.fa
-       fasta_path=$(realpath ${fasta_path}.filtered.fa)
+       Filter_input "$fasta_path" "$out_directory" "1"
        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding."
     else
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with gc content below '${filter}' percent or with more than '${rip}' percent of sequence with RIP-like signal."
-        seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${out_directory}/Elements_filterGC.txt
-        removed_elements=$(wc -l ${out_directory}/Elements_filterGC.txt | awk '{print $1}')
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements based on gc content"
-        seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
-
-        python ${auxiliary_path}/rip_calculator.py "${fasta_path}.filtered.fa" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${out_directory}/Elements_filterRIPlike.txt
-        removed_elements=$(wc -l ${out_directory}/Elements_filterRIPlike.txt | awk '{print $1}')
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements based on RIP-like signal"
-        seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterRIPlike.txt "${fasta_path}.filtered.fa" > ${fasta_path}.filtered2.fa
-
-        fasta_path=$(realpath ${fasta_path}.filtered2.fa)
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding."
+        Filter_input "$fasta_path" "$out_directory" "2"
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding..."
     fi
 else
     if [[ $filter == 0 ]]
@@ -219,105 +641,24 @@ else
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] skipping step 2 of gc content and rip filtering..."
     else
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with gc content below '${filter}' percent."
-        seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${out_directory}/Elements_filterGC.txt
-        removed_elements=$(wc -l ${out_directory}/Elements_filterGC.txt | awk '{print $1}')
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering '${removed_elements}' elements"
-        seqkit grep --quiet -n -v -f ${out_directory}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
-        fasta_path=$(realpath ${fasta_path}.filtered.fa)
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding."
+        Filter_input "$fasta_path" "$out_directory" "3"
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding..."
     fi
 fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Processing headers, creating sequence header association file, and updating metadata if available."
+Header_processing "$fasta_path" "$out_directory"
+echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding..."
 
-mkdir -p ${out_directory}/Data ${out_directory}/Workspace ${out_directory}/metadata_files
-
-# Define output file names
-output_fasta="${out_directory}/Sequences.fa"
-association_csv="${out_directory}/metadata_files/sequence_head.csv"
-
-# Create a temporary file with initials and original headers
-seqkit fx2tab --name "$fasta_path" | awk -F'\t' '
-    {
-        original_header = $1
-        cleaned_header = original_header
-        gsub(/[^a-zA-Z0-9_]/, "", cleaned_header)
-        initials = substr(cleaned_header, 1, 5)
-        print initials, original_header
-    }
-' > temp_initials_and_headers.tsv
-
-# Count the occurrences of each 5-char initial group
-awk '{ print $1 }' temp_initials_and_headers.tsv | sort | uniq -c > temp_initial_counts.tsv
-
-# Reset output files to ensure a clean start
-> "$output_fasta"
-echo "new_header;original_header" > "$association_csv"
-
-# Create a temporary file to track used IDs to prevent collisions
-temp_used_ids="temp_used_ids.txt"
-> "$temp_used_ids"
-
-# Loop through all headers and apply the renaming logic
-while read -r initials original_header; do
-    
-    # Get the count for the current initial group
-    group_count=$(grep -w "^[[:space:]]*[0-9]*[[:space:]]*$initials$" temp_initial_counts.tsv | awk '{print $1}')
-    
-    # Clean the header for processing
-    cleaned_header=$(echo "$original_header" | sed 's/[^a-zA-Z0-9_]//g')
-    
-    new_header=""
-    
-    # Check if this header belongs to an over-threshold group
-    if [ "$group_count" -gt "$max_initial_count" ]; then
-        # Check if the header's own last 5 characters can be used
-        current_last5=$(echo "$cleaned_header" | tail -c 6)
-        
-        # Check if the last 5 chars are a valid length and not already used
-        if [ "${#current_last5}" -eq 5 ] && ! grep -q "^$current_last5$" "$temp_used_ids"; then
-            new_header="$current_last5"
-        else
-            # Fallback to generating a unique ID
-            UNIQUE_ID=$(base62 "$ID_COUNTER")
-            PADDED_ID=$(printf "%05s" "$UNIQUE_ID" | sed 's/ /0/g')
-            new_header="$PADDED_ID"
-            ID_COUNTER=$((ID_COUNTER + 1))
-        fi
-    else
-        # The group is within the limit, use the cleaned header
-        new_header="$cleaned_header"
-    fi
-    
-    # Add the new header to the list of used IDs to prevent future collisions
-    echo "$new_header" >> "$temp_used_ids"
-    
-    # Print to the temporary file use for renamed
-    echo -e "$new_header\t$original_header" >> temp_association.tsv
-done < temp_initials_and_headers.tsv
-
-# Use seqkit to renames headers
-awk 'BEGIN {OFS="\t"} {print $2, $1}' temp_association.tsv > temp_association2.tsv
-seqkit replace --kv-file temp_association2.tsv -p "(.*)" -r "{kv}" "$fasta_path" | seqkit seq -u > "$output_fasta"
-
-# Create the final CSV association file
-sed 's/\t/;/g' temp_association.tsv | sed '1s/^/new_header;original_header\n/' > "$association_csv"
-
-# Create the updated metadata file
-if $metadata; then
-    metadata_csv="${out_directory}/metadata_files/metadata.csv"
-    awk 'BEGIN{FS=OFS=";"}{if($2=="")$2="NA"; else if($3=="")$3="NA"; print}' $metadata_path > temp_metadata.csv
-    join -1 2 -2 1 -t ';' <( sort -t ";" -k2,2 $association_csv) <(sort -t ";" -k1,1 temp_metadata.csv) > $metadata_csv
-else
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Skipping metadata file update..."
+# Organize all the files
+if [[ "${mode}" == "Starfish" ]]; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Processing Starfish input files."
+    Process_starfish "$out_directory" "$boundaries_path" "$gff_path"
+elif [[ "${mode}" == "Full" ]]; then
+    Process_simple "$out_directory" "$gff_path"
 fi
 
 # Cleanup temporary file
-rm -r temp*
+rm -r ${out_directory}/temp/
 
-echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Processing complete. Output files created:"
-echo "     - New FASTA file: $output_fasta"
-echo "     - Association file: $association_csv"
-if $metadata; then
-echo "     - Update metadata file: $metadata_csv"
-fi
+echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Process Complete."

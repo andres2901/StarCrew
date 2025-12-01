@@ -1,24 +1,5 @@
 #!/usr/bin/env bash
 
-# ==============================================================================
-# Software check block
-# ==============================================================================
-
-source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
-source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
-
-auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
-if [[ ! -d "$auxiliary_path" ]]; then
-    echo "Error: directory '$auxiliary_path' does not exist."
-    exit 1
-else
-    auxiliary_path=$(realpath $auxiliary_path)
-fi
-
-# ==============================================================================
-# Function block
-# ==============================================================================
-
 # Function to print help message
 function print_help() {
    echo -e "Script to run the syntenet pipeline using DIAMOND for sequence similarity search, summarizes the results, and organizes the output data.
@@ -26,31 +7,342 @@ function print_help() {
    1. Executes the initial data preprocessing step required by the syntenet pipeline.
    2. Runs DIAMOND using the preprocessed data.
    3. Runs the interspecies synteny command of syntenet to identify regions with gene collinearity.
-   4. Summarizes the results of syntenet on four possible modes:
+   4. Summarizes the results of syntenet on three possible modes:
      a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. \033[01;31mWARNING\033[m: This mode may yield a high rate of false positives.
      b. SSP: Return only pairs with strong synteny.
-     c. FilterBlast: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level.
-     d. FilterMetric: Filter and update collinearity based on a metric system.
+     c. Filter: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level.
    5. Defines initial clusters of elements and performs a spectral clustering process to identify potential subclusters.
    6. Organizes the final data output for each identified cluster.
    "
-   echo ""
-   echo "Syntax: SAT $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> ]"
-   echo ""
-   echo "Required args:"
-   echo "-w, --workingDirectory: Specify the working directory where all data are stored."
-   echo ""
-   echo "Required args with Default:"
-   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = FilterMetric) [Available mode: Raw, SSP, FilterBlast, FilterMetric]."
+   echo
+   echo "Syntax: SAT SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> ]"
+   echo "options:"
+   echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
+   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = FilterBlast) [Available mode: Raw, SSP, FilterBlast, FilterMetric]."
    echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
    echo "-s, --minSize: The minimum desired size for any final sub-cluster (Default: 2)."
    echo "-t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
    echo "-th, --threshold: The minimum modularity score for a split to be accepted (Default: 0.05) [range: -0.5 - 1.0]."
-   echo ""
-   echo "Optional args:"
+   echo "-p, --predictionMode: Mode of the gene prediction performed for the data (Default = Quick) [Available mode: Quick, Robust]"
    echo "-help: Display this help message."
+}
+
+# Initialize variables
+Working_directory=""
+mode="FilterBlast"
+auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
+anchorPoints="8"
+gaps="8"
+minSize="2"
+minNodes="4"
+threshold="0.05"
+threads="8"
+predictionMode="Quick"
+help_flag=false
+metadata_flag=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -w|--workingDirectory)
+            shift
+            Working_directory="$1"
+            ;;
+        -m|--mode)
+            shift
+            mode="$1"
+            ;;
+        -a|--anchors)
+            shift
+            anchorPoints="$1"
+            ;;
+        -g|--gaps)
+            shift
+            gaps="$1"
+            ;;
+        -n|--minNodes)
+            shift
+            minNodes="$1"
+            ;;
+        -s|--minSize)
+            shift
+            minSize="$1"
+            ;;
+        -th|--threshold)
+            shift
+            threshold="$1"
+            ;;
+        -t|--threads)
+            shift
+            threads="$1"
+            ;;
+        -p|--predictionMode)
+            shift
+            predictionMode="$1"
+            ;;
+        -help)
+            help_flag=true
+            ;;
+        *)
+            echo "Invalid option: $1"
+            print_help
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Print help if requested
+if $help_flag; then
+    print_help
+    exit 0
+fi
+
+# Check for mandatory argument and define the path as absolute
+if [[ -z "$Working_directory" ]]; then
+    echo "Error: Missing required arguments."
+    print_help
+    exit 1
+fi
+
+# Check if working directory exists
+if [[ ! -d "$Working_directory" ]]; then
+    echo "Error: Directory '$Working_directory' does not exist."
+    exit 1
+else
+    Working_directory=$(realpath $Working_directory)
+fi
+
+# Check if mode parameter is correct
+if [[ "$mode" != "Raw" && "$mode" != "SSP" && "$mode" != "FilterBlast" && "$mode" != "FilterMetric" ]]; then
+    echo "Error: provided mode '$mode' is not accepted."
+    print_help
+    exit 1
+fi
+
+# Check if directory where the python function are stored exists
+if [[ ! -d "$auxiliary_path" ]]; then
+    echo "Error: Directory '$auxiliary_path' does not exist."
+    exit 1
+else
+    auxiliary_path=$(realpath $auxiliary_path)
+fi
+
+# Check if python 'Blast_CleanUp.py' and 'Clustering.py' scripts exists in the given path 
+if [[ "${mode}" == "FilterBlast" ]]; then
+    if [[ ! -f "${auxiliary_path}/Blast_CleanUp.py" ]]; then
+        echo "Error: File '${auxiliary_path}/Blast_CleanUp.py' does not exist."
+        exit 1
+    fi
+fi
+
+if [[ ! -f "${auxiliary_path}/Clustering.py" ]]; then
+    echo "Error: File '${auxiliary_path}/Clustering.py' does not exist."
+    exit 1
+fi
+
+# Check anchor points and maximum gaps are within allowed range
+if [[ "$anchorPoints" =~ ^[0-9]+$ ]]; then
+    if (( anchorPoints < 5 || anchorPoints > 25 )); then
+        echo "Error: '$anchorPoints' anchor points is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$anchorPoints' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+if [[ "$gaps" =~ ^[0-9]+$ ]]; then
+    if (( gaps < 5 || gaps > 25 )); then
+        echo "Error: '$gaps' anchor points is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$gaps' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check parameters for subclustering
+if [[ ! "$minNodes" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$minNodes' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+if [[ ! "$minSize" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$minSize' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+if [[ "$threshold" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
+    if (( $(echo "$threshold < -0.5" | bc -l) )) && (( $(echo "$threshold > 1.0" | bc -l) )); then
+        echo "Error: '$threshold' is not an accepted value for clustering modularity score."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$threshold' is not a float."
+    print_help
+    exit 1
+fi
+
+# Check thread parameter
+if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$threads' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check if prediction mode parameter is correct
+if [[ "$predictionMode" != "Quick" && "$predictionMode" != "Robust" ]]; then
+    echo "Error: provided mode '$predictionMode' is not accepted."
+    print_help
+    exit 1
+fi
+
+# Check for required software
+if [[ -z "$(which python)" ]]; then
+    echo "Error: Missing python function."
+    exit 1
+fi
+
+if [[ -z "$(which Rscript)" ]]; then
+    echo "Error: Missing Rscript function."
+    exit 1
+fi
+
+if [[ -z "$(which diamond)" ]]; then
+    echo "Error: Missing diamond function."
+    exit 1
+fi
+
+if [[ -z "$(which blastn)" ]]; then
+    echo "Error: Missing blastn function."
+    exit 1
+fi
+
+if [[ -z "$(which makeblastdb)" ]]; then
+    echo "Error: Missing makeblastdb function."
+    exit 1
+fi
+
+if [[ -z "$(which blastdb_aliastool)" ]]; then
+    echo "Error: Missing blastdb_aliastool function."
+    exit 1
+fi
+
+if [[ -z "$(which blastdbcmd)" ]]; then
+    echo "Error: Missing blastdbcmd function."
+    exit 1
+fi
+
+
+# ==============================================================================
+# Bash function block
+# ==============================================================================
+
+check_directory_structure() {
+    local base_dir="$1"
+    
+    # Step 1: Locate required subdirectories and file
+    local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+
+    if [[ -z "$workspace_dir" ]]; then
+        echo "Error: Workspace directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+
+    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+
+    if [[ -z "$data_dir" ]]; then
+        echo "Error: Data directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+
+    local metadata_file="${data_dir}/metadata.csv"
+
+    if [[ -f "$metadata_file" ]]; then
+        metadata_flag=true
+    fi
+
+    if [[ -z "$gff_dir" ]]; then
+        echo "Error: GFF subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+
+    if [[ -z "$protein_dir" ]]; then
+        echo "Error: Protein subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+
+    if [[ -z "$nucleotide_dir" ]]; then
+        echo "Error: nucleotide subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+
+    if [[ -z "$exon_dir" ]]; then
+        echo "Error: exon subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+    
+    # Step 2: Check for consistent filenames across subdirectories
+
+    # Define temporary file paths in the working directory
+    local gff_files="$base_dir/gff_files.txt"
+    local protein_files="$base_dir/protein_files.txt"
+    local nucleotide_files="$base_dir/nucleotide_files.txt"
+    local exon_files="$base_dir/exon_files.txt"
+    
+    # Get sorted list of base filenames from the GFF directory
+    find "$gff_dir" -maxdepth 1 -type f -name "*.gff" | xargs -n 1 basename -s .gff | sort > "$gff_files"
+    
+    # Get sorted list of base filenames from the protein directory
+    find "$protein_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$protein_files"
+
+    # Get sorted list of base filenames from the GFF directory
+    find "$nucleotide_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$nucleotide_files"
+    
+    # Get sorted list of base filenames from the protein directory
+    find "$exon_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$exon_files"
+
+    # Compare the lists. If diff finds a difference, it returns a non-zero exit code.
+    if ! diff -q "$gff_files" "$protein_files" >/dev/null || \
+        ! diff -q "$gff_files" "$nucleotide_files" >/dev/null || \
+        ! diff -q "$gff_files" "$exon_files" >/dev/null || \
+        ! diff -q "$protein_files" "$nucleotide_files" >/dev/null || \
+        ! diff -q "$protein_files" "$exon_files" >/dev/null || \
+        ! diff -q "$nucleotide_files" "$exon_files" >/dev/null; then
+        echo "Error: File lists in subdirectories do not match." >&2
+        echo "Details:" >&2
+        echo "GFF vs. Protein:" >&2
+        diff "$gff_files" "$protein_files" >&2
+        echo "GFF vs. nucleotide:" >&2
+        diff "$gff_files" "$nucleotide_files" >&2
+        echo "GFF vs. exon:" >&2
+        diff "$gff_files" "$exon_files" >&2
+        echo "protein vs. nucleotide:" >&2
+        diff "$protein_files" "$nucleotide_files" >&2
+        echo "protein vs. exon:" >&2
+        diff "$protein_files" "$exon_files" >&2
+        echo "nucleotide vs. exon:" >&2
+        diff "$nucleotide_files" "$exon_files" >&2
+        rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"
+        exit 1
+    fi
+
+    # Cleanup temporary files
+    rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"
 }
 
 organize_working_directory() {
@@ -77,11 +369,8 @@ organize_working_directory() {
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
     cp -r ${exon_dir} ${working_dir}
-
-
-    if [[ -f "${data_dir}/metadata.csv" ]]; then
+    if $metadata_flag; then
         cp "${data_dir}/metadata.csv" ${working_dir}
-        metadata_flag=true
     fi
 }
 
@@ -127,14 +416,9 @@ process_diamond() {
     
     # Create a list of all species files to check against
     find "$protein_path" -maxdepth 1 -type f -name "*.fasta" | xargs -n 1 basename -s .fasta > "${temp_dir}all"
-
-    Total_states=${#fasta_files[@]}
-    State=0
     
     for fasta_file in "${fasta_files[@]}"
     do
-        State=$(($State + 1))
-
         local species_name=$(basename "$fasta_file" .fasta)
         local query="$fasta_file"
         local db="$db_file"
@@ -160,10 +444,9 @@ process_diamond() {
         done
 
         rm "${temp_dir}hit"
-        ProgressBar $State $Total_states
+        echo "    [$(date "+%Y-%m-%d %H:%M:%S")] ${species_name} finished Diamond analysis."
     done
-
-    echo ""
+    
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Analysis complete. Results stored in '$diamond_results_dir'."
 }
 
@@ -196,12 +479,9 @@ blastn_all_vs_all() {
     
     # Step 3: Run all-against-all search and append results to output file
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running blastn..."
-    Total_states=$(grep -c ">" "$temp_fasta")
-    State=0
     # Get all sequence headers from the temporary fasta file
     grep ">" "$temp_fasta" | sed 's/>//g' | while read -r line
     do
-        State=$(($State + 1))
         # Create a list of the current query sequence ID
         blastdbcmd -entry "$line" -db "$temp_db" -dbtype nucl -outfmt %i >> "$temp_exclude_1"
         
@@ -216,10 +496,9 @@ blastn_all_vs_all() {
                -evalue 1e-60 -num_threads "$threads" \
                -outfmt "6 qseqid sseqid evalue pident bitscore qstart qend qlen sstart send slen" \
                >> "$output_file"
-        ProgressBar $State $Total_states
+        echo "    [$(date "+%Y-%m-%d %H:%M:%S")] ${line} finished blast analysis."
     done
-
-    echo ""
+    
     echo "   [$(date "+%Y-%m-%d %H:%M:%S")] BLASTN analysis finished. Results are in '$output_file'."
     
     # The trap command will automatically remove temporary files upon function exit.
@@ -307,35 +586,49 @@ process_collinearity() {
         awk -F '/' '{print $NF}' "${temp_prefix}_raw_percentage_general.txt" | sed -e 's/ //g; s/.collinearity//g; s/:/\t/g; s/_/\t/g' > "${temp_prefix}_percentage_general.txt"
 
     # Generate the final result
-    
-    echo -e "element01;element02;General_percentage;element01_percentage;element02_percentage" > "${temp_dir}/Collinearity_percentage.txt"
+    if $metadata_flag; then
+        cut -d ';' -f 2- "${metadata_file}" | sort -t ';' > "${temp_prefix}_metadata.txt"
+        echo -e "element01""\t""element02""\t""General_percentage""\t""element01_percentage""\t""element02_percentage""\t""element01_species""\t""element01_length""\t""element02_species""\t""element02_length" > "${working_dir}/Collinearity_percentage.txt"
+    else
+        echo -e "element01""\t""element02""\t""General_percentage""\t""element01_percentage""\t""element02_percentage" > "${working_dir}/Collinearity_percentage.txt"
+    fi
+
     awk '{if($4>0){print}}' "${temp_prefix}_percentage_general.txt" > "${temp_prefix}_percentage_general_filter.txt"
 
     if [[ "${mode}" == "Raw" ]]
     then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
+        # Here is the error.
+        if $metadata_flag; then
         awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
             "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
             awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | awk '{if($3 >= 8) print}' | \
-            sed -e 's/ /;/g' | sort -t ';' >> "${temp_dir}/Collinearity_percentage.txt"
-        # Here is the error.
-        if $metadata_flag; then
-            python ${auxiliary_path}/merge_metadata.py -d "${temp_dir}/Collinearity_percentage.txt" -m "$metadata_file" -o "${working_dir}/Collinearity_percentage.txt"
+            sed -e 's/ /;/g' | sort -t ';'  >> "${temp_prefix}_Collinearity_percentage.txt"
+        join -t ';' -j 1 -a1 "${temp_prefix}_Collinearity_percentage.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
+        join -t ';' -1 2 -2 1 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         else
-            sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" >> "${working_dir}/Collinearity_percentage.txt"
+            awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
+            "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
+            awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | awk '{if($3 >= 8) print}' | \
+            sed -e 's/ /;/g' | sort -t ';' | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
     elif [[ "${mode}" == "SSP" ]]
     then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
+        if $metadata_flag; then
         awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
             "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
             awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | \
             awk '{if(($3 >= 41) || (($4 >= 45 || $5 >= 45) && ($4/$5 >= 1.8 || $4/$5 <= 0.55 ))) print}' | \
-            sed -e 's/ /;/g' | sort -t ';' >> "${temp_dir}/Collinearity_percentage.txt"
-        if $metadata_flag; then
-            python ${auxiliary_path}/merge_metadata.py -d "${temp_dir}/Collinearity_percentage.txt" -m "$metadata_file" -o "${working_dir}/Collinearity_percentage.txt"
+            sed -e 's/ /;/g' | sort -t ';' > "${temp_prefix}_Collinearity_percentage.txt"
+        join -t ';' -a1 "${temp_prefix}_Collinearity_percentage.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
+        join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         else
-            sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" >> "${working_dir}/Collinearity_percentage.txt" 
+            awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
+            "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
+            awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | \
+            awk '{if(($3 >= 41) || (($4 >= 45 || $5 >= 45) && ($4/$5 >= 1.8 || $4/$5 <= 0.55 ))) print}' | \
+            sed -e 's/ /;/g' | sort -t ';' | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
     elif [[ "${mode}" == "FilterBlast" ]]
     then
@@ -376,11 +669,11 @@ process_collinearity() {
         
         # Final stage
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
-        cat "${temp_prefix}_Collinearity_percentage_filter.txt" >> "${temp_dir}/Collinearity_percentage.txt"
         if $metadata_flag; then
-            python ${auxiliary_path}/merge_metadata.py -d "${temp_dir}/Collinearity_percentage.txt"  -m "$metadata_file" -o "${working_dir}/Collinearity_percentage.txt"
+            join -t ';' -a1 "${temp_prefix}_Collinearity_percentage_filter.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
+            join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         else
-            sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" >> "${working_dir}/Collinearity_percentage.txt"
+            cat "${temp_prefix}_Collinearity_percentage_filter.txt" | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
     elif [[ "${mode}" == "FilterMetric" ]]
     then
@@ -392,12 +685,8 @@ process_collinearity() {
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering results..."
 
-        Total_states=$(($(wc -l "${temp_prefix}_Collinearity_percentage.txt" | awk '{print $1}')) - 1)
-        State=0
-
-        awk 'BEGIN{FS=";";OFS=" "}NR>1{file1=$1"_"$2;file2=$2"_"$1; print file1 OFS file2}' "${temp_prefix}_Collinearity_percentage.txt" | while read line
+        awk 'BEGIN{FS=";";OFS=" "}{file1=$1"_"$2;file2=$2"_"$1; print file1 OFS file2}' "${temp_prefix}_Collinearity_percentage.txt" | while read line
         do
-            State=$(($State + 1))
             grep -E "[0-9]*-.*[0-9]*:" ${collinearity_path}/$(echo $line | awk '{print $1}').collinearity | awk 'BEGIN{FS=OFS="\t"}{print $2 OFS $3}' | sort -u > "${temp_prefix}_collinear1.txt"
             local Max_points=$(($(wc -l "${temp_prefix}_collinear1.txt" | awk '{print $1}') * 2))
             awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' "${temp_prefix}_collinear1.txt" > "${temp_prefix}_collinear2.txt"
@@ -412,18 +701,17 @@ process_collinearity() {
                 local Metric_index=$(echo "print(min(round(${Metric}/${Max_points},2),1))" | python)
                 echo $(echo $line | awk '{split($1,array,"_");print array[1]";"array[2]}')";"${Metric_index} >> "${working_dir}/Metrics_selected.out"
             fi
-            ProgressBar $State $Total_states
         done
-        echo ""
 
-        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' >> "${temp_dir}/Collinearity_percentage.txt"
+        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' > "${temp_prefix}_Collinearity_percentage_filter.txt"
 
         # Final stage
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
         if $metadata_flag; then
-            python ${auxiliary_path}/merge_metadata.py -d "${temp_dir}/Collinearity_percentage.txt"  -m "$metadata_file" -o "${working_dir}/Collinearity_percentage.txt"
+            join -t ';' -a1 "${temp_prefix}_Collinearity_percentage_filter.txt" "${temp_prefix}_metadata.txt" > "${temp_prefix}_join.txt"
+            join -t ';' -1 2 -a1 <( sort -t ';' -k2,2 "${temp_prefix}_join.txt") "${temp_prefix}_metadata.txt" | awk 'BEGIN{FS=";";OFS=";"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -t ';' -r -g -k3,3 | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         else
-            sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" >> "${working_dir}/Collinearity_percentage.txt"
+            cat "${temp_prefix}_Collinearity_percentage_filter.txt" | sed -e 's/;/\t/g' >> "${working_dir}/Collinearity_percentage.txt"
         fi
     fi
 
@@ -459,243 +747,146 @@ process_cluster_file() {
     local OLD_IFS="$IFS"
     IFS=$'\t'
 
-    Total_states=$(($(wc -l "${cluster_path}" | awk '{print $1}')) - 1)
-    State=0
+    if [[ "$predictionMode" == "Quick" ]]
+    then
+        while read -r cluster_id values_string; do
 
-    while read -r cluster_id values_string; do
-        State=$(($State + 1))
-
-        IFS=' ' read -r -a values_array <<< "$values_string"
-
-        echo "Processing: $cluster_id with ${#values_array[@]} elements."
+            IFS=' ' read -r -a values_array <<< "$values_string"
         
-        mkdir -p "${cluster_dir}/${cluster_id}"
-        mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
-        mkdir -p "${cluster_dir}/${cluster_id}/Data"
-        mkdir -p "${cluster_dir}/${cluster_id}/Data/Exon"
-        mkdir -p "${cluster_dir}/${cluster_id}/Data/Nucleotide"
-        mkdir -p "${cluster_dir}/${cluster_id}/Data/Protein"
-        mkdir -p "${cluster_dir}/${cluster_id}/Data/Gff"
-
-        if $metadata_flag; then
-            local updated_metadata="${cluster_dir}/${cluster_id}/Data/metadata.csv"
-        fi
+            echo "Processing: $cluster_id with ${#values_array[@]} elements."
         
-        for value in "${values_array[@]}"; do
-            cp ${gff_dir}/${value}.gff ${cluster_dir}/C${cluster_id}/Gff/
-            cp ${protein_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Protein/
-            cp ${nucleotide_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Nucleotide/    
-            cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Exon/
+            mkdir -p "${cluster_dir}/${cluster_id}"
+            mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data"
+
             if $metadata_flag; then
-                grep -w $value $metadata_file >> $updated_metadata
-                fi        
-        done
+                local updated_metadata="${cluster_dir}/${cluster_id}/Data/metadata.csv"
+            fi
+        
+            for value in "${values_array[@]}"; do
+                cat ${nucleotide_dir}/${value}.fa >> ${cluster_dir}/${cluster_id}/Sequences.fa      
+                if $metadata_flag; then
+                    grep -w $value $metadata_file >> $updated_metadata
+                fi   
+            done
+        done < "$cluster_path"
+    elif [[ "$predictionMode" == "Robust" ]] 
+    then
+        while read -r cluster_id values_string; do
 
-        grep -w ${cluster_id} ${cluster_dir}/cluster_stats.txt >> ${cluster_dir}/SelectedClusters.txt
-        ProgressBar $State $Total_states
-    done < "$cluster_path"
+            IFS=' ' read -r -a values_array <<< "$values_string"
+
+            echo "Processing: $cluster_id with ${#values_array[@]} elements."
+        
+            mkdir -p "${cluster_dir}/${cluster_id}"
+            mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Exon"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Nucleotide"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Protein"
+            mkdir -p "${cluster_dir}/${cluster_id}/Data/Gff"
+
+            if $metadata_flag; then
+                local updated_metadata="${cluster_dir}/${cluster_id}/Data/metadata.csv"
+            fi
+        
+            for value in "${values_array[@]}"; do
+                cp ${gff_dir}/${value}.gff ${cluster_dir}/C${cluster_id}/Gff/
+                cp ${protein_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Protein/
+                cp ${nucleotide_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Nucleotide/    
+                cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Exon/
+                if $metadata_flag; then
+                    grep -w $value $metadata_file >> $updated_metadata
+                fi        
+            done
+
+            grep -w ${cluster_id} ${cluster_dir}/cluster_stats.txt >> ${cluster_dir}/SelectedClusters.txt
+        done < "$cluster_path"
+    fi
 
     # Restore the original IFS at the end of the function.
     IFS="$OLD_IFS"
-    echo ""
     echo "Processing complete."
 }
 
 # ==============================================================================
-# Variables block
+# Start the process
 # ==============================================================================
 
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running Syntenet module analysis in '${mode}' mode."
 
-# Initialize variables
-Working_directory=""
-mode="FilterMetric"
-anchorPoints="8"
-gaps="8"
-minNodes="4"
-minSize="1"
-threshold="0.05"
-threads="8"
-help_flag=false
-metadata_flag=false
+echo "For Syntenet analysis, using the following parameter:"
+echo "  Minimum anchor points: $anchorPoints."
+echo "  Maximum allowed gaps: $gaps."
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -w|--workingDirectory)
-            shift
-            Working_directory="$1"
-            ;;
-        -m|--mode)
-            shift
-            mode="$1"
-            ;;
-        -a|--anchors)
-            shift
-            anchorPoints="$1"
-            ;;
-        -g|--gaps)
-            shift
-            gaps="$1"
-            ;;
-        -n|--minNodes)
-            shift
-            minNodes="$1"
-            ;;
-        -s|--minSize)
-            shift
-            minSize="$1"
-            ;;
-        -th|--threshold)
-            shift
-            threshold="$1"
-            ;;
-        -t|--threads)
-            shift
-            threads="$1"
-            ;;
-        -help)
-            help_flag=true
-            ;;
-        *)
-            echo "Invalid option: $1"
-            print_help
-            exit 1
-            ;;
-    esac
-    shift
-done
+echo "For Subclustering, using the following parameter:"
+echo "  Minimum number of elements in a cluster for subclustering to be attempted: $minNodes."
+echo "  Minimum desired size for any final sub-cluster: $minSize."
+echo "  Minimum modularity score for a split to be accepted: $threshold."
 
-# Print help if requested
-if $help_flag; then
-    print_help
-    exit 0
-fi
-
-# ==============================================================================
-# Script start block
-# ==============================================================================
-
-echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
-echo "  Working directory: " "$Working_directory"
-echo "  Mode: " "$mode"
-echo "  Minimum number of anchor points: " "$anchorPoints"
-echo "  Maximum number of gaps: " "$gaps"
-echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
-echo "  Minimum size of sub-cluster: " "$minSize"
-echo "  Modularity score threshold for Spectral clustering: " "$threshold"
-echo "  Number of threads: " "$threads"
-echo ""
-
-# ==============================================================================
-# Check variables block
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
-
-# Check for mandatory argument and define the path as absolute
-if [[ -z "$Working_directory" ]]; then
-    echo "Error: Missing required arguments."
-    print_help
-    exit 1
-fi
-
-# Check working directory exists
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: Directory '$Working_directory' does not exist."
-    exit 1
-else
-    Working_directory=$(realpath $Working_directory)
-fi
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
 check_directory_structure "${Working_directory}"
-
-# Check if mode parameter is correct
-check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
-
-# Check for auxiliary scripts
-check_auxiliary_scripts "$auxiliary_path" "$(basename -s .sh "$0" )"
-
-# Check anchor points and maximum gaps are within allowed range
-if [[ "$anchorPoints" =~ ^[0-9]+$ ]]; then
-    if (( anchorPoints < 5 || anchorPoints > 25 )); then
-        echo "Error: '$anchorPoints' anchor points is not an accepted value."
-        print_help
-        exit 1
-    fi
-else
-    echo "Error: '$anchorPoints' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-if [[ "$gaps" =~ ^[0-9]+$ ]]; then
-    if (( gaps < 5 || gaps > 25 )); then
-        echo "Error: '$gaps' anchor points is not an accepted value."
-        print_help
-        exit 1
-    fi
-else
-    echo "Error: '$gaps' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-# Check parameters for subclustering
-if [[ ! "$minNodes" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$minNodes' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-if [[ ! "$minSize" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$minSize' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-if [[ "$threshold" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
-    if (( $(echo "$threshold < -0.5" | bc -l) )) && (( $(echo "$threshold > 1.0" | bc -l) )); then
-        echo "Error: '$threshold' is not an accepted value for clustering modularity score."
-        print_help
-        exit 1
-    fi
-else
-    echo "Error: '$threshold' is not a float."
-    print_help
-    exit 1
-fi
-
-# Check thread parameter
-check_threads "$threads"
-
-# Check for required software
-check_required_software "$(basename -s .sh "$0" )"
-
-# ==============================================================================
-# Main Block
-# ==============================================================================
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
+
 organize_working_directory "${Working_directory}"
 
+# ==============================================================================
+# Preprocessing data
+# ==============================================================================
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Preprocessing data for Diamond."
+
 Rscript ${auxiliary_path}/syntenetPreprocess.R "${Working_directory}/Workspace/SyntenyClustering/"
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
+# ==============================================================================
+# Running Diamond analysis
+# ==============================================================================
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running Diamond analysis."
+
 process_diamond "${Working_directory}"
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+# ==============================================================================
+# Running Diamond analysis
+# ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running syntenet analysis."
 Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/SyntenyClustering/" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
+# ==============================================================================
+# Running Diamond analysis
+# ==============================================================================
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Summarizing syntenet results in '${mode}' mode."
+
 process_collinearity "${Working_directory}" "${mode}"
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
+# ==============================================================================
+# Running Clustering analysis
+# ==============================================================================
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Generating element clusters."
+
 python ${auxiliary_path}/Clustering.py -i "${Working_directory}/Workspace/SyntenyClustering/Collinearity_percentage.txt" -o "${Working_directory}/Clusters/" -m "${minSize}" -n "${minNodes}" -t "${threshold}"
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
+# ==============================================================================
+# Running Clusters division
+# ==============================================================================
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Sorting elements from clusters."
+
 process_cluster_file "${Working_directory}"
+
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished synteny and clustering analysis. Data is stored in ${Working_directory}"
