@@ -49,6 +49,12 @@ function print_help() {
    echo "-t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
    echo "-th, --threshold: The minimum modularity score for a split to be accepted (Default: 0.05) [range: -0.5 - 1.0]."
    echo ""
+   echo "Required args with Default in 'FilterBlast' mode:"
+   echo "-fs, --fragmentSize: The minimum fragment size of a blast alignment to be used for blastn filter (Default: 2000) [range: 1000, 5000]."
+   echo "-ms, --mergeSize: The minimum merge fragment size to be used for blastn filter (Default: 5000) [range: 2000, 10000]."
+   echo "-i, --identity: The minimum percentage of identity of a blast alignment to be used for blastn filter (Default: 70.0) [range: 60.0, 90.0]"
+   echo "-c, --coverage: The minimum coverage of the filter merge fragments for a pair to pass the filter (Default: 20.0) [range: 10.0, 50.0]"
+   echo ""
    echo "Optional args:"
    echo "-help: Display this help message."
 }
@@ -361,7 +367,7 @@ process_collinearity() {
         
             # Filter blastn results
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering Blastn results..."
-            python ${auxiliary_path}/Blast_CleanUp.py -f "${working_dir}/BlastnResults.out" -o "${working_dir}BlastnClean.out"
+            python ${auxiliary_path}/Blast_CleanUp.py -f "${working_dir}/BlastnResults.out" -o "${working_dir}BlastnClean.out" -fs "${fragment_size}" -i "${identity}" -ms "${merge_size}" -c "$coverage"
         
             # Filter low syntenic pairs
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering False Positive pairs..."
@@ -458,7 +464,7 @@ process_cluster_file() {
     local OLD_IFS="$IFS"
     IFS=$'\t'
 
-    Total_states=$(($(wc -l "${cluster_path}" | awk '{print $1}') - 1))
+    Total_states=$(wc -l "${cluster_path}" | awk '{print $1}')
     State=0
 
     while read -r cluster_id values_string; do
@@ -478,6 +484,7 @@ process_cluster_file() {
 
         if $metadata_flag; then
             local updated_metadata="${cluster_dir}/${cluster_id}/Data/metadata.csv"
+            head -n1 $metadata_file > $updated_metadata
         fi
         
         for value in "${values_array[@]}"; do
@@ -512,6 +519,10 @@ gaps="8"
 minNodes="4"
 minSize="1"
 threshold="0.05"
+fragment_size="2000"
+merge_size="5000"
+identity="70.0"
+coverage="20.0"
 threads="8"
 help_flag=false
 metadata_flag=false
@@ -545,6 +556,22 @@ while [[ $# -gt 0 ]]; do
         -th|--threshold)
             shift
             threshold="$1"
+            ;;
+        -fs|--fragmentSize)
+            shift
+            fragment_size="$1"
+            ;;
+        -ms|--mergeSize)
+            shift
+            merge_size="$1"
+            ;;
+        -i|--identity)
+            shift
+            identity="$1"
+            ;;
+        -c|--coverage)
+            shift
+            coverage="$1"
             ;;
         -t|--threads)
             shift
@@ -659,6 +686,59 @@ else
     echo "Error: '$threshold' is not a float."
     print_help
     exit 1
+fi
+
+# Check parameters for Blastn filtering
+if [[ $mode == "FilterBlast" ]]; then
+    if [[ "$fragment_size" =~ ^[0-9]+$ ]]; then
+        if (( fragment_size < 1000 || fragment_size > 5000 )); then
+            echo "Error: '$fragment_size' is not an accepted value for fragment size."
+            print_help
+            exit 1
+        fi
+    else
+        echo "Error: '$fragment_size' is not a positive integer."
+        print_help
+        exit 1
+    fi
+    if [[ "$merge_size" =~ ^[0-9]+$ ]]; then
+        if (( merge_size < 2000 || gaps > 10000 )); then
+            echo "Error: '$merge_size' is not an accepted value for merge size."
+            print_help
+            exit 1
+        fi
+    else
+        echo "Error: '$merge_size' is not a positive integer."
+        print_help
+        exit 1
+    fi
+    if [[ "$fragment_size" -gt "$merge_size" ]]; then
+        echo "Error: fragment size cannot be greater than merge size."
+        print_help
+        exit 1
+    fi
+    if [[ "$identity" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
+        if (( $(echo "$identity < 60.0" | bc -l) )) && (( $(echo "$identity > 90.0" | bc -l) )); then
+            echo "Error: '$identity' is not an accepted value for clustering modularity score."
+            print_help
+            exit 1
+        fi
+    else
+        echo "Error: '$identity' is not a float."
+        print_help
+        exit 1
+    fi
+    if [[ "$coverage" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
+        if (( $(echo "$coverage < 10.0" | bc -l) )) && (( $(echo "$coverage > 50.0" | bc -l) )); then
+            echo "Error: '$coverage' is not an accepted value for clustering modularity score."
+            print_help
+            exit 1
+        fi
+    else
+        echo "Error: '$coverage' is not a float."
+        print_help
+        exit 1
+    fi
 fi
 
 # Check thread parameter

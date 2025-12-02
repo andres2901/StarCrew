@@ -8,7 +8,7 @@ function print_help() {
    1. Run earlgrey TE prediction.
    2. Organize the results."
    echo
-   echo "Syntax: SAT TEPrediction [ -help ] -w <directory_path> -d <file_path> [ -m <string> -t <integer> ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> -d <file_path> [ -m <string> -t <integer> ]"
    echo "options:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo "-d, --database: Mycomobilome database to be use (Default = allConsensus) [Available type: allConsensus, proteinEvidence, unknown]."

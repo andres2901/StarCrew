@@ -31,7 +31,7 @@ fi
 function print_help() {
    echo "Script to organize the working directory to run the subsequent commands in the workflow."
    echo ""
-   echo "Syntax: SAT $(basename -s .sh "$0" ) [ -help ] -f <filte_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -g <file_path> -b <file_path> -s <character> -c <file_path> -M <file_path> ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -f <filte_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -g <file_path> -b <file_path> -s <character> -c <file_path> -M <file_path> ]"
    echo ""
    echo "Required args:"
    echo "-f, --fasta:  multifasta file wih the elements to study."

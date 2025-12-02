@@ -91,7 +91,7 @@ function print_help() {
    -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
    "
    echo
-   echo "Syntax: SAT $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
@@ -440,14 +440,11 @@ Removed_empty_elements() {
 check_clusters() {
     local base_dir="$1"
 
-    local cluster_information="${base_dir}/Clusters/SelectedClusters.txt"
+    local cluster_information="${base_dir}/Clusters/Cluster_stats.txt"
 
     if [[ ! -f $cluster_information ]]; then
-        echo "Error: SelectedClusters.txt file does not exist in '${base_dir}/Clusters/'."
+        echo "Error: Cluster_stats.txt file does not exist in '${base_dir}/Clusters/'."
         exit 1
-    else
-        Cluster_number=$(wc -l "$cluster_information" | awk '{print $1}')
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters.\n"
     fi
 }
 
@@ -633,6 +630,10 @@ then
         echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
         exit 1
     fi
+    if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
+        Removed_empty_elements "${internal_dir}"
+        echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
+    fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
@@ -673,7 +674,7 @@ then
 elif [[ "${mode}" == "Cluster" ]]
 then
     check_clusters "${Working_directory}"
-    awk '{print $1}' ${Working_directory}/Clusters/SelectedClusters.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
+    awk 'NR>1{if($ > 2) print $1}' ${Working_directory}/Clusters/Cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
@@ -713,16 +714,10 @@ then
         check_phylogeny "${internal_dir}"
         if $phylogeny_flag; then
             echo -e "\033[01;31mWARNING\033[m: There's no captain phylogeny file, this cluster needs to be manually checked."
+            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
         else
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run. Storing this cluster for further analysis."
             grep -w ${ClusterId} ${Working_directory}/Clusters/SelectedClusters.txt >> ${Working_directory}/Clusters/ClustersAnalyzed.txt
-        fi
-
-        if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
-            Removed_empty_elements "${internal_dir}"
-            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
-            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
-        else
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
         fi
     done

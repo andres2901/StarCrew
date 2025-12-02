@@ -4,7 +4,6 @@
 # Software check block
 # ==============================================================================
 
-source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
@@ -38,10 +37,15 @@ function print_help() {
    8. Determine if there are discordances at 'Clade' lavel between Cargo hierarchical clustering and Captain phylogenetic tree.
    "
    echo
-   echo "Syntax: SAT ClusterCharacterization [ -help ] -w <directory_path> [ -t <integer> ]"
-   echo "options:"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -t <integer> ]"
+   echo ""
+   echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
+   echo ""
+   echo "Required args with Default:"
    echo "-t, --threads: Number of threads for orthofinder and blast (Default: 8)"
+   echo ""
+   echo "Optional args:"
    echo "-help: Display this help message."
 }
 
@@ -261,12 +265,6 @@ fi
 
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
-echo "  Mode: " "$mode"
-echo "  Minimum number of anchor points: " "$anchorPoints"
-echo "  Maximum number of gaps: " "$gaps"
-echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
-echo "  Minimum size of sub-cluster: " "$minSize"
-echo "  Modularity score threshold for Spectral clustering: " "$threshold"
 echo "  Number of threads: " "$threads"
 echo ""
 
