@@ -285,7 +285,7 @@ run_braker_second() {
 
     local working_dir="${base_dir}/Workspace/RobustGenePrediction/"
 
-    braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --threads=8 --workingdir ${working_dir}/braker --useexisting &> /dev/null
+    braker --genome ${fasta_path} --softmasking_off --downsampling_lambda=0 --prot_seq ${working_dir}/Selected_database.fa --gff3 --fungus --threads=${threads} --workingdir ${working_dir}/braker --useexisting &> /dev/null
 }
 
 check_braker() {

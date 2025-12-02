@@ -15,6 +15,14 @@ else
     auxiliary_path=$(realpath $auxiliary_path)
 fi
 
+agat_config="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../agat_config.yaml"
+if [[ ! -f "$agat_config" ]]; then
+    echo "Error: file '$agat_config' does not exist."
+    exit 1
+else
+    agat_config=$(realpath $agat_config)
+fi
+
 # ==============================================================================
 # Function block
 # ==============================================================================
@@ -262,9 +270,9 @@ organize_info() {
 
         # Creating Exome
         if $CDS_flag; then
-            agat_sp_extract_sequences.pl --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
+            agat_sp_extract_sequences.pl --config ${agat_config} --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
         else
-            agat_sp_extract_sequences.pl --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
+            agat_sp_extract_sequences.pl --config ${agat_config} --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
         fi
 
         awk '{if($2){$1=">"$2} print $1}' ${working_dir}/temp/exon/${line}.fa| sed 's/gene=//g' > ${working_dir}/Data/Exon/${line}.fa
@@ -398,9 +406,9 @@ Process_starfish() {
         grep -w "^${line}" ${working_dir}/temp/metaeuk.gff > ${working_dir}/temp/gff/temp_captain_${line}.gff
         cat ${working_dir}/Data/Gff/${line}.gff ${working_dir}/temp/gff/temp_captain_${line}.gff > ${working_dir}/temp/gff/${line}_merge.gff 
         python ${auxiliary_path}/merge.py ${working_dir}/temp/gff/${line}_merge.gff ${working_dir}/temp/modelsKeep/${line}.txt &> /dev/null
-        agat_sp_filter_feature_from_keep_list.pl --gff ${working_dir}/temp/gff/${line}_merge.gff  --keep_list ${working_dir}/temp/modelsKeep/${line}.txt --output ${working_dir}/temp/gff/${line}_mergeKeep.gff &> /dev/null
+        agat_sp_filter_feature_from_keep_list.pl --config ${agat_config} --gff ${working_dir}/temp/gff/${line}_merge.gff  --keep_list ${working_dir}/temp/modelsKeep/${line}.txt --output ${working_dir}/temp/gff/${line}_mergeKeep.gff &> /dev/null
         rm ${working_dir}/Data/Gff/${line}.gff
-        agat_sp_keep_longest_isoform.pl --gff ${working_dir}/temp/gff/${line}_mergeKeep.gff -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
+        agat_sp_keep_longest_isoform.pl --config ${agat_config} --gff ${working_dir}/temp/gff/${line}_mergeKeep.gff -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
 
         ProgressBar $State $Total_states
     done

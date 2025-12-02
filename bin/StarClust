@@ -6,10 +6,11 @@ show_main_help() {
   echo
   echo "Available commands:"
   echo "  Initialize    - Gather the input and organize the working directory to run this toolkit."
-  echo "  QuickGenePrediction    - Performs a quick gene prediction with metaeuk." # Remove
+#  echo "  QuickGenePrediction    - Performs a quick gene prediction with metaeuk." # Remove
   echo "  SyntenyClustering    - Perform the clustering of elements based on collinear regions."
-  echo "  BrakerGenePrediction    - Performs gene prediciton with BRAKER." # Remove
-  echo "  RobustGenePrediction    - Filter the BRAKER gene prediction, Performs a metaeuk captain prediction, and merge both results." # Remove
+  echo "  OrthogroupsClustering    - Perform the clustering of elements based on orthogroups."
+#  echo "  BrakerGenePrediction    - Performs gene prediciton with BRAKER." # Remove
+#  echo "  RobustGenePrediction    - Filter the BRAKER gene prediction, Performs a metaeuk captain prediction, and merge both results." # Remove
   echo "  TEPrediction    - Identify putative TEs in elements with EarlGrey approach and Mycomobilome database."
   echo "  CaptainIdentification    - Performs the identification and phylogenetic analysis of Captains of the elements."
   echo "  ClusterCharacterization    - Analyzed and visualized each cluster that had a captain phylogenetic tree."

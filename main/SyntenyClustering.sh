@@ -164,7 +164,6 @@ process_diamond() {
     done
 
     echo ""
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Analysis complete. Results stored in '$diamond_results_dir'."
 }
 
 blastn_all_vs_all() {
@@ -392,7 +391,7 @@ process_collinearity() {
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering results..."
 
-        Total_states=$(($(wc -l "${temp_prefix}_Collinearity_percentage.txt" | awk '{print $1}')) - 1)
+        Total_states=$(($(wc -l "${temp_prefix}_Collinearity_percentage.txt" | awk '{print $1}') - 1))
         State=0
 
         awk 'BEGIN{FS=";";OFS=" "}NR>1{file1=$1"_"$2;file2=$2"_"$1; print file1 OFS file2}' "${temp_prefix}_Collinearity_percentage.txt" | while read line
@@ -429,19 +428,19 @@ process_collinearity() {
 
     # Remove temporary data
     rm -rf ${temp_prefix}*
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Processing complete. Final report saved to ${working_dir}/Collinearity_percentage.txt"
 }
 
 process_cluster_file() {
     local base_dir="$1"
+    local data_dir="${base_dir}/Data/"
 
     local cluster_dir="${base_dir}/Clusters/"
     local working_dir="${base_dir}/Workspace/SyntenyClustering/"
     
-    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local exon_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     if $metadata_flag; then
         local metadata_file="${working_dir}/metadata.csv"
@@ -459,7 +458,7 @@ process_cluster_file() {
     local OLD_IFS="$IFS"
     IFS=$'\t'
 
-    Total_states=$(($(wc -l "${cluster_path}" | awk '{print $1}')) - 1)
+    Total_states=$(($(wc -l "${cluster_path}" | awk '{print $1}') - 1))
     State=0
 
     while read -r cluster_id values_string; do
@@ -467,7 +466,7 @@ process_cluster_file() {
 
         IFS=' ' read -r -a values_array <<< "$values_string"
 
-        echo "Processing: $cluster_id with ${#values_array[@]} elements."
+        #echo "Processing: $cluster_id with ${#values_array[@]} elements."
         
         mkdir -p "${cluster_dir}/${cluster_id}"
         mkdir -p "${cluster_dir}/${cluster_id}/Workspace"
@@ -482,16 +481,15 @@ process_cluster_file() {
         fi
         
         for value in "${values_array[@]}"; do
-            cp ${gff_dir}/${value}.gff ${cluster_dir}/C${cluster_id}/Gff/
-            cp ${protein_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Protein/
-            cp ${nucleotide_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Nucleotide/    
-            cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Exon/
+            cp ${gff_dir}/${value}.gff ${cluster_dir}/${cluster_id}/Data/Gff/
+            cp ${protein_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Data/Protein/
+            cp ${nucleotide_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Data/Nucleotide/    
+            cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Data/Exon/
             if $metadata_flag; then
                 grep -w $value $metadata_file >> $updated_metadata
                 fi        
         done
 
-        grep -w ${cluster_id} ${cluster_dir}/cluster_stats.txt >> ${cluster_dir}/SelectedClusters.txt
         ProgressBar $State $Total_states
     done < "$cluster_path"
 
@@ -698,4 +696,4 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Sorting elements from clusters."
 process_cluster_file "${Working_directory}"
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished synteny and clustering analysis. Data is stored in ${Working_directory}"
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished synteny and clustering analysis."

@@ -1,31 +1,12 @@
 #!/usr/bin/env bash
 
-# ==============================================================================
-# Software check block
-# ==============================================================================
-
-source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
-source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
-
-auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
-if [[ ! -d "$auxiliary_path" ]]; then
-    echo "Error: directory '$auxiliary_path' does not exist."
-    exit 1
-else
-    auxiliary_path=$(realpath $auxiliary_path)
-    check_auxiliary_scripts "${auxiliary_path}" "$(basename -s .sh "$0" )"
-fi
-
-# ==============================================================================
-# Function block
-# ==============================================================================
-
 # Function to print help message
+
 function print_help() {
    echo -e "Script to run the characterization of each selected cluster.
-   This script perform eight steps per cluster to analyzed:
-   1. Identify orthogroups through OrthoFinder.
-   2. Perform all-vs-all Blastn for synteny visualization.
+   This script perform eight steps:
+   1. Identify orthogroups through OrthoFinder software.
+   2. Perform all-vs-all Blastn.
    3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
    4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny image for the cluster.
    5. Identify possible individual nesting events inside the cluster.
@@ -33,9 +14,9 @@ function print_help() {
      6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
      6.2. Specific core: Orthogroups that are present in at least 80% of the elements for subclusters generated at a 0.8 height of the hierarchical tree of cargo content.
        6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
-       6.2.2. If subslusters are presen, identify core genes in each one that have at least 5 elements using the same logic of general core.
-   7. If subclusters are present it try to identify putative cargo movement events and try to avoid 'General core' genes.
-   8. Determine if there are discordances at 'Clade' lavel between Cargo hierarchical clustering and Captain phylogenetic tree.
+       6.2.2. If subslusters are generated identify core genes in each one that have at least 5 elements using the same logic of general core.
+   7. If subclusters are present it try to identify putative cargo movement events including the specific orthogroups involve.
+   8. Determine if there are discordances at 'Clade' lavel between CArgo hierarchical clustering and Captain phylogenetic tree.
    "
    echo
    echo "Syntax: SAT ClusterCharacterization [ -help ] -w <directory_path> [ -t <integer> ]"
@@ -45,7 +26,102 @@ function print_help() {
    echo "-help: Display this help message."
 }
 
-# Modify this part when I have finish the SyntenyClustering fix
+# Initialize variables
+
+Working_directory=""
+mode="Raw"
+auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
+threads="8"
+help_flag=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -w|--workingDirectory)
+            shift
+            Working_directory="$1"
+            ;;
+        -t|--threads)
+            shift
+            threads="$1"
+            ;;
+        -help)
+            help_flag=true
+            ;;
+        *)
+            echo "Invalid option: $1"
+            print_help
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Print help if requested
+if $help_flag; then
+    print_help
+    exit 0
+fi
+
+# Check for mandatory argument and define the path as absolute
+if [[ -z "$Working_directory" ]]; then
+    echo "Error: Missing required arguments."
+    print_help
+    exit 1
+fi
+
+# Check if working directory exists
+if [[ ! -d "$Working_directory" ]]; then
+    echo "Error: Directory '$Working_directory' does not exist."
+    exit 1
+else
+    Working_directory=$(realpath $Working_directory)
+fi
+
+# Check if directory where the R function are stored exists
+if [[ ! -d "$auxiliary_path" ]]; then
+    echo "Error: Directory '$auxiliary_path' does not exist."
+    exit 1
+else
+    auxiliary_path=$(realpath $auxiliary_path)
+fi
+
+if [[ ! -f "${auxiliary_path}/ClusterAnalysis.R" ]]; then
+    echo "Error: File '${auxiliary_path}/ClusterAnalysis.R' does not exist."
+    exit 1
+fi
+
+# Check thread parameter
+if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$threads' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check for software presence
+if [[ -z "$(which Rscript)" ]]; then
+    echo "Error: Missing Rscript function."
+    exit 1
+fi
+
+if [[ -z "$(which blastn)" ]]; then
+    echo "Error: Missing blastn function."
+    exit 1
+fi
+
+if [[ -z "$(which makeblastdb)" ]]; then
+    echo "Error: Missing makeblastdb function."
+    exit 1
+fi
+
+if [[ -z "$(which orthofinder)" ]]; then
+    echo "Error: Missing orthofinder function."
+    exit 1
+fi
+
+# ==============================================================================
+# Bash function block
+# ==============================================================================
+
 check_clusters() {
     local base_dir="$1"
 
@@ -60,8 +136,96 @@ check_clusters() {
     fi
 }
 
-check_captain_information() {
-    local base_dir="$1"   
+check_directory_structure() {
+    local base_dir="$1"
+    
+    # Locate required subdirectories and file
+    local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+
+    if [[ -z "$workspace_dir" ]]; then
+        echo "Error: Workspace directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+
+    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+
+    if [[ -z "$data_dir" ]]; then
+        echo "Error: Data directory not found in '$base_dir'." >&2
+        exit 1
+    fi
+    
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+
+    if [[ -z "$gff_dir" ]]; then
+        echo "Error: GFF subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+
+    if [[ -z "$protein_dir" ]]; then
+        echo "Error: Protein subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+
+    if [[ -z "$nucleotide_dir" ]]; then
+        echo "Error: nucleotide subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+
+    if [[ -z "$exon_dir" ]]; then
+        echo "Error: exon subdirectory not found in '$data_dir'." >&2
+        exit 1
+    fi
+
+    # Step 2: Check for consistent filenames across subdirectories
+
+    # Define temporary file paths in the working directory
+    local gff_files="$base_dir/gff_files.txt"
+    local protein_files="$base_dir/protein_files.txt"
+    local nucleotide_files="$base_dir/nucleotide_files.txt"
+    local exon_files="$base_dir/exon_files.txt"
+    
+    # Get sorted list of base filenames from the GFF directory
+    find "$gff_dir" -maxdepth 1 -type f -name "*.gff" | xargs -n 1 basename -s .gff | sort > "$gff_files"
+    
+    # Get sorted list of base filenames from the protein directory
+    find "$protein_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$protein_files"
+
+    # Get sorted list of base filenames from the GFF directory
+    find "$nucleotide_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$nucleotide_files"
+    
+    # Get sorted list of base filenames from the protein directory
+    find "$exon_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$exon_files"
+
+    # Compare the lists. If diff finds a difference, it returns a non-zero exit code.
+    if ! diff -q "$gff_files" "$protein_files" >/dev/null || \
+        ! diff -q "$gff_files" "$nucleotide_files" >/dev/null || \
+        ! diff -q "$gff_files" "$exon_files" >/dev/null || \
+        ! diff -q "$protein_files" "$nucleotide_files" >/dev/null || \
+        ! diff -q "$protein_files" "$exon_files" >/dev/null || \
+        ! diff -q "$nucleotide_files" "$exon_files" >/dev/null; then
+        echo "Error: File lists in subdirectories do not match." >&2
+        echo "Details:" >&2
+        echo "GFF vs. Protein:" >&2
+        diff "$gff_files" "$protein_files" >&2
+        echo "GFF vs. nucleotide:" >&2
+        diff "$gff_files" "$nucleotide_files" >&2
+        echo "GFF vs. exon:" >&2
+        diff "$gff_files" "$exon_files" >&2
+        echo "protein vs. nucleotide:" >&2
+        diff "$protein_files" "$nucleotide_files" >&2
+        echo "protein vs. exon:" >&2
+        diff "$protein_files" "$exon_files" >&2
+        echo "nucleotide vs. exon:" >&2
+        diff "$nucleotide_files" "$exon_files" >&2
+        rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"
+        exit 1
+    fi
+
+    # Cleanup temporary files
+    rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"   
 
     local captainPhylogeny="${base_dir}/CaptainPhylogeny.nw"
 
@@ -219,101 +383,27 @@ check_movement() {
 }
 
 # ==============================================================================
-# Variables block
+# Start the process
 # ==============================================================================
 
-# Initialize variables
-Working_directory=""
-threads="8"
-help_flag=false
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -w|--workingDirectory)
-            shift
-            Working_directory="$1"
-            ;;
-        -t|--threads)
-            shift
-            threads="$1"
-            ;;
-        -help)
-            help_flag=true
-            ;;
-        *)
-            echo "Invalid option: $1"
-            print_help
-            exit 1
-            ;;
-    esac
-    shift
-done
-
-# Print help if requested
-if $help_flag; then
-    print_help
-    exit 0
-fi
-
-# ==============================================================================
-# Script start block
-# ==============================================================================
-
-echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
-echo "  Working directory: " "$Working_directory"
-echo "  Mode: " "$mode"
-echo "  Minimum number of anchor points: " "$anchorPoints"
-echo "  Maximum number of gaps: " "$gaps"
-echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
-echo "  Minimum size of sub-cluster: " "$minSize"
-echo "  Modularity score threshold for Spectral clustering: " "$threshold"
-echo "  Number of threads: " "$threads"
-echo ""
-
-# ==============================================================================
-# Check variables block
-# ==============================================================================
-
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
-
-# Check for mandatory argument and define the path as absolute
-if [[ -z "$Working_directory" ]]; then
-    echo "Error: Missing required arguments."
-    print_help
-    exit 1
-fi
-
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: Directory '$Working_directory' does not exist."
-    exit 1
-else
-    Working_directory=$(realpath $Working_directory)
-fi
-check_directory_structure "${Working_directory}"
-
-# Check thread parameter
-check_threads "$threads"
-
-# Check for software presence
-check_required_software "$(basename -s .sh "$0" )"
-
-# ==============================================================================
-# Main Block
-# ==============================================================================
-
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterCharacterization Module."
 check_clusters "${Working_directory}"
 
-# Modify this part when I have finish the SyntenyClustering fix
 awk '{print $1}' ${Working_directory}/Clusters/ClustersAnalyzed.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
 do
     internal_dir="${Working_directory}/Clusters/${ClusterId}/"
     subcluster_number=$(grep -w ${ClusterId} ${Working_directory}/Clusters/ClustersAnalyzed.txt | awk '{print $3}' | sed $'s/[^[:print:]\t]//g')
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
     check_directory_structure "${internal_dir}"
-    check_captain_information "${internal_dir}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
     
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
     organize_working_directory "${internal_dir}"
+
+    # ==============================================================================
+    # Running orthofinder
+    # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running orthofinder..."
     run_orthofinder "${internal_dir}"
@@ -325,9 +415,17 @@ do
     fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
+    # ==============================================================================
+    # Running blast
+    # ==============================================================================
+
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running blast for nucleotide synteny..."
     run_blast "${internal_dir}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+    # ==============================================================================
+    # Running characterization
+    # ==============================================================================
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running characterization of the cluster..."
     Rscript ${auxiliary_path}/ClusterAnalysis.R -d "${internal_dir}/Workspace/ClusterCharacterization/" -s "${subcluster_number}" -c $captainremoval_number
