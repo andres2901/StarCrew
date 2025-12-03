@@ -8,76 +8,13 @@ source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
 database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
-if [[ ! -d "$database_path" ]]; then
-    echo "Error: Directory '$database_path' does not exist."
-    exit 1
-else
-    database_path=$(realpath $database_path)
-    if [[ ! -d "${database_path}/Foldseek/" ]]; then
-        echo "Error: Directory 'Foldseek' does not exist in '$database_path'."
-        exit 1
-    else
-        foldseek_path="${database_path}/Foldseek/"
-        if [[ "$foldseekdb" != "pdb" && "$foldseekdb" != "afdb_swissprot" ]]; then
-            echo "Error: '$foldseekdb' is not accepted as a foldseek database."
-            print_help
-            exit 1
-        fi
-
-        if [[ ! -d "$foldseek_path/weights/" ]]; then
-            echo "Error: Directory 'weights' does not exist in '${foldseek_path}'."
-            exit 1
-        fi
-
-        if [[ ! -f "$foldseek_path/${foldseekdb}" ]]; then
-            echo "Error: 'pdb' database does not exist in '${foldseek_path}'."
-            exit 1
-        fi
-
-        if [[ "$foldseekdb" == "pdb" ]]; then
-            if [[ ! -f "$foldseek_path/entries_update.idx" ]]; then
-                echo "Error: 'entries_update.idx' file does not exist in '${foldseek_path}'."
-                exit 1
-            fi
-        fi
-
-        if [[ "$foldseekdb" == "afdb_swissprot" ]]; then
-            if [[ ! -f "$foldseek_path/Accession_swissprot.txt" ]]; then
-                echo "Error: 'Accession_swissprot.txt' file does not exist in '${foldseek_path}'."
-                exit 1
-            fi
-        fi
-    fi
-
-    if [[ ! -d "${database_path}/hhsuite/" ]]; then
-        echo "Error: Directory 'hhsuite' does not exist in '$database_path'."
-        exit 1
-    else
-        hhsuite_path="${database_path}/hhsuite/"
-        if [[ ! -f "$hhsuite_path/pfam.md5sum" ]]; then
-            echo "Error: 'pfam' database does not exist in '${hhsuite_path}'."
-            exit 1
-        fi
-    fi
-fi
+check_databases "${database_path}" "$(basename -s .sh "$0" )"
+foldseek_path="${database_path}/Foldseek/"
+hhsuite_path="${database_path}/hhsuite/"
 
 Interpro_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../interproscan-5.76-107.0/"
-if [[ ! -d "$Interpro_path" ]]; then
-    echo "Error: Directory '$Interpro_path' does not exist."
-    exit 1
-else
-    Interpro_path=$(realpath $Interpro_path)
-    if [[ ! -f "${Interpro_path}/interproscan-5.jar" ]]; then
-        echo "Error: interproscan jar file is not available in the '${Interpro_path}' folder."
-        exit 1
-    fi
-    if [[ ! -d "${Interpro_path}/data/" ]]; then
-        echo "Error: data directory is not available in the '$Interpro_path' folder."
-        exit 1
-    else
-        if [[ ! -d "${Interpro_path}/data/" ]]; then #Applications: CDD,Gene3D,HAMAP,PANTHER,Pfam,PIRSF,PRINTS,PROSITEPATTERNS,PROSITEPROFILES,SFLD,SMART,SUPERFAMILY,TIGRFAM
-    fi
-fi
+check_intrepro_software "${Interpro_path}"
+Interpro_path=$(realpath $Interpro_path)
 
 # ==============================================================================
 # Function block
@@ -115,123 +52,6 @@ function print_help() {
    echo "Optional args:"
    echo "-help: Display this help message."
 }
-
-# Initialize variables
-
-Working_directory=""
-clusters_file=""
-mode="All"
-foldseekdb="afdb_swissprot"
-threads="8"
-help_flag=false
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -w|--workingDirectory)
-            shift
-            Working_directory="$1"
-            ;;
-        -m|--mode)
-            shift
-            mode="$1"
-            ;;
-        -c|--clusters)
-            shift
-            clusters_file="$1"
-            ;;
-        -t|--threads)
-            shift
-            threads="$1"
-            ;;
-        -f|--foldseekdb)
-            shift
-            foldseekdb="$1"
-            ;;
-        -help)
-            help_flag=true
-            ;;
-        *)
-            echo "Invalid option: $1"
-            print_help
-            exit 1
-            ;;
-    esac
-    shift
-done
-
-# Print help if requested
-if $help_flag; then
-    print_help
-    exit 0
-fi
-
-# Check for mandatory argument and define the path as absolute
-if [[ -z "$Working_directory" || -z "$clusters_file" ]]; then
-    echo "Error: Missing required arguments."
-    print_help
-    exit 1
-fi
-
-# Check if working directory exists
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: Directory '$Working_directory' does not exist."
-    exit 1
-else
-    Working_directory=$(realpath $Working_directory)
-fi
-
-# Check if InterPro directory exists
-if [[ ! -d "$Interpro_path" ]]; then
-    echo "Error: Directory '$Interpro_path' does not exist."
-    exit 1
-else
-    Interpro_path=$(realpath $Interpro_path)
-fi
-
-# Check if cluster file exist
-if [[ ! -f "$clusters_file" ]]; then
-    echo "Error: File '$clusters_file' does not exist."
-    exit 1
-else
-    clusters_file=$(realpath $clusters_file)
-fi
-
-# Check if mode parameter is correct
-if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" ]]; then
-    echo "Error: provided mode '$mode' is not accepted."
-    print_help
-    exit 1
-fi
-
-# Check thread parameter
-if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$threads' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-# Check if database directory exists
-
-
-# Check for required software
-if [[ -z "$(which mafft)" ]]; then
-    echo "Error: Missing mafft function."
-    exit 1
-fi
-
-if [[ -z "$(which foldseek)" ]]; then
-    echo "Error: Missing foldseek function."
-    exit 1
-fi
-
-if [[ -z "$(which hhblits)" ]]; then
-    echo "Error: Missing hhblits function."
-    exit 1
-fi
-
-# ==============================================================================
-# Bash function block
-# ==============================================================================
 
 check_clusters() {
     # Modify based on the input file to compare with the current set of Clusters ID 
@@ -462,15 +282,129 @@ create_summary_table(){
 }
 
 # ==============================================================================
-# Start the process
+# Variables block
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running ClusterCharacterization Module with the following parameters:"
-echo "  Mode: ${mode}"
-echo "  Foldseek Database: ${foldseekdb}"
-echo -e "  threads: ${threads}\n"
+# Initialize variables
+Working_directory=""
+clusters_file=""
+mode="All"
+foldseekdb="afdb_swissprot"
+threads="8"
+help_flag=false
 
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -w|--workingDirectory)
+            shift
+            Working_directory="$1"
+            ;;
+        -m|--mode)
+            shift
+            mode="$1"
+            ;;
+        -c|--clusters)
+            shift
+            clusters_file="$1"
+            ;;
+        -t|--threads)
+            shift
+            threads="$1"
+            ;;
+        -f|--foldseekdb)
+            shift
+            foldseekdb="$1"
+            ;;
+        -help)
+            help_flag=true
+            ;;
+        *)
+            echo "Invalid option: $1"
+            print_help
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Print help if requested
+if $help_flag; then
+    print_help
+    exit 0
+fi
+
+# ==============================================================================
+# Script start block
+# ==============================================================================
+
+echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
+echo "  Working directory: " "$Working_directory"
+echo "  Cluster file: " "$clusters_file"
+echo "  Mode: " "$mode"
+echo "  Foldseek database: " "$foldseekdb"
+echo "  Number of threads: " "$threads"
+echo ""
+
+# ==============================================================================
+# Check variables block
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
+
+# Check for mandatory argument and define the path as absolute
+if [[ -z "$Working_directory" || -z "$clusters_file" ]]; then
+    echo "Error: Missing required arguments."
+    print_help
+    exit 1
+fi
+
+# Check if working directory exists
+if [[ ! -d "$Working_directory" ]]; then
+    echo "Error: Directory '$Working_directory' does not exist."
+    exit 1
+else
+    Working_directory=$(realpath $Working_directory)
+fi
+check_directory_structure "${Working_directory}"
+
+# Check if cluster file exist
+if [[ ! -f "$clusters_file" ]]; then
+    echo "Error: File '$clusters_file' does not exist."
+    exit 1
+else
+    clusters_file=$(realpath $clusters_file)
+fi
 check_clusters "${Working_directory}" "${clusters_file}"
+
+# Check if mode parameter is correct
+if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" ]]; then
+    echo "Error: provided mode '$mode' is not accepted."
+    print_help
+    exit 1
+fi
+
+# Check thread parameter
+if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$threads' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check if database directory exists
+if [[ "$foldseekdb" != "pdb" && "$foldseekdb" != "afdb_swissprot" ]]; then
+    echo "Error: '$foldseekdb' is not accepted as a foldseek database."
+    print_help
+    exit 1
+else
+    check_foldseek_databases "${foldseek_path}" "${foldseekdb}"
+fi
+
+# Check for required software
+check_required_software "$(basename -s .sh "$0" )"
+
+# ==============================================================================
+# Main Block
+# ==============================================================================
 
 cat ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
 do

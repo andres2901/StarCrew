@@ -57,14 +57,6 @@ else
     fi
 fi
 
-agat_config="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../agat_config.yaml"
-if [[ ! -f "$agat_config" ]]; then
-    echo "Error: file '$agat_config' does not exist."
-    exit 1
-else
-    agat_config=$(realpath $agat_config)
-fi
-
 # ==============================================================================
 # Function block
 # ==============================================================================
@@ -102,6 +94,9 @@ function print_help() {
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
    echo "-r, --rangeKb:The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]"
    echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
+   echo ""
+   echo "Required args with Default in 'Cluster' mode:"
+   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
    echo ""
    echo "Optional args:"
    echo "-help: Display this help message."
@@ -154,24 +149,31 @@ process_hmmsearch() {
     
     # Get a list of all species filenames without the .fa extension
     local fa_files=( $(find "$protein_path" -maxdepth 1 -type f -name "*.fa") )
+
+    Total_states=${#fa_files[@]}
+    State=0
     
     for fa_file in "${fa_files[@]}"
     do
+        State=$(($State + 1))
+
         local species_name=$(basename "$fa_file" .fa)
         local query="$fa_file"
         local outfileCAPTAIN="${hmmer_results_CAPTAIN}/${species_name}.txt"
         local outfileDUF="${hmmer_results_DUF}/${species_name}.txt"
         local outfileCAT="${hmmer_results_CAT}/${species_name}.txt"
 
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking at element '${species_name}'"
+        #echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking at element '${species_name}'"
         
         # Perform profile search
         hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAPTAIN} ${CAPTAIN_hmm} ${query} >/dev/null
         hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileDUF} ${DUF_hmm} ${query} >/dev/null
         hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAT} ${CAT_hmm} ${query} >/dev/null
+
+        ProgressBar $State $Total_states
     done
 
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Analysis complete. Results stored in '$working_dir'."
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Analysis complete."
     return 0
 }
 
@@ -188,7 +190,7 @@ Captain_identification() {
     local results_path="${working_dir}/CaptainsID.txt"
     local empty_elements="${working_dir}/EmptyElements.txt"
 
-    python ${auxiliary_path}/hmmscan_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}" --range_kb "${range}"
+    python ${auxiliary_path}/hmmscan_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}" --range_kb "${range}" >/dev/null
 }
 
 Captain_pseudogene() {
@@ -220,14 +222,19 @@ Captain_pseudogene() {
     if [ -s "${empty_elements}" ]; then
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] \033[01;31mWARNING\033[m: Not all elements have an identifible captain. Trying to identify a region possibly associated to a captain pseudogene..."
 
+        Total_states=$(wc -l ${empty_elements} | awk '{print $1}')
+        local Full_range=$(( ${range} * 1000 ))
+        State=0
+
         #Search for possible pseudogenes in the empty elements
         mkdir -p ${temp_dir}/blast
         cat ${empty_elements} | while read line 
-        do 
+        do
+            State=$(($State + 1))
             # Search for captain pseudogene at the beginning in the positive strand
-            echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking for captain pseudogene in element '${line}'"
+            #echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking for captain pseudogene in element '${line}'"
 
-            seqkit subseq --quiet -r 1:20000 ${nucleotide_path}/${line}.fa > ${temp_dir}/blast/${line}_start.fa
+            seqkit subseq --quiet -r 1:${Full_range} ${nucleotide_path}/${line}.fa > ${temp_dir}/blast/${line}_start.fa
 
             makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null
 
@@ -266,7 +273,7 @@ Captain_pseudogene() {
                 seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
             else
                 # Search for captain pseudogene at the end in the negative strand
-                seqkit subseq --quiet -r -20000:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
+                seqkit subseq --quiet -r -${Full_range}:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
                 makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
 
                 blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
@@ -307,9 +314,12 @@ Captain_pseudogene() {
                     echo "${line}" >> ${Remove_elements}
                 fi
             fi 
-        done
 
-        rm ${nucleotide_path}/*seqkit*
+            ProgressBar $State $Total_states
+        done
+        echo ""
+
+        rm ${nucleotide_path}/*seqkit* > /dev/null
     else
         rm ${empty_elements}
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] All elements have a confident captain gene model"
@@ -440,11 +450,13 @@ Removed_empty_elements() {
 check_clusters() {
     local base_dir="$1"
 
-    local cluster_information="${base_dir}/Clusters/Cluster_stats.txt"
+    local cluster_information="${base_dir}/Clusters/cluster_stats.txt"
 
     if [[ ! -f $cluster_information ]]; then
-        echo "Error: Cluster_stats.txt file does not exist in '${base_dir}/Clusters/'."
+        echo "Error: cluster_stats.txt file does not exist in '${base_dir}/Clusters/'."
         exit 1
+    else
+        Cluster_number=$(awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | wc -l)
     fi
 }
 
@@ -471,6 +483,7 @@ length="250"
 level="2"
 range="10"
 threads="1"
+minimum_size="4"
 help_flag=false
 
 while [[ $# -gt 0 ]]; do
@@ -498,6 +511,10 @@ while [[ $# -gt 0 ]]; do
         -t|--threads)
             shift
             threads="$1"
+            ;;
+        -m|--minSize)
+            shift
+            minimum_size="$1"
             ;;
         -help)
             help_flag=true
@@ -530,6 +547,7 @@ echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
 echo "  Minimum size of sub-cluster: " "$minSize"
 echo "  Modularity score threshold for Spectral clustering: " "$threshold"
 echo "  Number of threads: " "$threads"
+echo "  Minimum size of a Cluster to analyzed in 'Cluster' mode: " "${minimum_size}"
 echo ""
 
 # ==============================================================================
@@ -581,8 +599,14 @@ else
     exit 1
 fi
 
+if [[ ! "$minimum_size" =~ ^[0-9]+$ || $minimum_size -lt 4 || $minimum_size -gt 10 ]]; then
+    echo "Error: '$minimum_size' minimum size is not an accepted value."
+    print_help
+    exit 1
+fi
+
 if [[ "$range" =~ ^[0-9]+$ ]]; then
-    if (( $range < 3 || $length > 20 )); then
+    if (( $range < 3 || $range > 20 )); then
         echo "Error: '$range' range is not an accepted value."
         print_help
         exit 1
@@ -674,7 +698,8 @@ then
 elif [[ "${mode}" == "Cluster" ]]
 then
     check_clusters "${Working_directory}"
-    awk 'NR>1{if($ > 2) print $1}' ${Working_directory}/Clusters/Cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters."
+    awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
@@ -711,13 +736,19 @@ then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+
+        if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
+            Removed_empty_elements "${internal_dir}"
+            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
+        fi
+
         check_phylogeny "${internal_dir}"
         if $phylogeny_flag; then
             echo -e "\033[01;31mWARNING\033[m: There's no captain phylogeny file, this cluster needs to be manually checked."
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
         else
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run. Storing this cluster for further analysis."
-            grep -w ${ClusterId} ${Working_directory}/Clusters/SelectedClusters.txt >> ${Working_directory}/Clusters/ClustersAnalyzed.txt
+            grep -w ${ClusterId} ${Working_directory}/Clusters/cluster_stats.txt >> ${Working_directory}/Clusters/ClustersAnalyzed.txt
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
         fi
     done

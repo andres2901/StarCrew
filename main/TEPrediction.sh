@@ -1,7 +1,21 @@
 #!/usr/bin/env bash
 
-# Function to print help message
+# ==============================================================================
+# Software check block
+# ==============================================================================
 
+source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
+source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
+
+database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
+check_databases "${database_path}" "$(basename -s .sh "$0" )"
+database_path="$(realpath $database_path)""MycoMobilome_db/"
+
+# ==============================================================================
+# Function block
+# ==============================================================================
+
+# Function to print help message
 function print_help() {
    echo "Script to predict TEs in the sequences based on earlgrey approach and Mycomobilome database.
    This script perform two steps:
@@ -9,154 +23,21 @@ function print_help() {
    2. Organize the results."
    echo
    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> -d <file_path> [ -m <string> -t <integer> ]"
-   echo "options:"
-   echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
+   echo ""
+   echo "Required args:"
+   echo "-w, --workingDirectory: Specify the working directory where all data are stored."
+   echo ""
+   echo "Required args with Default:"
    echo "-d, --database: Mycomobilome database to be use (Default = allConsensus) [Available type: allConsensus, proteinEvidence, unknown]."
    echo "-m, --mode: Define the data that will be use for the TE prediction. This can be perform for all the data or for each cluster (Default = Cluster) [Available mode: Cluster, All]."
-   echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID (required in mode Cluster)."
    echo "-t, --threads: Number of threads for earlgrey (Default = 8)"
+   echo ""
+   echo "Required args in 'Cluster' mode:"
+   echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID."
+   echo ""
+   echo "Optional args:"
    echo "-help: Display this help message."
 }
-
-# Initialize variables
-
-Working_directory=""
-clusters_file=""
-mode="Cluster"
-database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/MycoMobilome_db/"
-database="allConsensus"
-threads="8"
-help_flag=false
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-	    -w|--workingDirectory) 
-	        shift
-	        Working_directory="$1"
-	        ;; 
-        -m|--mode)
-            shift
-            mode="$1"
-            ;;
-        -d|--database)
-            shift
-            database="$1"
-            ;;
-        -c|--clusters)
-            shift
-            clusters_file="$1"
-            ;;
-        -t|--threads)
-            shift
-            threads="$1"
-            ;;
-        -help)
-            help_flag=true
-            ;;
-        *)
-            echo "Invalid option: $1"
-            print_help
-            exit 1
-            ;;
-    esac
-    shift
-done
-
-# Print help if requested
-
-if $help_flag; then
-    print_help
-    exit 0
-fi
-
-# Check for mandatory arguments
-
-if [[ -z "$Working_directory" || -z "$clusters_file" ]]; then
-    echo "Error: Missing required arguments."
-    print_help
-    exit 1
-fi
-
-# check if working directory exist
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: folder '$Working_directory' does not exist."
-    exit 1
-else
-    # Check if the path is absolute
-    if [[ ! "${Working_directory:0:1}" == "/" ]]; then
-        Working_directory=$(realpath $Working_directory)
-    fi
-fi
-
-# Check if database directory exists
-if [[ ! -d "$database_path" ]]; then
-    echo "Error: file '$database_path' does not exist."
-    exit 1
-else
-    # Check if the path is absolute
-    if [[ ! "${database_path:0:1}" == "/" ]]; then
-        database_path=$(realpath $database_path)
-    fi
-fi
-
-# Check if dabatabase parameter is correct
-if [[ "$database" != "allConsensus" && "$database" != "proteinEvidence" && "$database" != "unknown"  ]]; then
-    echo "Error: provided database type '$database' is not accepted."
-    print_help
-    exit 1
-else
-    # Check if database file exist 
-    if [[ ! -z $(find "$database_path" -maxdepth 1 -type f -name "*${database}*" 2>/dev/null) ]]; then
-        echo "Error: file '$database_path' does not exist."
-        exit 1
-    else
-        database_path=$(realpath $(find "$database_path" -maxdepth 1 -type f -name "*${database}*" 2>/dev/null))
-    fi
-fi
-
-# Check if mode parameter is correct
-if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
-    echo "Error: provided mode '$mode' is not accepted."
-    print_help
-    exit 1
-else
-    if [[ "$mode" != "Cluster" ]]; then
-        if [[ -z "$clusters_file" ]]; then
-            echo "Error: In 'Cluster' mode, a file with Cluster IDs is required."
-            print_help
-            exit 1
-        else
-            if [[ ! -f "$clusters_file" ]]; then
-                echo "Error: File '$clusters_file' does not exist."
-                exit 1
-            else
-                clusters_file=$(realpath $clusters_file)
-            fi
-        fi
-    fi
-fi
-
-# Check thread parameter
-if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$threads' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-# Check for software presence
-if [[ -z "$(which earlGreyAnnotationOnly)" ]]; then
-    echo "Error: Missing earlGreyAnnotationOnly function."
-    exit 1
-fi
-
-if [[ -z "$(which seqkit)" ]]; then
-    echo "Error: Missing seqkit function."
-    exit 1
-fi
-
-# ==============================================================================
-# Bash function block
-# ==============================================================================
 
 check_directory_structure() {
     local base_dir="$1"
@@ -252,7 +133,158 @@ check_clusters() {
 }
 
 # ==============================================================================
-# Start the process
+# Variables block
+# ==============================================================================
+
+# Initialize variables
+Working_directory=""
+clusters_file=""
+mode="Cluster"
+database="allConsensus"
+threads="8"
+help_flag=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+	    -w|--workingDirectory) 
+	        shift
+	        Working_directory="$1"
+	        ;; 
+        -m|--mode)
+            shift
+            mode="$1"
+            ;;
+        -d|--database)
+            shift
+            database="$1"
+            ;;
+        -c|--clusters)
+            shift
+            clusters_file="$1"
+            ;;
+        -t|--threads)
+            shift
+            threads="$1"
+            ;;
+        -help)
+            help_flag=true
+            ;;
+        *)
+            echo "Invalid option: $1"
+            print_help
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Print help if requested
+if $help_flag; then
+    print_help
+    exit 0
+fi
+
+# ==============================================================================
+# Script start block
+# ==============================================================================
+
+echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
+echo "  Working directory: " "$Working_directory"
+echo "  Number of threads: " "$threads"
+echo ""
+
+# ==============================================================================
+# Check variables block
+# ==============================================================================
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
+
+# Check for mandatory arguments
+if [[ -z "$Working_directory" || -z "$clusters_file" ]]; then
+    echo "Error: Missing required arguments."
+    print_help
+    exit 1
+fi
+
+# check if working directory exist
+if [[ ! -d "$Working_directory" ]]; then
+    echo "Error: folder '$Working_directory' does not exist."
+    exit 1
+else
+    # Check if the path is absolute
+    if [[ ! "${Working_directory:0:1}" == "/" ]]; then
+        Working_directory=$(realpath $Working_directory)
+    fi
+fi
+
+# Check if database directory exists
+if [[ ! -d "$database_path" ]]; then
+    echo "Error: file '$database_path' does not exist."
+    exit 1
+else
+    # Check if the path is absolute
+    if [[ ! "${database_path:0:1}" == "/" ]]; then
+        database_path=$(realpath $database_path)
+    fi
+fi
+
+# Check if dabatabase parameter is correct
+if [[ "$database" != "allConsensus" && "$database" != "proteinEvidence" && "$database" != "unknown"  ]]; then
+    echo "Error: provided database type '$database' is not accepted."
+    print_help
+    exit 1
+else
+    # Check if database file exist 
+    if [[ ! -z $(find "$database_path" -maxdepth 1 -type f -name "*${database}*" 2>/dev/null) ]]; then
+        echo "Error: file '$database_path' does not exist."
+        exit 1
+    else
+        database_path=$(realpath $(find "$database_path" -maxdepth 1 -type f -name "*${database}*" 2>/dev/null))
+    fi
+fi
+
+# Check if mode parameter is correct
+if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
+    echo "Error: provided mode '$mode' is not accepted."
+    print_help
+    exit 1
+else
+    if [[ "$mode" != "Cluster" ]]; then
+        if [[ -z "$clusters_file" ]]; then
+            echo "Error: In 'Cluster' mode, a file with Cluster IDs is required."
+            print_help
+            exit 1
+        else
+            if [[ ! -f "$clusters_file" ]]; then
+                echo "Error: File '$clusters_file' does not exist."
+                exit 1
+            else
+                clusters_file=$(realpath $clusters_file)
+            fi
+        fi
+    fi
+fi
+
+# Check thread parameter
+if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$threads' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+# Check for software presence
+if [[ -z "$(which earlGreyAnnotationOnly)" ]]; then
+    echo "Error: Missing earlGreyAnnotationOnly function."
+    exit 1
+fi
+
+if [[ -z "$(which seqkit)" ]]; then
+    echo "Error: Missing seqkit function."
+    exit 1
+fi
+
+# ==============================================================================
+# Main Block
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running RobustGenePrediction Module with the following parameters:"

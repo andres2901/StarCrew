@@ -220,7 +220,7 @@ blastn_all_vs_all() {
                -gapopen 8 -gapextend 6 -reward 5 -penalty -4 \
                -evalue 1e-60 -num_threads "$threads" \
                -outfmt "6 qseqid sseqid evalue pident bitscore qstart qend qlen sstart send slen" \
-               >> "$output_file"
+               >> "$output_file" 2>/dev/null
         ProgressBar $State $Total_states
     done
 
