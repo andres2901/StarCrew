@@ -53,7 +53,7 @@ function print_help() {
    echo "-g, --gff: Path to the GFF file containing gene predictions with element-relative coordinates for all elements in the fasta file."
    echo ""
    echo "Optional args:"
-   echo "-M, --Metadata: csv file delimited by semicolon without headers with the information of the elements as follows: seqID;species;seqlength (optional)."
+   echo "-M, --Metadata: csv file delimited by semicolon with the metadata information: ElemenID;<data1>;<data2>;...."
    echo "-help: Display this help message."
 }
 
@@ -292,7 +292,7 @@ Process_simple() {
     local gff_file="$3"
     local CDS_flag=false
 
-    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/
+    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/ ${working_dir}/temp/gff/
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff file..."
 
@@ -319,7 +319,8 @@ Process_simple() {
     do
         State=$(($State + 1))
         grep "^#" ${gff_file} > ${working_dir}/Data/Gff/${line}.gff
-        grep -w $line ${gff_file} >> ${working_dir}/Data/Gff/${line}.gff
+        grep -w $line ${gff_file} >> ${working_dir}/temp/gff/${line}.gff
+        agat_sp_manage_IDs.pl --config ${agat_config} --gff ${working_dir}/temp/gff/${line}.gff --prefix ${line}. -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
         ProgressBar $State $Total_states
     done
 
@@ -333,7 +334,7 @@ Process_starfish() {
     local gff_path="$3"
     local CDS_flag=false
 
-    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/ ${working_dir}/temp/gff/
+    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/ ${working_dir}/temp/gff/ ${working_dir}/temp/gff2/
 
     Total_states=$(wc -l ${working_dir}/temp/temp_association.tsv | awk '{print $1}')
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] processing '$Total_states' elements."
@@ -368,7 +369,7 @@ Process_starfish() {
         CDS_flag=true
     fi
 
-    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff file per element..."
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Extracting gene model information per element..."
     Total_states=$(awk '{print $NF}' ${working_dir}/Coordinate_file.txt | sort -u | wc -l)
     State=0
     
@@ -377,6 +378,18 @@ Process_starfish() {
         State=$(($State + 1))
         grep -w $line ${working_dir}/Coordinate_file.txt | cut -d$'\t' -f 1-5 > ${working_dir}/temp/temp_coordinate_file.txt
         python ${auxiliary_path}/gff_slicer.py -c ${working_dir}/temp/temp_coordinate_file.txt -i ${working_dir}/temp/gff/${line}.gff -o ${working_dir}/Data/Gff/ &> /dev/null
+        ProgressBar $State $Total_states
+    done
+
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Updating elements gff file..."
+    Total_states=$(ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | wc -l)
+    State=0
+    
+    ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line 
+    do
+        State=$(($State + 1))
+        sed -i -e "s/ID=/ID=${line}\./g" -e "s/Parent=/Parent=${line}\./g" ${working_dir}/Data/Gff/${line}.gff
+        #agat_sp_manage_IDs.pl --config ${agat_config} --gff ${working_dir}/temp/gff2/${line}.gff --prefix ${line}. -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
         ProgressBar $State $Total_states
     done
 
@@ -403,8 +416,12 @@ Process_starfish() {
     do
         State=$(($State + 1))
 
-        grep -w "^${line}" ${working_dir}/temp/metaeuk.gff > ${working_dir}/temp/gff/temp_captain_${line}.gff
-        cat ${working_dir}/Data/Gff/${line}.gff ${working_dir}/temp/gff/temp_captain_${line}.gff > ${working_dir}/temp/gff/${line}_merge.gff 
+        echo "#gff version-3" > ${working_dir}/temp/gff/temp_captain_${line}.gff
+
+        grep -w "^${line}" ${working_dir}/temp/metaeuk.gff >> ${working_dir}/temp/gff/temp_captain_${line}.gff
+        agat_sp_manage_IDs.pl --config ${agat_config} --gff ${working_dir}/temp/gff/temp_captain_${line}.gff --prefix ${line}.metaeuk -o ${working_dir}/temp/gff/temp_captain2_${line}.gff &> /dev/null
+        cp ${working_dir}/Data/Gff/${line}.gff ${working_dir}/temp/gff/${line}_merge.gff
+        grep -v "^#" ${working_dir}/temp/gff/temp_captain2_${line}.gff >> ${working_dir}/temp/gff/${line}_merge.gff 
         python ${auxiliary_path}/merge.py ${working_dir}/temp/gff/${line}_merge.gff ${working_dir}/temp/modelsKeep/${line}.txt &> /dev/null
         agat_sp_filter_feature_from_keep_list.pl --config ${agat_config} --gff ${working_dir}/temp/gff/${line}_merge.gff  --keep_list ${working_dir}/temp/modelsKeep/${line}.txt --output ${working_dir}/temp/gff/${line}_mergeKeep.gff &> /dev/null
         rm ${working_dir}/Data/Gff/${line}.gff
@@ -526,15 +543,6 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
 if [[ "$mode" == "Simple" ]]; then
     if [[ -z "$fasta_path" ]]; then
-        echo "Error: Missing required argument(s)."
-        print_help
-        exit 1
-    else
-        check_fasta_dna "$fasta_path"
-        fasta_path=$(realpath $fasta_path)
-    fi
-elif [[ "$mode" == "Full" ]]; then
-    if [[ -z "$fasta_path" || -z "$gff_path" ]]; then
         echo "Error: Missing required argument(s)."
         print_help
         exit 1

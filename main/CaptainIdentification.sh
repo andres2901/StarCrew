@@ -89,17 +89,35 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: specified the mode (Default = Cluster) [Available mode: Cluster, FullAll, AllID]."
+   echo "-m, --mode: specified the mode (Default = AllID) [Available mode: Cluster, FullAll, AllID]."
    echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 250) [range: 200 - 800]."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
    echo "-r, --rangeKb:The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]"
-   echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
    echo ""
    echo "Required args with Default in 'Cluster' mode:"
    echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
    echo ""
    echo "Optional args:"
+   echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
    echo "-help: Display this help message."
+}
+
+Check_previous_information() {
+    local base_dir="$1"
+
+    local captain_dir="${base_dir}/Captain_Information/"
+
+    if [[ ! -f "${captain_dir}/Captains_exon.fa" ]]; then
+        return 0
+    else
+        check_fasta_dna "${captain_dir}/Captains_exon.fa"
+    fi
+
+    if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
+        check_fasta_dna "${captain_dir}/Captains_exon.fa"
+    fi
+
+    Previous_captain_run=true
 }
 
 organize_working_directory() {
@@ -124,6 +142,18 @@ organize_working_directory() {
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
     cp -r ${exon_dir} ${working_dir}
+
+    if ${Previous_captain_run}; then
+        local captain_dir="${base_dir}/Captain_Information/"
+
+        if [[ -f "${captain_dir}/Captains_exon.fa" ]]; then
+            cp "${captain_dir}/Captains_exon.fa" ${working_dir}
+        fi
+
+        if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
+            cp "${captain_dir}/Captains_pseudo.fa" ${working_dir}
+        fi
+    fi
 }
 
 process_hmmsearch() {
@@ -413,7 +443,7 @@ Tree_inference() {
         gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_dir}/captainlength.nw
 
         # Root tree
-        gotree reroot midpoint -i ${temp_dir}/captainlength.nw -o ${base_dir}/CaptainPhylogeny.nw
+        gotree reroot midpoint -i ${temp_dir}/captainlength.nw -o ${working_dir}/CaptainPhylogeny.nw
     else
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] There's only one unique sequence in the current dataset. Skipping tree inference."
     fi
@@ -472,19 +502,45 @@ check_phylogeny() {
     fi
 }
 
+organize_information() {
+    local base_dir="$1"
+    local working_dir="${base_dir}/Workspace/CaptainIdentification"
+
+    local Captain_dir="${base_dir}/Captain_Information/"
+    mkdir -p ${Captain_dir}
+
+    if [[ ! -d "${working_dir}" ]]; then
+        echo "Error in working directory"
+    fi
+
+    if [[ -f "${working_dir}/Captains_exon.fa" ]]; then
+        cp ${working_dir}/CaptainsID.txt ${Captain_dir}
+        cp ${working_dir}/Captains_exon.fa ${Captain_dir}
+    fi
+
+    if [[ -f "${working_dir}/Captains_pseudo.fa" ]]; then
+        cp ${working_dir}/Captains_pseudo.fa ${Captain_dir}
+    fi
+
+    if ! $phylogeny_flag; then
+        cp "${Working_dir}/CaptainPhylogeny.nw" ${Captain_dir}
+    fi
+}
+
 # ==============================================================================
 # Variables block
 # ==============================================================================
 
 # Initialize variables
 Working_directory=""
-mode="Cluster"
+mode="AllID"
 length="250"
 level="2"
 range="10"
 threads="1"
 minimum_size="4"
 help_flag=false
+Previous_captain_run=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -632,45 +688,53 @@ check_required_software "$(basename -s .sh "$0" )"
 
 if [[ "${mode}" == "FullAll" ]]
 then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking if there is data of a previous run..."
+    Check_previous_information "${Working_directory}"
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
     organize_working_directory "${Working_directory}"
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmscan."
-    process_hmmsearch "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+    if ! $Previous_captain_run; then
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmscan."
+        process_hmmsearch "${Working_directory}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmscan results."
-    Captain_identification "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmscan results."
+        Captain_identification "${Working_directory}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
-    Captain_pseudogene "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
+        Captain_pseudogene "${Working_directory}"
+        if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
+            Removed_empty_elements "${internal_dir}"
+            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
+        fi
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
+    else
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] There's information from a previous run. Steps 1, 2 and 3 will be skipped..."
+    fi
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
     Alignment "${Working_directory}"
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
+
     if $captainless_flag; then
         echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
         exit 1
     fi
-    if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
-        Removed_empty_elements "${internal_dir}"
-        echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
-    fi
+
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
     Tree_inference "${Working_directory}"
+    check_phylogeny "${Working_directory}"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
-    if [ -s "${Working_directory}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
-        Removed_empty_elements "${Working_directory}"
-        echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
-    else
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
-    fi
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
+    organize_information "${Working_directory}"
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
+
 elif [[ "${mode}" == "AllID" ]]
 then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
@@ -691,10 +755,13 @@ then
     if [ -s "${Working_directory}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
         Removed_empty_elements "${Working_directory}"
         echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
-    else
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
     fi
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
+    organize_information "${Working_directory}"
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
+
 elif [[ "${mode}" == "Cluster" ]]
 then
     check_clusters "${Working_directory}"
@@ -707,20 +774,31 @@ then
         check_directory_structure "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${internal_dir}' is valid. Proceeding."
 
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking if there is data of a previous run..."
+        Check_previous_information "${Working_directory}"
+
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
         organize_working_directory "${internal_dir}"
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmscan."
-        process_hmmsearch "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+        if ! $Previous_captain_run; then
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmscan."
+            process_hmmsearch "${internal_dir}"
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmscan results."
-        Captain_identification "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmscan results."
+            Captain_identification "${internal_dir}"
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
-        Captain_pseudogene "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
+            Captain_pseudogene "${internal_dir}"
+            if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
+                Removed_empty_elements "${internal_dir}"
+                echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
+            fi
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
+        else
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] There's information from a previous run. Steps 1, 2 and 3 will be skipped..."
+        fi
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
         Alignment "${internal_dir}"
@@ -733,16 +811,9 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
         Tree_inference "${internal_dir}"
+        check_phylogeny "${internal_dir}"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
 
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
-
-        if [ -s "${internal_dir}/Workspace/CaptainIdentification/Captainless_elements.txt" ]; then
-            Removed_empty_elements "${internal_dir}"
-            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
-        fi
-
-        check_phylogeny "${internal_dir}"
         if $phylogeny_flag; then
             echo -e "\033[01;31mWARNING\033[m: There's no captain phylogeny file, this cluster needs to be manually checked."
             echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"

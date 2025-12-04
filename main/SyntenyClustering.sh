@@ -46,7 +46,6 @@ function print_help() {
    echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
    echo "-s, --minSize: The minimum desired size for any final sub-cluster (Default: 2)."
-   echo "-t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
    echo "-th, --threshold: The minimum modularity score for a split to be accepted (Default: 0.05) [range: -0.5 - 1.0]."
    echo ""
    echo "Required args with Default in 'FilterBlast' mode:"
@@ -56,6 +55,8 @@ function print_help() {
    echo "-c, --coverage: The minimum coverage of the filter merge fragments for a pair to pass the filter (Default: 20.0) [range: 10.0, 50.0]"
    echo ""
    echo "Optional args:"
+   echo "-t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
+   echo "-ci, --captainInfo: Boolean (0/1) to check and used the captain exon/pseudoexon information for the cluster (Default: 0)"
    echo "-help: Display this help message."
 }
 
@@ -452,6 +453,15 @@ process_cluster_file() {
         local metadata_file="${working_dir}/metadata.csv"
     fi
 
+    if $captainInfo; then
+        if [[ -f "${Captain_dir}/Captains_exon.fa" ]]; then
+            Exon_file="${Captain_dir}/Captains_exon.fa"
+        fi
+        if [[ -f "${Captain_dir}/Captains_pseudo.fa" ]]; then
+            Pseudo_file="${Captain_dir}/Captains_pseudo.fa"
+        fi
+    fi
+
     local cluster_path="${cluster_dir}/main_clusters.txt"
 
     # --- Error Handling ---
@@ -482,8 +492,13 @@ process_cluster_file() {
         mkdir -p "${cluster_dir}/${cluster_id}/Data/Protein"
         mkdir -p "${cluster_dir}/${cluster_id}/Data/Gff"
 
+        if $captainInfo; then
+            mkdir -p "${cluster_dir}/${cluster_id}/Captain_Information/"
+        fi
+
         if $metadata_flag; then
-            local updated_metadata="${cluster_dir}/${cluster_id}/Data/metadata.csv"
+            mkdir -p "${cluster_dir}/${cluster_id}/metadata_files/"
+            local updated_metadata="${cluster_dir}/${cluster_id}/metadata_files/metadata.csv"
             head -n1 $metadata_file > $updated_metadata
         fi
         
@@ -494,7 +509,21 @@ process_cluster_file() {
             cp ${exon_dir}/${value}.fa ${cluster_dir}/${cluster_id}/Data/Exon/
             if $metadata_flag; then
                 grep -w $value $metadata_file >> $updated_metadata
-                fi        
+            fi
+
+            if $captainInfo; then
+                if [[ ! -z "${Exon_file}" ]]; then
+                    local Exon_value=$(grep "${value}\." "${Exon_file}" | awk -F '>' '{print $2}')
+                    echo "${Exon_value}"
+                    if [[ $Exon_value != "" ]]; then
+                        seqkit grep --quiet -p $Exon_value ${cluster_dir}/${cluster_id}/Data/Nucleotide/${value}.fa >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_exon.fa
+                    else
+                        seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_pseudo.fa
+                    fi
+                else
+                    seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_pseudo.fa
+                fi
+            fi  
         done
 
         ProgressBar $State $Total_states
@@ -524,6 +553,7 @@ merge_size="5000"
 identity="70.0"
 coverage="20.0"
 threads="8"
+captainInfo="0"
 help_flag=false
 metadata_flag=false
 
@@ -577,6 +607,10 @@ while [[ $# -gt 0 ]]; do
             shift
             threads="$1"
             ;;
+        -ci|--captainInfo)
+            shift
+            captainInfo="$1"
+            ;;
         -help)
             help_flag=true
             ;;
@@ -608,6 +642,7 @@ echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
 echo "  Minimum size of sub-cluster: " "$minSize"
 echo "  Modularity score threshold for Spectral clustering: " "$threshold"
 echo "  Number of threads: " "$threads"
+echo "  Boolean argumen for captain information: " "$captainInfo"
 echo ""
 
 # ==============================================================================
@@ -743,6 +778,36 @@ fi
 
 # Check thread parameter
 check_threads "$threads"
+
+# Check captain parameter
+if [[ $captainInfo != "0" && $captainInfo != "1" ]]; then
+    echo "Error: '$captainInfo' value for captainInfo argument is not valid"
+    print_help
+    exit 1
+else
+    if [[ $captainInfo == "0" ]];then
+        captainInfo=false
+    else
+        captainInfo=true
+        # Check that there's the right information
+        if [[ ! -d "${Working_directory}/Captain_Information/" ]]; then
+            echo "Error: There's no Captain information folder in '${Working_directory}'."
+            exit 1
+        else
+            Captain_dir=$(realpath "${Working_directory}/Captain_Information/")
+            Captain_dir_file_number=$(ls ${Captain_dir}/Captain* | wc -l)
+            if [[  $Captain_dir_file_number -eq "0" ]]; then
+                echo "Error: '${Captain_dir}' folder is empty."
+                exit 1
+            else
+                ls ${Captain_dir}/Captain*.fa | xargs -n 1 basename -s .fa | while read line
+                do
+                    check_fasta_dna ${Captain_dir}/${line}.fa
+                done
+            fi
+        fi
+    fi
+fi
 
 # Check for required software
 check_required_software "$(basename -s .sh "$0" )"
