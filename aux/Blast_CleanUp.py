@@ -9,20 +9,28 @@ parser.add_argument("-f", "--file", dest="file_in", required=True,
                     help="Input file. This assumes a file with the following columns: 'qseqid sseqid evalue pident bitscore qstart qend qlen sstart send slen'.")
 parser.add_argument("-o", "--output", dest="file_out", required=True,
                     help="Output file. Returns the filtered file to the specified location.")
+parser.add_argument('-fs', '--fragmentSize', type=int, default=2000, dest='MINIMUM_FRAGMENT_SIZE',
+                    help="The minimum fragment size of a blast alignment to be used (default: 2000) [range: 1000, 5000].")
+parser.add_argument('-i', '--identity', type=float, default=70.0, dest='MINIMUM_PIDENT',
+                    help="The minimum percentage of identity of a blast alignment to be used (default: 70.0) [range: 60.0, 90.0].")
+parser.add_argument('-ms', '--mergeSize', type=int, default=2000, dest='MINIMUM_MERGED_SIZE',
+                    help="The minimum merge fragment size to be used (default: 5000) [range: 2000, 10000].")
+parser.add_argument('-c', '--coverage', type=float, default=20.0, dest='MINIMUM_HIT_COVERAGE',
+                    help="The minimum coverage of the filter merge fragments to pass (default: 20.0) [range: 10.0, 50.0].")
 args = parser.parse_args()
 
 # Setting minimum filtering values
-MINIMUM_FRAGMENT_SIZE = 2000
-MINIMUM_MERGED_SIZE = 5000
-MINIMUM_HIT_COVERAGE = 20.0
-MINIMUM_PIDENT = 70.0
+#MINIMUM_FRAGMENT_SIZE = 2000
+#MINIMUM_MERGED_SIZE = 5000
+#MINIMUM_HIT_COVERAGE = 20.0
+#MINIMUM_PIDENT = 70.0
 
 print("")
 print("  Setting hit names")
-print(f"  Minimum fragment size: {MINIMUM_FRAGMENT_SIZE} bp")
-print(f"  Minimum merged size: {MINIMUM_MERGED_SIZE} bp")
-print(f"  Minimum identity percentage: {MINIMUM_PIDENT}%")
-print(f"  Minimum coverage: {MINIMUM_HIT_COVERAGE}%")
+print(f"  Minimum fragment size: {args.MINIMUM_FRAGMENT_SIZE} bp")
+print(f"  Minimum identity percentage: {args.MINIMUM_PIDENT}%")
+print(f"  Minimum merged size: {args.MINIMUM_MERGED_SIZE} bp")
+print(f"  Minimum coverage: {args.MINIMUM_HIT_COVERAGE}%")
 
 dirty = {}
 clean = {}
@@ -77,12 +85,12 @@ for line_num, line_content in enumerate(open(args.file_in), 1):
     current_shit_len = send_span - sstart_span + 1
     
     # Filter by minimum fragment size
-    if current_qhit_len < MINIMUM_FRAGMENT_SIZE or current_shit_len < MINIMUM_FRAGMENT_SIZE:
+    if current_qhit_len < args.MINIMUM_FRAGMENT_SIZE or current_shit_len < args.MINIMUM_FRAGMENT_SIZE:
         filtered_by_size += 1
         continue
 
      # Filter by minimum pident
-    if pident_val < MINIMUM_PIDENT:
+    if pident_val < args.MINIMUM_PIDENT:
         filtered_by_pident += 1
         continue
 
@@ -173,14 +181,14 @@ for hit_key in dirty:
     
     filtered_q_intervals = []
     for start, end in merged_q_intervals:
-        if (end - start + 1) >= MINIMUM_MERGED_SIZE:
+        if (end - start + 1) >= args.MINIMUM_MERGED_SIZE:
             filtered_q_intervals.append((start, end))
         else:
             filtered_by_size += 1
 
     filtered_s_intervals = []
     for start, end in merged_s_intervals:
-        if (end - start + 1) >= MINIMUM_MERGED_SIZE:
+        if (end - start + 1) >= args.MINIMUM_MERGED_SIZE:
             filtered_s_intervals.append((start, end))
         else:
             filtered_by_size += 1
@@ -209,7 +217,7 @@ for hit_key in dirty:
         q_cover = (100.0 * final_combined_hit['total_q_hit_len_sum'] / final_combined_hit['qlen']) if final_combined_hit['qlen'] > 0 else 0.0
         s_cover = (100.0 * final_combined_hit['total_s_hit_len_sum'] / final_combined_hit['slen']) if final_combined_hit['slen'] > 0 else 0.0
 
-        if q_cover < MINIMUM_HIT_COVERAGE and s_cover < MINIMUM_HIT_COVERAGE:
+        if q_cover < args.MINIMUM_HIT_COVERAGE and s_cover < args.MINIMUM_HIT_COVERAGE:
             filtered_by_coverage += 1
             continue
 

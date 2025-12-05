@@ -514,9 +514,8 @@ process_cluster_file() {
             if $captainInfo; then
                 if [[ ! -z "${Exon_file}" ]]; then
                     local Exon_value=$(grep "${value}\." "${Exon_file}" | awk -F '>' '{print $2}')
-                    echo "${Exon_value}"
                     if [[ $Exon_value != "" ]]; then
-                        seqkit grep --quiet -p $Exon_value ${cluster_dir}/${cluster_id}/Data/Nucleotide/${value}.fa >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_exon.fa
+                        seqkit grep --quiet -p $Exon_value ${cluster_dir}/${cluster_id}/Data/Exon/${value}.fa >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_exon.fa
                     else
                         seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_pseudo.fa
                     fi

@@ -125,7 +125,7 @@ check_clusters() {
     if [[ $diff != "" ]]; then
         rm ${cluster_original} 
         echo "ERROR: there are additional lines no compatible to current ClusterID in ${clusters_file}."
-        echo "Check for this lines: ${diff}"
+        echo "Check for these lines: ${diff}"
         exit 1
     else
         rm ${cluster_original}

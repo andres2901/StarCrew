@@ -369,10 +369,10 @@ Alignment() {
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
 
     if [[ ! -s "${pseudoExons}"  && -s "${captain_file}"  ]]; then
-        java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        macse -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
         captainless_flag=false
     elif [[ -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
-        java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        macse -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
         captainless_flag=false
     elif [[ -s "${pseudoExons}"  && ! -s "${captain_file}" ]]; then
         #Select a subset of captain exons from the big database that looks similar to our pseudogenes
@@ -381,7 +381,7 @@ Alignment() {
         seqkit grep --quiet -f ${temp_dir}/Selected_captain_exons.txt ${database_path}/Captains_exon.fa -o ${temp_dir}/Selected_captain_exons.fa
 
         #Perform alignment with this selected sequences
-        java -jar ${auxiliary_path}/macse.jar -prog alignSequences -seq ${temp_dir}/Selected_captain_exons.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
+        macse -prog alignSequences -seq ${temp_dir}/Selected_captain_exons.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
 
         #Remove sequences from the database
         seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_exons.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
