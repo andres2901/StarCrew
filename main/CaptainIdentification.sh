@@ -65,7 +65,7 @@ fi
 function print_help() {
    echo -e "Script to identify captain genes within each element and construct a phylogenetic tree based on these captains.
    It executes five main steps:
-   1. Run hmmsearch using hmm profiles of captain domains against the proteome of each element.
+   1. Run hmmscan using hmm profiles of specific domains in captains against the proteome of each element.
    2. Processes the data to identify Captains and regions suitable for phylogenetic analysi. Three minimum confidence levels can be used for Captain identification:
       2.1 Only a match with the Captain HMM profile from Starfish (\033[01;31mWARNING\033[m: This may lead to false positive identifications and result in an unreliable phylogenetic analysis).
       2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
@@ -261,9 +261,8 @@ Captain_pseudogene() {
         cat ${empty_elements} | while read line 
         do
             State=$(($State + 1))
+            
             # Search for captain pseudogene at the beginning in the positive strand
-            #echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Looking for captain pseudogene in element '${line}'"
-
             seqkit subseq --quiet -r 1:${Full_range} ${nucleotide_path}/${line}.fa > ${temp_dir}/blast/${line}_start.fa
 
             makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null

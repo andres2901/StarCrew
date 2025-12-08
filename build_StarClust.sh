@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
 # Exit with any non-zero status from a command.
-echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Verifying folder organization...\n"
-set -e
+echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Verifying library files...\n"
 
 # Setting amain directory.
 Main_dir="$( dirname -- "$( readlink -f -- "$0"; )"; )"
+databases_dir="${Main_dir}/databases/"
 
 # Check library directory
-LIB_DIR="${Main_dir}/../lib/"
+LIB_DIR="${Main_dir}/lib/"
 
 # Check that the libraries are there
 if [[ ! -d "$LIB_DIR" ]]; then
@@ -29,9 +29,6 @@ else
     fi
 fi
 
-# Check main directory
-check_main_directory "${Main_dir}"
-
 # Check conda environment
 Conda_environment_presence=$(conda info --envs | grep -w -c "StarClust")
 
@@ -40,12 +37,21 @@ if [[ $Conda_environment_presence -eq 0 ]]; then
 
     conda env create -f ${Main_dir}/StarClust_environment.yml
     source activate StarClust
+
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Checking environment installation...\n"
     check_required_software "All"
+    
+    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Checking main directory...\n"
+    check_main_directory "${Main_dir}"
+    chmod +x ${Main_dir}/bin/StarClust
 else
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] There's an existing 'StarClust' environment, checking if everything is installed...\n"
     source activate StarClust
     check_required_software "All"
+
+    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Checking main directory...\n"
+    check_main_directory "${Main_dir}"
+    chmod +x ${Main_dir}/bin/StarClust
 fi
 
 echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] Intalling gggenomes and Checking the correct installation of R packages...\n"
@@ -165,3 +171,5 @@ rm MycoMobilome_v1.0.tar.gz
 echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] Checking full instalation..."
 
 check_installation "${Main_dir}"
+
+echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] installation Successful."

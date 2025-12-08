@@ -4,11 +4,11 @@ check_installation() {
     local Main_directory="$1"
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Interpro installation..."
-    check_intrepro_software "${Main_directory}/interproscan/"
+    check_interpro_software "${Main_directory}/interproscan/"
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking databases..."
     check_databases "${Main_directory}/databases/" "All"
-    check_foldseek_databases "${Main_directory}/databases/" "All"
+    check_foldseek_databases "${Main_directory}/databases/Foldseek/" "All"
 }
 
 check_main_directory(){
@@ -614,7 +614,7 @@ check_directory_structure() {
     rm -r "${base_dir}/temp"
 }
 
-check_intrepro_software() {
+check_interpro_software() {
     local Interpro_path="$1"
     if [[ ! -d "$Interpro_path" ]]; then
         echo "Error: Sofware of Interpro software does not exist."
@@ -624,7 +624,7 @@ check_intrepro_software() {
             echo "Error: interproscan script file is not available in the '${Interpro_path}' folder."
             exit 1
         else
-            if [[ ! $(${Interpro_path}/interproscan.sh -version | grep -c "InterproScan") -eq 2 ]]; then
+            if [[ ! $(${Interpro_path}/interproscan.sh -version | grep -c "InterProScan") -eq 2 ]]; then
                echo "Error: interproscan script is not properly install."
                exit 1 
            fi
@@ -636,7 +636,7 @@ check_intrepro_software() {
             if [[ ! $(egrep -c "antifam|gene3d|hamap|ncbifam|panther|pfam-a|pirsf|pirsr|sfld|superfamily" ${Interpro_path}/interproscan.properties) -eq 10 ]]; then
                 echo "Error: property file for interproscan is corrupted."
                 exit 1
-            elif [[ ! $(grep "antifam|gene3d|hamap|ncbifam|panther|pfam-a|pirsf|pirsr|sfld|superfamily" interproscan.properties | awk -F '=' '{print NF}' | sort -u) -eq 2 ]]; then
+            elif [[ ! $(egrep "antifam|gene3d|hamap|ncbifam|panther|pfam-a|pirsf|pirsr|sfld|superfamily" ${Interpro_path}/interproscan.properties | awk -F '=' '{print NF}' | sort -u) -eq 2 ]]; then
                 echo "Error: property file for interproscan is corrupted."
                 exit 1
             fi
@@ -692,18 +692,17 @@ check_databases() {
             echo "Error: file '$database_path/MycoMobilome_db/' does not exist."
             exit 1
         else
-            if [[ ! $(ls "$database_path/MycoMobilome_db/*fasta") -eq 3 ]]; then
+            if [[ ! $(ls $database_path/MycoMobilome_db/*fasta | wc -l) -eq 3 ]]; then
                 echo "Error: There are missing files for MycoMobilome database."
                 exit 1
-            fi
-    
+            fi 
         fi
     elif [[ $command == "All" ]]; then
         if [[ ! -d "$database_path/MycoMobilome_db/" ]]; then
             echo "Error: file '$database_path/MycoMobilome_db/' does not exist."
             exit 1
         else
-            if [[ ! $(ls "$database_path/MycoMobilome_db/*fasta") -eq 3 ]]; then
+            if [[ ! $(ls $database_path/MycoMobilome_db/*.fasta | wc -l) -eq 3 ]]; then
                 echo "Error: There are missing files for MycoMobilome database."
                 exit 1
             fi
@@ -757,11 +756,6 @@ check_foldseek_databases() {
     local foldseek_path="$1"
     local foldseekdb="$2"
 
-    if [[ ! -f "$foldseek_path/${foldseekdb}" ]]; then
-        echo "Error: '${foldseekdb}' database does not exist in '${foldseek_path}'."
-        exit 1
-    fi
-
     if [[ "$foldseekdb" == "pdb" ]]; then
         if [[ ! $(ls $foldseek_path/${foldseekdb}* | wc -l) -eq 40 ]]; then
             echo "Error: There are missing files for '${foldseekdb}' database."
@@ -781,8 +775,8 @@ check_foldseek_databases() {
             exit 1
         fi
     elif [[ "$foldseekdb" == "All" ]]; then
-        if [[ ! $(ls $foldseek_path/${foldseekdb}* | wc -l) -eq 40 ]]; then
-            echo "Error: There are missing files for '${foldseekdb}' database."
+        if [[ ! $(ls $foldseek_path/pdb* | wc -l) -eq 40 ]]; then
+            echo "Error: There are missing files for '$pdb' database."
             exit 1
         fi
         if [[ ! -f "$foldseek_path/entries_update.idx" ]]; then
@@ -793,8 +787,8 @@ check_foldseek_databases() {
             echo "Error: 'Accession_swissprot.txt' file does not exist in '${foldseek_path}'."
             exit 1
         fi
-        if [[ ! $(ls $foldseek_path/${foldseekdb}* | wc -l) -eq 16 ]]; then
-            echo "Error: There are missing files for '${foldseekdb}' database."
+        if [[ ! $(ls $foldseek_path/afdb_swissprot* | wc -l) -eq 16 ]]; then
+            echo "Error: There are missing files for 'afdb_swissprot' database."
             exit 1
         fi
     else
