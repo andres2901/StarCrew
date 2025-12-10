@@ -50,6 +50,7 @@ function print_help() {
    echo "-t, --threads: Number of threads for all analysis (Default: 8)"
    echo ""
    echo "Optional args:"
+   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
    echo "-help: Display this help message."
 }
 
@@ -84,33 +85,33 @@ check_directory_structure() {
         exit 1
     fi
 
-    local ClusterCharacterization_dir=$(find "$workspace_dir" -maxdepth 1 -type d -name "ClusterCharacterization" 2>/dev/null)
+    local ClusterAnnotation_dir=$(find "$workspace_dir" -maxdepth 1 -type d -name "ClusterCharacterization" 2>/dev/null)
 
-    if [[ -z "$ClusterCharacterization_dir" ]]; then
+    if [[ -z "$ClusterAnnotation_dir" ]]; then
         echo "Error: ClusterCharacterization directory not found in '$workspace_dir'." >&2
         echo "The ClusterCharacterization command should be run before this analysis" >&2
         exit 1
     fi
     
-    local moveOrthologs_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "*_moveOrthologs" 2>/dev/null)
-    local CoreGenes_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
-    local Orthogroups_dir=$(find "$ClusterCharacterization_dir" -maxdepth 3 -type d -name "Orthogroup_Sequences" 2>/dev/null)
+    local moveOrthologs_dir=$(find "$ClusterAnnotation_dir" -maxdepth 1 -type d -name "*_moveOrthologs" 2>/dev/null)
+    local CoreGenes_dir=$(find "$ClusterAnnotation_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
+    local Orthogroups_dir=$(find "$ClusterAnnotation_dir" -maxdepth 3 -type d -name "Orthogroup_Sequences" 2>/dev/null)
 
     directory_flag=true
 
     if [[ $mode == "All" ]]; then
         if [[ -z "$Orthogroups_dir" ]]; then
-            echo "Error: Orthogroups subdirectory not found in '$ClusterCharacterization_dir'." >&2
+            echo "Error: Orthogroups subdirectory not found in '$ClusterAnnotation_dir'." >&2
             directory_flag=false
         fi
     elif [[ $mode == "MoveAssociated" ]]; then
         if [[ -z "$moveOrthologs_dir" ]]; then
-            echo "Orthogroups subdirectory for moving genes not found in '$ClusterCharacterization_dir'." >&2
+            echo "Orthogroups subdirectory for moving genes not found in '$ClusterAnnotation_dir'." >&2
             directory_flag=false
         fi
     elif [[ $mode == "Core" ]]; then
         if [[ -z "$CoreGenes_dir" ]]; then
-            echo "Error: Orthogroups subdirectory not found in '$ClusterCharacterization_dir'." >&2
+            echo "Error: Orthogroups subdirectory not found in '$ClusterAnnotation_dir'." >&2
             directory_flag=false
         fi
     fi
@@ -120,25 +121,31 @@ organize_working_directory() {
     local base_dir="$1"
 
     local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
-    local ClusterCharacterization_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local ClusterAnnotation_dir="${base_dir}/Workspace/ClusterCharacterization/"
     local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
+
+    if [[ -d "$working_dir" ]]; then
+        echo "Error: There's a previous run in the Workspace."
+        echo "If you want to overwrite this previous run, add the '--overwrite' flag to the command line."
+        exit 1
+    fi
 
     mkdir -p ${working_dir}
     mkdir -p ${Orthogroups_dir}
     mkdir -p ${temp_dir}
 
     if [[ $mode == "All" ]]; then
-        local data_dir=$(find "$ClusterCharacterization_dir" -maxdepth 3 -type d -name "Orthogroup_Sequences" 2>/dev/null)
+        local data_dir=$(find "$ClusterAnnotation_dir" -maxdepth 3 -type d -name "Orthogroup_Sequences" 2>/dev/null)
         cp ${data_dir}/* ${Orthogroups_dir}/
     elif [[ $mode == "MoveAssociated" ]]; then
-        local moveOrthologs_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "*_moveOrthologs" 2>/dev/null)
+        local moveOrthologs_dir=$(find "$ClusterAnnotation_dir" -maxdepth 1 -type d -name "*_moveOrthologs" 2>/dev/null)
         echo $moveOrthologs_dir | awk '{OFS=RS;$1=$1}1' | while read line; 
         do 
             cp ${line}/* ${Orthogroups_dir}/
         done
     elif [[ $mode == "Core" ]]; then
-        local CoreGenes_dir=$(find "$ClusterCharacterization_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
+        local CoreGenes_dir=$(find "$ClusterAnnotation_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
         cp ${CoreGenes_dir}/* ${Orthogroups_dir}/
     fi
 }
@@ -278,7 +285,27 @@ create_summary_table(){
             echo $OrthogroupID";"";"$InterPro_General";"$InterProGO_General";"$Foldseek_general >> ${working_dir}/General_summary.csv
         fi
     done
+}
 
+organize_information() {
+    local base_dir="$1"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+
+    local Annotation_dir="${base_dir}/$(basename -s .sh "$0" )/"
+
+    mkdir -p ${Annotation_dir}
+
+    if [[ ! -d "${working_dir}" ]]; then
+        echo "Error in working directory"
+    fi
+
+    if [[ -f "${working_dir}/General_summary.csv" ]]; then
+        cp ${working_dir}/General_summary.csv ${Annotation_dir}/
+    fi
+
+    if [[ -d "${working_dir}/Summary/" ]]; then
+        cp -r ${working_dir}/Summary/ ${Annotation_dir}/Orthogroups_summary
+    fi
 }
 
 # ==============================================================================
@@ -291,6 +318,7 @@ clusters_file=""
 mode="All"
 foldseekdb="afdb_swissprot"
 threads="8"
+overwrite=false
 help_flag=false
 
 while [[ $# -gt 0 ]]; do
@@ -314,6 +342,9 @@ while [[ $# -gt 0 ]]; do
         -f|--foldseekdb)
             shift
             foldseekdb="$1"
+            ;;
+        --overwrite)
+            overwrite=true
             ;;
         -help)
             help_flag=true
@@ -414,8 +445,11 @@ do
     check_directory_structure "${internal_dir}"
 
     if $directory_flag; then
-
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
+        if $overwrite; then
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
+            overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+        fi
     
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
         organize_working_directory "${internal_dir}"
@@ -450,6 +484,7 @@ do
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Creating summary table..."
         create_summary_table "${internal_dir}"
+        rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding. \n"
     else
         echo -e "Cluster $ClusterId do not have the required directory for '$mode' mode. \n"

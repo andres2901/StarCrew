@@ -46,6 +46,7 @@ function print_help() {
    echo "-t, --threads: Number of threads for orthofinder and blast (Default: 8)"
    echo ""
    echo "Optional args:"
+   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
    echo "-help: Display this help message."
 }
 
@@ -99,6 +100,12 @@ organize_working_directory() {
     local full_gff="${working_dir}/Final_model.gff"
 
     local captainPhylogeny="${base_dir}/CaptainPhylogeny.nw"
+
+    #if [[ -d "$working_dir" ]]; then
+    #    echo "Error: There's a previous run in the Workspace."
+    #    echo "If you want to overwrite this previous run, add the '--overwrite' flag to the command line."
+    #    exit 1
+    #fi
 
     # Create required subdirectories
     mkdir -p ${working_dir}
@@ -222,6 +229,47 @@ check_movement() {
     fi
 }
 
+organize_information() {
+    local base_dir="$1"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+
+    local Characterization_dir="${base_dir}/$(basename -s .sh "$0" )/"
+
+    mkdir -p ${Characterization_dir}
+
+    if [[ ! -d "${working_dir}" ]]; then
+        echo "Error in working directory"
+    fi
+
+    if [[ -f "${working_dir}/CargoHC.nwk" ]]; then
+        cp ${working_dir}/CargoHC.nwk ${Characterization_dir}/CargoHierarchicalTree.nwk
+    fi
+
+    if [[ -d "${working_dir}/Images/" ]]; then
+        cp -r ${working_dir}/Images/ ${Characterization_dir}/
+    fi
+
+    if [[ -d "${working_dir}/Core_genes/" ]]; then
+        mkdir -p ${Characterization_dir}/Core/
+        cp -r ${working_dir}/Core_genes/ ${Characterization_dir}/Core/Orthogroups/
+        cp ${working_dir}/Core_genes-* ${Characterization_dir}/Core/
+    fi
+
+    local movingFolders=$(ls "${working_dir}/*_moveOrthologs.txt" | wc -l | awk '{print $1}')
+
+    if [[ $movingFolders -ge 1 ]]; then
+        mkdir -p ${Characterization_dir}/Movement_genes/
+        ls ${working_dir}/*_moveOrthologs.txt | xargs -n1 basename -s .txt | while read line
+        do
+            local SubCluster=$(echo $line | awk -F '_' '{print $1}')
+            mkdir -p ${Characterization_dir}/Movement_genes/${SubCluster}/
+            cp -r ${working_dir}/${SubCluster}_moveOrthologs/ ${Characterization_dir}/Movement_genes/${SubCluster}/Orthogroups
+            cp ${SubCluster}_moveOrthologs.txt ${Characterization_dir}/Movement_genes/${SubCluster}/OrthogroupsID.txt
+            cp ${SubCluster}_moveOrthologsTable.csv ${Characterization_dir}/Movement_genes/${SubCluster}/Matrix.txt
+        done
+    fi
+}
+
 # ==============================================================================
 # Variables block
 # ==============================================================================
@@ -229,6 +277,7 @@ check_movement() {
 # Initialize variables
 Working_directory=""
 threads="8"
+overwrite=false
 help_flag=false
 
 while [[ $# -gt 0 ]]; do
@@ -240,6 +289,9 @@ while [[ $# -gt 0 ]]; do
         -t|--threads)
             shift
             threads="$1"
+            ;;
+        --overwrite)
+            overwrite=true
             ;;
         -help)
             help_flag=true
@@ -266,6 +318,7 @@ fi
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
 echo "  Number of threads: " "$threads"
+echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
@@ -309,6 +362,11 @@ do
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
     check_directory_structure "${internal_dir}"
     check_captain_information "${internal_dir}"
+
+    if $overwrite; then
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
+        overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+    fi
     
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
     organize_working_directory "${internal_dir}"
@@ -339,6 +397,11 @@ do
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for identifiable genes that participate in movement..."
     check_movement "${internal_dir}"
     
-    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding.\n"
+    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished."
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
+    organize_information "${internal_dir}"
+    rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
+    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Proceeding.\n"
 done
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"

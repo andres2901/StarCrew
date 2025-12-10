@@ -70,16 +70,7 @@ def calculate_consecutive_rip_percentage(sequence, window_size, step_size, comp_
             affected_start = w3['start']   
             
             # Intersection End: The earliest ending coordinate (i.e., the end of w1)
-            affected_end = w1['end']       
-            
-            # Example: W1 (0-1000), W2 (500-1500), W3 (1000-2000)
-            # Intersection Start (w3['start']): 1000
-            # Intersection End (w1['end']): 1000
-            # This logic needs adjustment for the correct overlap region of three windows.
-            # 
-            # Correct intersection of W1(S1, E1), W2(S2, E2), W3(S3, E3) is:
-            # Start: max(S1, S2, S3) -> S3
-            # End: min(E1, E2, E3) -> E1
+            affected_end = w1['end']      
             
             # Recalculating affected_end to find the EARLIEST end coordinate among the three
             affected_end = min(w1['end'], w2['end'], w3['end'])
@@ -103,12 +94,12 @@ if __name__ == "__main__":
     
     parser.add_argument('fasta_file', help="Input FASTA file path.")
     parser.add_argument('-w', '--window', type=int, default=1000, help="Sliding window size (bp). Default: 1000")
-    parser.add_argument('-s', '--step', type=int, default=500, help="Sliding window step size (bp). Default: 500")
+    parser.add_argument('-s', '--step', type=int, default=250, help="Sliding window step size (bp). Default: 250")
     
     # Triple Threshold Arguments
     parser.add_argument('-tc', '--comp_thresh', type=float, default=0.0, help="Minimum Composite Index threshold (Product - Substrate). Default: 0.0")
-    parser.add_argument('-tp', '--prod_thresh', type=float, default=0.86, help="Minimum Product Index threshold (TpA/ApT). Default: 0.86")
-    parser.add_argument('-ts', '--subst_thresh', type=float, default=1.03, help="Maximum Substrate Index threshold ((CpA+TpG)/(ApC+GpT)). Default: 1.03")
+    parser.add_argument('-tp', '--prod_thresh', type=float, default=0.8, help="Minimum Product Index threshold (TpA/ApT). Default: 0.8")
+    parser.add_argument('-ts', '--subst_thresh', type=float, default=1.05, help="Maximum Substrate Index threshold ((CpA+TpG)/(ApC+GpT)). Default: 1.05")
     
     args = parser.parse_args()
     

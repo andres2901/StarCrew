@@ -31,7 +31,7 @@ fi
 function print_help() {
    echo "Script to organize the working directory to run the subsequent commands in the workflow."
    echo ""
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -f <filte_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -g <file_path> -b <file_path> -s <character> -c <file_path> -M <file_path> ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -f <filte_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -g <file_path> -b <file_path> -s <character> -c <file_path> -M <file_path> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-f, --fasta:  multifasta file wih the elements to study."
@@ -54,6 +54,7 @@ function print_help() {
    echo ""
    echo "Optional args:"
    echo "-M, --Metadata: csv file delimited by semicolon with the metadata information: ElemenID;<data1>;<data2>;...."
+   echo "--overwrite: Flag to overwrite in case there is already a previous run (Default: off)"
    echo "-help: Display this help message."
 }
 
@@ -289,40 +290,45 @@ organize_info() {
 # Function to process 'Simple' input
 Process_simple() {
     local working_dir="$1"
-    local gff_file="$3"
+    local gff_file="$2"
     local CDS_flag=false
 
     mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/ ${working_dir}/temp/gff/
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff file..."
 
-    if [[ $(grep -i -c "cds" "${gff_file}") -ge 1 ]]; then
+    if [[ $(grep -i -c "cds" ${gff_file}) -ge 1 ]]; then
         CDS_flag=true
     fi
+
+    local Total_states=$(wc -l ${working_dir}/temp/temp_association.tsv | awk '{print $1}')
+    local State=0
 
     cat ${working_dir}/temp/temp_association.tsv | while read line
     do
         State=$(($State + 1))     
         A=$(echo $line | awk '{print $2}')
         B=$(echo $line | awk '{print $1}')
-        grep $A ${gff_file} | sed s/$A/$B/ >> ${working_dir}/temp/gff_file.gff
+        grep -w "^$A" ${gff_file} | sed s/$A/$B/ >> ${working_dir}/temp/gff_file.gff
         ProgressBar $State $Total_states
     done
 
     gff_file="${working_dir}/temp/gff_file.gff"
 
-    echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff file per element..."
-    local Total_states=$(grep -v "^#" ${gff_file} | sort | uniq | wc -l)
+    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Dividing gff file per element..."
+    local Total_states=$(grep -v "^#" ${gff_file} | awk '{print $1}' | sort | uniq | wc -l)
     local State=0
 
-    grep -v "^#" ${gff_file} | sort | uniq | while read line
+    grep -v "^#" ${gff_file} | awk '{print $1}' | sort | uniq | while read line
     do
         State=$(($State + 1))
-        grep "^#" ${gff_file} > ${working_dir}/Data/Gff/${line}.gff
+        grep "^#" ${gff_file} > ${working_dir}/temp/gff/${line}.gff
         grep -w $line ${gff_file} >> ${working_dir}/temp/gff/${line}.gff
-        agat_sp_manage_IDs.pl --config ${agat_config} --gff ${working_dir}/temp/gff/${line}.gff --prefix ${line}. -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
+        agat_sp_keep_longest_isoform.pl --config ${agat_config} --gff ${working_dir}/temp/gff/${line}.gff -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
+        sed -i -e "s/ID=/ID=${line}\./g" -e "s/Parent=/Parent=${line}\./g" ${working_dir}/Data/Gff/${line}.gff &> /dev/null
         ProgressBar $State $Total_states
     done
+    echo ""
 
     organize_info "$working_dir" "$CDS_flag"
 }
@@ -389,7 +395,6 @@ Process_starfish() {
     do
         State=$(($State + 1))
         sed -i -e "s/ID=/ID=${line}\./g" -e "s/Parent=/Parent=${line}\./g" ${working_dir}/Data/Gff/${line}.gff
-        #agat_sp_manage_IDs.pl --config ${agat_config} --gff ${working_dir}/temp/gff2/${line}.gff --prefix ${line}. -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
         ProgressBar $State $Total_states
     done
 
@@ -449,6 +454,7 @@ gff_path=""
 boundaries_path=""
 captains_path=""
 separator=""
+overwrite=false
 help_flag=false
 
 while [[ $# -gt 0 ]]; do
@@ -497,6 +503,9 @@ while [[ $# -gt 0 ]]; do
             shift
             separator="$1"
             ;; 
+        --overwrite)
+            overwrite=true
+            ;;
         -help)
             help_flag=true
             ;;
@@ -531,6 +540,7 @@ echo "  Starfish boundary file: " "$boundaries_path"
 echo "  Starfish captain file: " "$captains_path"
 echo "  Separator used during starfish run: " "$separator"
 echo "  Metadata file: " "$metadata_path" 
+echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
@@ -542,7 +552,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 # Check for mandatory arguments
 check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
 if [[ "$mode" == "Simple" ]]; then
-    if [[ -z "$fasta_path" ]]; then
+    if [[ -z "$fasta_path" || -z "$gff_path" ]]; then
         echo "Error: Missing required argument(s)."
         print_help
         exit 1
@@ -622,8 +632,15 @@ check_required_software "$(basename -s .sh "$0" )"
 
 # check if output directory exist
 if [[ -d "$out_directory" ]]; then
-    echo "Error: directory '$out_directory' already exist."
-    exit 1
+    if $overwrite; then
+        rm -r $out_directory
+        mkdir $out_directory
+        mkdir -p ${out_directory}/Data ${out_directory}/Workspace ${out_directory}/metadata_files ${out_directory}/temp/ 
+    else
+        echo "Error: directory '$out_directory' already exist."
+        echo "If you want to overwrite this previous run, add the '--overwrite' flag to the command line."
+        exit 1
+    fi
 else
     mkdir $out_directory
     mkdir -p ${out_directory}/Data ${out_directory}/Workspace ${out_directory}/metadata_files ${out_directory}/temp/ 
@@ -639,7 +656,7 @@ check_duplicates "$fasta_path" "$out_directory"
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> No duplicate headers found. Proceeding."
 
 # Filter stage
-if [[ $rip > 0 ]]
+if [[ $rip < 100 ]]
 then
     if [[ $filter == 0 ]]
     then
@@ -670,7 +687,8 @@ echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding..."
 if [[ "${mode}" == "Starfish" ]]; then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Processing Starfish input files."
     Process_starfish "$out_directory" "$boundaries_path" "$gff_path"
-elif [[ "${mode}" == "Full" ]]; then
+elif [[ "${mode}" == "Simple" ]]; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Processing Simple input files."
     Process_simple "$out_directory" "$gff_path"
 fi
 

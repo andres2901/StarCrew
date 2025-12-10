@@ -35,14 +35,14 @@ function print_help() {
    6. Organizes the final data output for each identified cluster.
    "
    echo ""
-   echo "Syntax: SAT $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> ]"
+   echo "Syntax: SAT $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> --captainInfo --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
    echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = FilterMetric) [Available mode: Raw, SSP, FilterBlast, FilterMetric]."
-   echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
+   echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default = 8) [range: 3 - 25]."
    echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
    echo "-s, --minSize: The minimum desired size for any final sub-cluster (Default: 2)."
@@ -56,7 +56,8 @@ function print_help() {
    echo ""
    echo "Optional args:"
    echo "-t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
-   echo "-ci, --captainInfo: Boolean (0/1) to check and used the captain exon/pseudoexon information for the cluster (Default: 0)"
+   echo "--captainInfo: Flag to check and used the captain exon/pseudoexon information for the cluster (Default: off)"
+   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
    echo "-help: Display this help message."
 }
 
@@ -71,13 +72,19 @@ organize_working_directory() {
     local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
     local cluster_dir="${base_dir}/Clusters/"
-    local working_dir="${base_dir}/Workspace/SyntenyClustering/"
-    local temp_dir="${base_dir}/Workspace/SyntenyClustering/temp/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
+
+    if [[ -d "$working_dir" ]]; then
+        echo "Error: There's a previous run in the Workspace."
+        echo "If you want to overwrite this previous run, add the '--overwrite' flag to the command line."
+        exit 1
+    fi
 
     # Create required subdirectories
     mkdir -p ${working_dir}
     mkdir -p ${temp_dir}
-    mkdir -p ${cluster_dir}
+    mkdir -p ${cluster_dir}    
 
     # Copy require files
     cp -r ${gff_dir} ${working_dir}
@@ -95,7 +102,7 @@ organize_working_directory() {
 process_diamond() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/SyntenyClustering/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local temp_dir="${working_dir}/temp/"
 
     # Locate the preprocess protein directory 
@@ -237,7 +244,7 @@ process_collinearity() {
     local base_dir="$1"
     local mode="$2"
 
-    local working_dir="${base_dir}/Workspace/SyntenyClustering/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
 
     # Locate required subdirectories and define output path
     local collinearity_path=$(find "$working_dir" -maxdepth 1 -type d -name "Collinearity" 2>/dev/null)
@@ -390,13 +397,15 @@ process_collinearity() {
         fi
     elif [[ "${mode}" == "FilterMetric" ]]
     then
+        local Metric_treshold=$(python -c "print(max(6,$anchorPoints))")
+
         # Generate files that will be filter.
         awk 'NR == FNR {f1[$1,$2] = $0; next} $1 SUBSEP $2 in f1 {print f1[$1,$2],"\t"$7,"\t"$8}' \
             "${temp_prefix}_percentage_general_filter.txt" "${temp_prefix}_percentage_pairwise.txt" | \
             awk '{print $1 FS $2 FS $4 FS $5 FS $6}' | awk '{if($3 >= 8) print}' | \
             sed -e 's/ /;/g' | sort -t ';'  >> "${temp_prefix}_Collinearity_percentage.txt"
 
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering results..."
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering results base on a minimum metric value of '${Metric_treshold}'..."
 
         Total_states=$(($(wc -l "${temp_prefix}_Collinearity_percentage.txt" | awk '{print $1}') - 1))
         State=0
@@ -407,14 +416,14 @@ process_collinearity() {
             grep -E "[0-9]*-.*[0-9]*:" ${collinearity_path}/$(echo $line | awk '{print $1}').collinearity | awk 'BEGIN{FS=OFS="\t"}{print $2 OFS $3}' | sort -u > "${temp_prefix}_collinear1.txt"
             local Max_points=$(($(wc -l "${temp_prefix}_collinear1.txt" | awk '{print $1}') * 2))
             awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' "${temp_prefix}_collinear1.txt" > "${temp_prefix}_collinear2.txt"
-            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' > "${temp_prefix}_hits1.txt"
-            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100){print}}' > "${temp_prefix}_hits2.txt"
+            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' > "${temp_prefix}_hits1.txt" 2> /dev/null
+            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100){print}}' > "${temp_prefix}_hits2.txt" 2> /dev/null
             local hits1=$(wc -l "${temp_prefix}_hits1.txt" | awk '{print $1}') 
             local hits2=$(wc -l "${temp_prefix}_hits2.txt" | awk '{print $1}')
             local bonus1=$(awk -F '\t' '{if($3>95){sum+= 0.1*($4/200)}}END{if(sum!=""){print sum}else{print 0}}' "${temp_prefix}_hits1.txt")
             local bonus2=$(awk -F '\t' '{if($3>95){sum+= 0.1*($4/200)}}END{if(sum!=""){print sum}else{print 0}}' "${temp_prefix}_hits2.txt")
             local Metric=$(echo "$hits1 + $hits2 + $bonus1 + $bonus2" | bc)
-            if (( $(bc <<< "$Metric >= $anchorPoints") )); then
+            if (( $(bc <<< "$Metric >= $Metric_treshold") )); then
                 local Metric_index=$(echo "print(min(round(${Metric}/${Max_points},2),1))" | python)
                 echo $(echo $line | awk '{split($1,array,"_");print array[1]";"array[2]}')";"${Metric_index} >> "${working_dir}/Metrics_selected.out"
             fi
@@ -442,7 +451,7 @@ process_cluster_file() {
     local data_dir="${base_dir}/Data/"
 
     local cluster_dir="${base_dir}/Clusters/"
-    local working_dir="${base_dir}/Workspace/SyntenyClustering/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     
     local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
     local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
@@ -493,7 +502,7 @@ process_cluster_file() {
         mkdir -p "${cluster_dir}/${cluster_id}/Data/Gff"
 
         if $captainInfo; then
-            mkdir -p "${cluster_dir}/${cluster_id}/Captain_Information/"
+            mkdir -p "${cluster_dir}/${cluster_id}/CaptainIdentification/"
         fi
 
         if $metadata_flag; then
@@ -515,12 +524,12 @@ process_cluster_file() {
                 if [[ ! -z "${Exon_file}" ]]; then
                     local Exon_value=$(grep "${value}\." "${Exon_file}" | awk -F '>' '{print $2}')
                     if [[ $Exon_value != "" ]]; then
-                        seqkit grep --quiet -p $Exon_value ${cluster_dir}/${cluster_id}/Data/Exon/${value}.fa >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_exon.fa
+                        seqkit grep --quiet -p $Exon_value ${cluster_dir}/${cluster_id}/Data/Exon/${value}.fa >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_exon.fa
                     else
-                        seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_pseudo.fa
+                        seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_pseudo.fa
                     fi
                 else
-                    seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/Captain_Information/Captains_pseudo.fa
+                    seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_pseudo.fa
                 fi
             fi  
         done
@@ -552,7 +561,8 @@ merge_size="5000"
 identity="70.0"
 coverage="20.0"
 threads="8"
-captainInfo="0"
+captainInfo=false
+overwrite=false
 help_flag=false
 metadata_flag=false
 
@@ -606,9 +616,11 @@ while [[ $# -gt 0 ]]; do
             shift
             threads="$1"
             ;;
-        -ci|--captainInfo)
-            shift
-            captainInfo="$1"
+        --captainInfo)
+            captainInfo=true
+            ;;
+        --overwrite)
+            overwrite=true
             ;;
         -help)
             help_flag=true
@@ -641,7 +653,8 @@ echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
 echo "  Minimum size of sub-cluster: " "$minSize"
 echo "  Modularity score threshold for Spectral clustering: " "$threshold"
 echo "  Number of threads: " "$threads"
-echo "  Boolean argumen for captain information: " "$captainInfo"
+echo "  Captain information: " "$captainInfo"
+echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
@@ -666,6 +679,11 @@ else
 fi
 check_directory_structure "${Working_directory}"
 
+if $overwrite; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
+    overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+fi
+
 # Check if mode parameter is correct
 check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
 
@@ -674,7 +692,7 @@ check_auxiliary_scripts "$auxiliary_path" "$(basename -s .sh "$0" )"
 
 # Check anchor points and maximum gaps are within allowed range
 if [[ "$anchorPoints" =~ ^[0-9]+$ ]]; then
-    if (( anchorPoints < 5 || anchorPoints > 25 )); then
+    if (( anchorPoints < 3 || anchorPoints > 25 )); then
         echo "Error: '$anchorPoints' anchor points is not an accepted value."
         print_help
         exit 1
@@ -779,31 +797,24 @@ fi
 check_threads "$threads"
 
 # Check captain parameter
-if [[ $captainInfo != "0" && $captainInfo != "1" ]]; then
-    echo "Error: '$captainInfo' value for captainInfo argument is not valid"
-    print_help
-    exit 1
-else
-    if [[ $captainInfo == "0" ]];then
+if $captainInfo; then
+    # Check that there's the right information
+    if [[ ! -d "${Working_directory}/CaptainIdentification/" ]]; then
+        echo "There's no Captain information folder in '${Working_directory}'."
+        echo "Proceeding to run the full script."
         captainInfo=false
     else
-        captainInfo=true
-        # Check that there's the right information
-        if [[ ! -d "${Working_directory}/Captain_Information/" ]]; then
-            echo "Error: There's no Captain information folder in '${Working_directory}'."
-            exit 1
+        Captain_dir=$(realpath "${Working_directory}/CaptainIdentification/")
+        Captain_dir_file_number=$(ls ${Captain_dir}/Captain* | wc -l)
+        if [[  $Captain_dir_file_number -eq "0" ]]; then
+            echo "Error: '${Captain_dir}' folder is empty."
+            echo "Proceeding to run the full script."
+            captainInfo=false
         else
-            Captain_dir=$(realpath "${Working_directory}/Captain_Information/")
-            Captain_dir_file_number=$(ls ${Captain_dir}/Captain* | wc -l)
-            if [[  $Captain_dir_file_number -eq "0" ]]; then
-                echo "Error: '${Captain_dir}' folder is empty."
-                exit 1
-            else
-                ls ${Captain_dir}/Captain*.fa | xargs -n 1 basename -s .fa | while read line
-                do
-                    check_fasta_dna ${Captain_dir}/${line}.fa
-                done
-            fi
+            ls ${Captain_dir}/Captain*.fa | xargs -n 1 basename -s .fa | while read line
+            do
+                check_fasta_dna ${Captain_dir}/${line}.fa
+            done
         fi
     fi
 fi
@@ -819,7 +830,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
 organize_working_directory "${Working_directory}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Preprocessing data for Diamond."
-Rscript ${auxiliary_path}/syntenetPreprocess.R "${Working_directory}/Workspace/SyntenyClustering/"
+Rscript ${auxiliary_path}/syntenetPreprocess.R "${Working_directory}/Workspace/$(basename -s .sh "$0" )/"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running Diamond analysis."
@@ -827,7 +838,7 @@ process_diamond "${Working_directory}"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running syntenet analysis."
-Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/SyntenyClustering/" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
+Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )/" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Summarizing syntenet results in '${mode}' mode."
@@ -835,9 +846,10 @@ process_collinearity "${Working_directory}" "${mode}"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Generating element clusters."
-python ${auxiliary_path}/Clustering.py -i "${Working_directory}/Workspace/SyntenyClustering/Collinearity_percentage.txt" -o "${Working_directory}/Clusters/" -m "${minSize}" -n "${minNodes}" -t "${threshold}"
+python ${auxiliary_path}/Clustering.py -i "${Working_directory}/Workspace/$(basename -s .sh "$0" )/Collinearity_percentage.txt" -o "${Working_directory}/Clusters/" -m "${minSize}" -n "${minNodes}" -t "${threshold}"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished. Proceeding."
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 6: Sorting elements from clusters."
 process_cluster_file "${Working_directory}"
+rm -r "${Working_directory}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished synteny and clustering analysis."

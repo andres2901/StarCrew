@@ -328,7 +328,6 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
     
     if all_results:
         final_df = pd.DataFrame(all_results)
-        # MODIFICATION: Only write the 'ID' column to the output file.
         final_df['ID'].to_csv(output_file, index=False, header=False)
         print(f"Successfully wrote a list of {len(final_df)} IDs to {output_file}")
     else:

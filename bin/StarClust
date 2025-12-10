@@ -5,11 +5,11 @@ show_main_help() {
   echo "Usage: $0 <COMMAND> [options]"
   echo
   echo "Available commands:"
-  echo "  Initialize    - Gather the input and organize the working directory to run this toolkit."
+  echo "  Initialize    - Gather the input and organize the working directory to run this tool."
+  echo "  CaptainIdentification    - Performs the identification and phylogenetic analysis of Captains of the elements."
   echo "  SyntenyClustering    - Perform the clustering of elements based on collinear regions."
   echo "  OrthogroupsOverrepresentation    - Identify Orthogroups that are overrepresented in the dataset."
   echo "  TEPrediction    - Identify putative TEs in elements with EarlGrey approach and Mycomobilome database."
-  echo "  CaptainIdentification    - Performs the identification and phylogenetic analysis of Captains of the elements."
   echo "  ClusterCharacterization    - Analyzed and visualized each cluster that had a captain phylogenetic tree."
   echo "  OrthogroupsAnnotation    - Performs functional annotation of orthogroups."
   echo
