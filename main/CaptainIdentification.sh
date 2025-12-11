@@ -83,10 +83,10 @@ function print_help() {
    -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> --overwrite ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> -ms <integer> --overwrite ]"
    echo ""
    echo "Required args:"
-   echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
+   echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
    echo "-m, --mode: specified the mode (Default = AllID) [Available mode: Cluster, FullAll, AllID]."
@@ -95,7 +95,7 @@ function print_help() {
    echo "-r, --rangeKb:The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]"
    echo ""
    echo "Required args with Default in 'Cluster' mode:"
-   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analyzis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
+   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analysis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
    echo ""
    echo "Optional args:"
    echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."

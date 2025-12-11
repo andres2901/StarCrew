@@ -27,7 +27,8 @@ function print_help() {
    1. Organize the Orthogroups that are selected base on the mode.
      1.1 Core: Orthogoups that were identify as core by the ClusterCharacteriation command.
      1.2 MoveAssociated: Orthogoups that were identify as part of a putative movement event between subclusters by the ClusterCharacterization command.
-     2.3 All: All orthogroups identify by the ClusterCharacterization command
+     2.3 All: All orthogroups identify by the ClusterCharacterization command.
+     2.4 Overrepresented: Orthogroups that were identified as Overrepresented by the OrthogroupsOverrepresentation command.
    2. Perform the characterization of the Orthogroup proteins with four approaches:
      2.1 InterProScan: Using all default applications except COILS and MOBIDB.
      2.3 Foldseek: Search for homologs proteins against a database based on the secondary structure.
@@ -38,19 +39,18 @@ function print_help() {
      It return only those 'chracteristics' that are shared for at least 50% of the proteins in the Orthogroup.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> -c <file_path> [ -t <integer> ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
-   echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
-   echo "-c, --clusters: file with a list of clusters to be analyzed, each line correspond to a single cluster ID (required)."
+   echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All]."
+   echo "-m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All, Overrepresented]."
    echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = afdb_swissprot) [Available: pdb, afdb_swissprot]."
-   echo "-t, --threads: Number of threads for all analysis (Default: 8)"
+   echo "-t, --threads: Number of threads for all analysis (Default: 8)."
    echo ""
    echo "Optional args:"
-   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
+   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)."
    echo "-help: Display this help message."
 }
 

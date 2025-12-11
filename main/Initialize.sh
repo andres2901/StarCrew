@@ -31,7 +31,7 @@ fi
 function print_help() {
    echo "Script to organize the working directory to run the subsequent commands in the workflow."
    echo ""
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -f <filte_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -g <file_path> -b <file_path> -s <character> -c <file_path> -M <file_path> --overwrite ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -b <file_path> -s <character> -c <file_path> -M <file_path> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-f, --fasta:  multifasta file wih the elements to study."
@@ -46,14 +46,14 @@ function print_help() {
    echo "Required args in 'Starfish' mode:"
    echo "-g, --gff: 2 column tsv: genome code, path to GFF. The path should be to the original gff files and not the ones formatted to run starfish."
    echo "-b, --boundaries: *.elements.feat file output of 'starfish summary' command."
-   echo "-s, --separator: character separating genomeID from featureID that was used for starfish run."
+   echo "-s, --separator: character separating genomeID from featureID that was used for Starfish run."
    echo "-c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command."
    echo ""
    echo "Required args in 'Simple' mode:"
    echo "-g, --gff: Path to the GFF file containing gene predictions with element-relative coordinates for all elements in the fasta file."
    echo ""
    echo "Optional args:"
-   echo "-M, --Metadata: csv file delimited by semicolon with the metadata information: ElemenID;<data1>;<data2>;...."
+   echo "-M, --Metadata: csv file delimited by semicolon with the metadata information: ElementID;<data1>;<data2>;...."
    echo "--overwrite: Flag to overwrite in case there is already a previous run (Default: off)"
    echo "-help: Display this help message."
 }
@@ -79,37 +79,35 @@ Filter_input() {
     local working_dir="$2"
     local filter_option="$3"
 
+    local temp_dir="${working_dir}/temp/"
+
     if [[ "$filter_option" == 1 ]]
     then
        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on RIP-like signal"
        python ${auxiliary_path}/rip_calculator.py "$fasta_path" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${working_dir}/Elements_filterRIPlike.txt
        removed_elements=$(wc -l ${working_dir}/Elements_filterRIPlike.txt | awk '{print $1}')
        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove based on RIP-like signal"
-       seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterRIPlike.txt "$fasta_path" > ${fasta_path}.filtered.fa
-       fasta_path=$(realpath ${fasta_path}.filtered.fa)
+       seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterRIPlike.txt "$fasta_path" > ${temp_dir}/Sequences.fa
     elif [[ "$filter_option" == 2 ]]
     then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on gc content"
         seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${working_dir}/Elements_filterGC.txt
         removed_elements=$(wc -l ${working_dir}/Elements_filterGC.txt | awk '{print $1}')
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove based on gc content"
-        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
+        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterGC.txt "$fasta_path" > ${temp_dir}/Sequences-filter1.fa
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on RIP-like signal"
-        python ${auxiliary_path}/rip_calculator.py "${fasta_path}.filtered.fa" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${working_dir}/Elements_filterRIPlike.txt
+        python ${auxiliary_path}/rip_calculator.py "${temp_dir}/Sequences-filter1.fa" -tc 0.01 -tp 1 -ts 1 -w 500 -s 100 | awk -F '\t' -v min="$rip" 'NR>1{if($4 > min){print $1}}' > ${working_dir}/Elements_filterRIPlike.txt
         removed_elements=$(wc -l ${working_dir}/Elements_filterRIPlike.txt | awk '{print $1}')
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove based on RIP-like signal"
-        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterRIPlike.txt "${fasta_path}.filtered.fa" > ${fasta_path}.filtered2.fa
-
-        fasta_path=$(realpath ${fasta_path}.filtered2.fa)
+        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterRIPlike.txt "${temp_dir}/Sequences-filter1.fa" > ${temp_dir}/Sequences.fa
     elif [[ "$filter_option == 3" ]]
     then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] filtering elements based on gc content"
         seqkit fx2tab -g -n "$fasta_path" | awk -v min="$filter" '{if($NF < min){$NF=""; print $0}}' | sed -e 's/ $//g' > ${working_dir}/Elements_filterGC.txt
         removed_elements=$(wc -l ${working_dir}/Elements_filterGC.txt | awk '{print $1}')
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] '${removed_elements}' elements were remove base on gc content."
-        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterGC.txt "$fasta_path" > ${fasta_path}.filtered.fa
-        fasta_path=$(realpath ${fasta_path}.filtered.fa)
+        seqkit grep --quiet -n -v -f ${working_dir}/Elements_filterGC.txt "$fasta_path" > ${temp_dir}/Sequences.fa
     fi
 }
 
@@ -168,40 +166,53 @@ Header_processing() {
     State=0
 
     # Loop through all headers and apply the renaming logic
-    while read -r initials original_header; do
-        State=$(($State + 1))
-    
-        # Get the count for the current initial group
-        group_count=$(grep -w "^[[:space:]]*[0-9]*[[:space:]]*$initials$" ${working_dir}/temp/temp_initial_counts.tsv | awk '{print $1}')
-    
-        # Clean the header for processing
-        cleaned_header=$(echo "$original_header" | sed 's/[^a-zA-Z0-9_]//g')
-    
-        new_header=""
-    
-        # Check if this header belongs to an over-threshold group
-        if [ "$group_count" -gt "$max_initial_count" ]; then
-            # Check if the header's own last 5 characters can be used
-            current_last5=$(echo "$cleaned_header" | tail -c 6)
+while read -r initials original_header; do
+    State=$(($State + 1))
+ 
+    # Get the count for the current initial group
+    group_count=$(grep -w "^[[:space:]]*[0-9]*[[:space:]]*$initials$" ${working_dir}/temp/temp_initial_counts.tsv | awk '{print $1}')
+ 
+    # Clean the header for processing
+    cleaned_header=$(echo "$original_header" | sed 's/[^a-zA-Z0-9_]//g')
+ 
+    new_header=""
+ 
+    # Check if this header belongs to an over-threshold group
+    if [ "$group_count" -gt "$max_initial_count" ]; then
+        # Check if the header's own last 5 characters can be used
+        current_last5=$(echo "$cleaned_header" | tail -c 6)
         
-            # Check if the last 5 chars are a valid length and not already used
-            if [ "${#current_last5}" -eq 5 ] && ! grep -q "^$current_last5$" "$temp_used_ids"; then
-                new_header="$current_last5"
-            else
-                # Fallback to generating a unique ID
-                UNIQUE_ID=$(base62 "$ID_COUNTER")
-                PADDED_ID=$(printf "%05s" "$UNIQUE_ID" | sed 's/ /0/g')
-                new_header="$PADDED_ID"
-                ID_COUNTER=$((ID_COUNTER + 1))
-            fi
+        # Check if the last 5 chars are a valid length and not already used
+        if [ "${#current_last5}" -eq 5 ] && ! grep -q "^$current_last5$" "$temp_used_ids"; then
+            new_header="$current_last5"
+            echo "$new_header" >> "$temp_used_ids" # <-- TRACK THE LAST5 ID IMMEDIATELY
         else
-            # The group is within the limit, use the cleaned header
-            new_header="$cleaned_header"
+            # Fallback to generating a unique ID and ENSURE it is new
+            while true; do
+                UNIQUE_ID=$(base62 "$ID_COUNTER")
+                # Pad to 5 characters with '0'
+                PADDED_ID=$(printf "%05s" "$UNIQUE_ID" | sed 's/ /0/g')
+
+                # **CRITICAL FIX: Check if the generated ID is already used**
+                if ! grep -q "^$PADDED_ID$" "$temp_used_ids"; then
+                    new_header="$PADDED_ID"
+                    echo "$new_header" >> "$temp_used_ids" # <-- TRACK THE BASE62 ID IMMEDIATELY
+                    ID_COUNTER=$((ID_COUNTER + 1))
+                    break # Exit the while true loop
+                fi
+                ID_COUNTER=$((ID_COUNTER + 1)) # Increment if collision found and try again
+            done
         fi
-    
-        # Add the new header to the list of used IDs to prevent future collisions
-        echo "$new_header" >> "$temp_used_ids"
-    
+    else
+        # The group is within the limit, use the full cleaned header
+        new_header="$cleaned_header"
+        # Only track if it's a 5-char header, to prevent collisions with
+        # the last-5-char logic later on.
+        if [ "${#new_header}" -eq 5 ]; then
+             echo "$new_header" >> "$temp_used_ids"
+        fi
+    fi
+ 
         # Print to the temporary file use for renamed
         echo -e "$new_header\t$original_header" >> ${working_dir}/temp/temp_association.tsv
 
@@ -297,7 +308,7 @@ Process_simple() {
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff file..."
 
-    if [[ $(grep -i -c "cds" ${gff_file}) -ge 1 ]]; then
+    if [[ $(grep -i -c "cds" ${gff_file}) -ge 10 ]]; then
         CDS_flag=true
     fi
 
@@ -323,12 +334,14 @@ Process_simple() {
     do
         State=$(($State + 1))
         grep "^#" ${gff_file} > ${working_dir}/temp/gff/${line}.gff
-        grep -w $line ${gff_file} >> ${working_dir}/temp/gff/${line}.gff
+        grep -w "^$line" ${gff_file} >> ${working_dir}/temp/gff/${line}.gff
         agat_sp_keep_longest_isoform.pl --config ${agat_config} --gff ${working_dir}/temp/gff/${line}.gff -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
         sed -i -e "s/ID=/ID=${line}\./g" -e "s/Parent=/Parent=${line}\./g" ${working_dir}/Data/Gff/${line}.gff &> /dev/null
         ProgressBar $State $Total_states
     done
     echo ""
+
+    echo "CDS flag: " "$CDS_flag"
 
     organize_info "$working_dir" "$CDS_flag"
 }
@@ -354,7 +367,7 @@ Process_starfish() {
         State=$(($State + 1))     
         A=$(echo $line | awk '{print $2}' | awk -F '|' '{print $1}')
         B=$(echo $line | awk '{print $1}')
-        grep $A ${working_dir}/temp/coordinate_file.txt | sed s/$A/$B/ >> ${working_dir}/Coordinate_file.txt
+        grep "^$A" ${working_dir}/temp/coordinate_file.txt | sed s/$A/$B/ >> ${working_dir}/Coordinate_file.txt
         ProgressBar $State $Total_states
     done
     
@@ -367,7 +380,7 @@ Process_starfish() {
         State=$(($State + 1))
         GFF_FILE=$(grep -w "${line}" ${gff_path} | awk '{print $2}')
         check_gff_file "$(echo $line | awk '{print $2}')"
-        sed -e s/${separator}//g $(echo $line | awk '{print $2}') > ${working_dir}/temp/gff/$(grep -w "${line}" ${gff_path} | awk '{print $1}').gff
+        sed -e s/${separator}//g $(echo $line | awk '{print $2}') > ${working_dir}/temp/gff/$(echo $line | awk '{print $1}').gff
         ProgressBar $State $Total_states
     done
 
@@ -594,7 +607,7 @@ fi
 if [[ -z "$metadata_path" ]]; then
     metadata=false
 else
-    check_metadata_file "$metadata_path"
+    check_metadata_file "$metadata_path" "$fasta_path"
     metadata=true
     metadata_path=$(realpath $metadata_path)
 fi
@@ -656,9 +669,9 @@ check_duplicates "$fasta_path" "$out_directory"
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> No duplicate headers found. Proceeding."
 
 # Filter stage
-if [[ $rip < 100 ]]
+if [[ "$rip" -lt 100 ]]
 then
-    if [[ $filter == 0 ]]
+    if [[ "$filter" == 0 ]]
     then
        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with more than '${rip}' percent of sequence with RIP-like signal."
        Filter_input "$fasta_path" "$out_directory" "1"
@@ -669,9 +682,10 @@ then
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding..."
     fi
 else
-    if [[ $filter == 0 ]]
+    if [[ "$filter" == 0 ]]
     then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] skipping step 2 of gc content and rip filtering..."
+        cp $fasta_path ${out_directory}/temp/Sequences.fa
     else
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: filtering elements with gc content below '${filter}' percent."
         Filter_input "$fasta_path" "$out_directory" "3"
@@ -680,7 +694,7 @@ else
 fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Processing headers, creating sequence header association file, and updating metadata if available."
-Header_processing "$fasta_path" "$out_directory"
+Header_processing "${out_directory}/temp/Sequences.fa" "$out_directory"
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding..."
 
 # Organize all the files

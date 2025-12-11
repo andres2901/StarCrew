@@ -282,7 +282,7 @@ check_metadata_file () {
                     else
                         if [[ $(head -n1 $metadata_path | tr ';' '\n' | sort | uniq -c | awk '{print $1}' |sort -u) -eq 1 ]]; then
 
-            	            local Headers_name=$(grep "^>" $fasta_path | awk -F '>' '{print $2}' | tr '\n' '|' | sed 's/|$//')
+                            local Headers_name=$(grep "^>" $fasta_path | awk -F '>' '{print $2}' | tr '\n' '|' | sed 's/|$//')
         	                local Headers_count=$(grep -c "^>" $fasta_path)
         	                local Metadata_count=$(egrep $Headers_name $metadata_path | wc -l)
         	                if [[ $Metadata_count -eq 0 ]]; then
@@ -298,8 +298,6 @@ check_metadata_file () {
         	fi
         fi
     fi
-
-    return $metadata_path
 }
 
 check_auxiliary_scripts() {

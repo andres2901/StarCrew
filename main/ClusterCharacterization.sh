@@ -40,7 +40,7 @@ function print_help() {
    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -t <integer> ]"
    echo ""
    echo "Required args:"
-   echo "-w, --workingDirectory: Specify the working directory where all data are stored (required)."
+   echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
    echo "-t, --threads: Number of threads for orthofinder and blast (Default: 8)"
