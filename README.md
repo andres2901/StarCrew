@@ -2,9 +2,9 @@
 
 ## Overview
 
-**StarClust** is a tool specifically designed to systematically analyze the cargo genes of Starship elements. The tool is composed of seven distinct commands and creates a well-organized project folder to facilitate downstream analysis. StarClust provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this tool is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested in either dry-lab or wet-lab environments.
+**StarClust** is a tool specifically designed to systematically analyze the cargo genes of Starship elements. The tool is composed of seven distinct commands and creates a well-organized project folder to facilitate downstream analysis. StarClust provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this tool is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
 
-In addition to the main commands, StarClust is distributed with a diverse set of auxiliary scripts. Although these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1)A modified RIP-like signal calculator, 2)Filtering genes or isoforms from a GFF file based on intron density, 3) Extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) And other specific tasks.
+In addition to the main commands, StarClust is distributed with a diverse set of auxiliary scripts. Although these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1) a modified RIP-like signal calculator, 2) filtering genes or isoforms from a GFF file based on intron density, 3) extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) and other specific tasks.
 
 ## Table of contents
 
@@ -42,7 +42,7 @@ This tool was specifically written to be run on Linux and requires the following
 - python with the following packages: networkx, biopython, gffutils, pandas, numpy, scikit-learn.
 - seqkit.
 - earlgrey.
-- blast.
+- blast+.
 - clipkit.
 - iqtree3.
 - gotree.
@@ -61,18 +61,19 @@ This tool was specifically written to be run on Linux and requires the following
 The commands related to functional annotation and Transposable element identification require databases that are not distributed under this repositorie and need to be properly dowwnload:
 
 - interproscan related databases.
-- pfamA from hhblits.
+- pfamA for hhblits.
 - foldseek: ProstT5, PDB and alphaphold.
 - Mycomobilome.
 
 ## Installation
 
-Before installation, ensure you have **Anaconda3** and **git** installed and accessible in your system path, as they are required for the full tool installation. After cloning, execute the `build_StarClust.sh` script to properly install all necessary software dependencies and databases required by the tool's commands, as shown below:
+Before installation, ensure you have `Anaconda3` and `git` installed and accessible in your system path, as they are required for the full tool installation. After cloning, execute the `build_StarClust.sh` script to properly configure a conda environment, and install all necessary software dependencies and databases required by the tool's commands, as shown below:
 
 ```
 # clone the repository
 git clone https://github.com/andres2901/StarClust.git
 
+# Construct the environment and download require databases
 cd StarClust/
 bash build_StarClust.sh
 ```
@@ -96,16 +97,14 @@ In this scenario, you only require two basic input files:
 1.  **Elements File (Multifasta):** A multifasta file containing the nucleotide sequences of the elements you intend to study.
 
 2.  **Gene Prediction File (GFF3):** A GFF3 file containing the gene predictions for all elements listed in the `Elements` fasta file.
-    * The `seqID` in the first column **must be the header/ID of the element** itself, **not** the ID of the contig from which it was extracted.
-    * Similarly, the coordinates must be **relative to the element's sequence**, not the contig from which it was extracted.
+    * The `seqID` in the first column must be the header/ID of the element itself, not the ID of the contig from which it was extracted.
+    * Similarly, the coordinates must be relative to the element's sequence, not the contig from which it was extracted.
 
 ### Starfish input files
 
-This input mode is used when you have processed your dataset using the **[Starfish toolkit](https://github.com/egluckthaler/starfish)** and wish to analyze the obtained "ships" (elements).
+This input mode is used when you have processed your dataset using the [Starfish toolkit](https://github.com/egluckthaler/starfish) and wish to analyze the obtained "ships" (elements). It is strongly recommended that you first perform an initial inspection and removal of false positives, as described in the Starfish [step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial).
 
-**It is strongly recommended** that you first perform an initial inspection and removal of false positives, as described in the Starfish **[step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial)**.
-
-To use this tool, you must have the results from both the `geneFinder` and `elementFinder` modules of Starfish. **StarClust** utilizes three resulting Starfish files and one user-constructed file:
+To use this tool, you must have the results from both the `geneFinder` and `elementFinder` modules of Starfish. StarClust utilizes three resulting Starfish files and one user-constructed file:
 
 1.  **Elements File (Multifasta):**
     * This is the `*.elements.fna` file resulting from the `starfish summarize` command.
@@ -120,13 +119,13 @@ To use this tool, you must have the results from both the `geneFinder` and `elem
 3.  **Captain File (Multifasta):**
     * This is the `*_tyr.filt_intersect.fas` file resulting from the `starfish annotate` command.
     * This file contains the putative YR recombinase genes identified by Starfish.
-    * **Note:** While filtering is not strictly required, users working with large datasets can reduce the file to include only Captains of **true positive** elements to decrease run time.
+    * **Note:** While filtering is not strictly required, users working with large datasets can reduce the file to include only Captains of true positive elements to decrease run time.
 
 4.  **Gene Prediction Path File (TSV):**
     * This is a user-constructed TSV file with a two-column structure (similar to the optional Starfish input file): `genome code` and `path to GFF`.
     * **Crucial Points:**
-        * The `genome code` must be **identical** to the code used in the Starfish analysis.
-        * The GFF path must point to the **original GFF file**, and **not** the files returned by the `starfish format` or `starfish format-ncbi` commands.
+        * The `genome code` must be identical to the code used in the Starfish analysis.
+        * The GFF path must point to the original GFF file, and not the files returned by the `starfish format` or `starfish format-ncbi` commands.
         * This tool requires the gene, mRNA, intron, exon, and CDS information, and needs the original contig `seqID` to be maintained. The files returned by the `starfish format` or `starfish format-ncbi` commands only retain mRNA information and alter the IDs to suit the Starfish workflow.
     * **Acquisition:** The user can obtain the necessary GFF file using the same command line as detailed in the Starfish step-by-step tutorial:
 
@@ -327,11 +326,11 @@ For the purpose of clustering, we use two specific collinearity metrics:
 A preliminary filter is performed by removing any pair with a GCP below 8%, as initial testing indicated these pairs consistently represented false positives. After this basic filtering, the final pairs can be returned using one of four criteria-based modes:
 
 1.  **Raw Mode:**
-    * Returns all pairs remaining after the basic GCP $< 8\%$ filtering.
+    * Returns all pairs remaining after the basic GCP < 8% filtering.
     * **WARNING:** This mode may yield a high rate of false positives and requires significant manual effort to confirm the results.
 2.  **Strong Syntenic Pairs (SSP):**
-    * Returns all pairs with a **GCP $ \ge 41\%$**.
-    * For pairs with a relatively large difference in length and gene content, this mode also accepts pairs where $ECP_x \ge 45\%$ and the ratio between the ECPs is at least $1.8$, meaning $\frac{ECP_x}{ECP_y} \ge 1.8$.
+    * Returns all pairs with a $GCP \ge 41$%.
+    * For pairs with a relatively large difference in length and gene content, this mode also accepts pairs where $ECP_x \ge 45$% and the ratio between the ECPs is at least $1.8$, meaning $\frac{ECP_x}{ECP_y} \ge 1.8$.
 3.  **Blastn Filter (FilterBlast):**
     * This was the initial filtering approach design for the tool, inspired by the BLAST result cleaning process described in [Westerberg et al. 2021](https://pubmed.ncbi.nlm.nih.gov/38218923/) before LTR network construction.
     * All pairs not considered SSP are further analyzed using an all-versus-all blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/yass.php).
@@ -347,9 +346,9 @@ A preliminary filter is performed by removing any pair with a GCP below 8%, as i
     * Metric System Details:
         * Identify anchor pairs from the collinearity file and defined the expected points as $Anchor\ pairs \times 2$.
         * Select these anchor pairs from each DIAMOND search direction ($x \rightarrow y$ and $y \rightarrow x$). **Note:** Because the MCScanX algorithm does not require hits to be reciprocal to define an anchor point, we search individually for each direction.
-        * Filter hits with a length $< 100 \text{aa}$ and identity percentage $< 60\%$.
+        * Filter hits with a length $< 100 \text{aa}$ and identity percentage < 60%.
         * Each remaining hit contributes **1 point**. Reciprocal hits for a single anchor pair thus return **2 points**.
-        * Bonus Points: Hits with identity percentage $\ge 95\%$ receive $0.1$ extra point per $200 \text{aa}$ of alignment length. Example: A hit with $98\%$ identity and $350 \text{aa}$ alignment length gives $0.175$ extra points.
+        * Bonus Points: Hits with identity percentage $\ge 95$% receive $0.1$ extra point per $200 \text{aa}$ of alignment length. Example: A hit with $98\%$ identity and $350 \text{aa}$ alignment length gives $0.175$ extra points.
         * **Acceptance Criteria:** A pair is accepted if the obtained points are equal to or higher than the number of anchor points defined by the user. If the user-defined anchor point parameter is less than 6, the minimum required point total defaults to **6** to prevent false positive results from using a low anchor threshold.
         * **GCP/ECP Update:** A ratio is defined as $\frac{Obtain\_points}{Expected\_points}$. The GCP and ECP of the pair are then updated by multiplying them by this ratio. **Note:** If a pair's ratio is higher than $1$ (due to bonus points), the ratio is capped at $1$ to prevent GCP or ECP from exceeding $100\%$.
 
@@ -402,8 +401,8 @@ This command is designed to characterize the cargo gene dynamics within each ele
 The main goal of this command is to identify two relevant groups of genes within each cluster:
 
 * **Core Genes:**
-    * We use a loose definition of "core gene" in this context. While core genes are present in $95\%-98\%$ of genomes, this strict threshold is inappropriate here due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this tool.
-    * Therefore, "core genes" here are defined as those present in at least $80\%$ of the elements in a cluster or subcluster.
+    * We use a loose definition of "core gene" in this context. While core genes are present in 95%-98% of genomes, this strict threshold is inappropriate here due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this tool.
+    * Therefore, "core genes" here are defined as those present in at least 80% of the elements in a cluster or subcluster.
     * **Rationale:** Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster/subcluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in the element over evolutionary time.
 
 * **Movement Genes:**
