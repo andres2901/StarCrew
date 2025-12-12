@@ -30,7 +30,6 @@ if (arguments$threads > 1) {
   plan("multicore", workers = arguments$threads)
 }
 
-
 # Check software installation
 suppressPackageStartupMessages(library(syntenet))
 

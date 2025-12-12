@@ -189,13 +189,6 @@ The command provides three main filtering approaches you can utilize:
 3. Gene Content Filtering: This filter removes elements that are empty or contain a very low number of cargo genes.
     * Since the primary goal of this tool is to analyze cargo content, maintaining elements without sufficient cargo genes is inefficient. This filter ensures that only elements useful for downstream analysis are retained.
 
-In the case of 'Starfish' mode, the input data goes trough a specific preprocess to be able to enter the pipeline:
-
-1. The gene information from the original gff files is extracted and updated base on the positions from the metadata file from starfish run.
-2. As Starfish perform a _de novo_ gene prediction of captains, we have to perform again this approach to be able to obtain the full genetic information of this genes (exon, intron, CDS...). For our purpose, we performed a modify version of that approach:
-    * Based on the YR recombinase database obtain in Starfish, we run meateuk against the nucleotide file looking for a minimum sequence identity of 0.95 and minimum coverage of 0.95.
-    * In the case there was a previous gene model in the same position, this tool will select the longest gene model. This present a difference with Starfish logic that always select metaeuk gene model in those cases.
-
 When using the 'Starfish' input mode, the provided data undergoes specific preprocessing before entering the main pipeline:
 
 1.  **GFF Information Update:** The gene information from the original GFF files is extracted and updated based on the positions provided in the metadata file resulting from the Starfish run.
@@ -298,7 +291,7 @@ Required args with Default:
 -g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25].
 -n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4).
 -s, --minSize: The minimum desired size for any final sub-cluster (Default: 2).
--th, --threshold: The minimum modularity score for a split to be accepted (Default: 0.05) [range: -0.5 - 1.0].
+-th, --threshold: The minimum modularity score for a set of subcluster to be accepted (Default: 0.05) [range: -0.5 - 1.0].
  
  Required args with Default in 'FilterBlast' mode:
 -fs, --fragmentSize: The minimum fragment size of a blast alignment to be used for blastn filter (Default: 2000) [range: 1000, 5000].
@@ -308,12 +301,70 @@ Required args with Default:
 
 Optional args:
 -t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8).
---captainInfo: Flag to check and used the captain exon/pseudoexon information for the cluster (Default: off).
+--captainInfo: Flag to check and used the captain exon/pseudoexon information for the cluster. This will reduce time in downstream analysis. (Default: off).
 --overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off).
 -help: Display this help message.
 ```
 
-The clustering of elements is based on collinearity regions. In this case, 
+The clustering of elements is based on collinearity regions identified using the [syntenet](https://pubmed.ncbi.nlm.nih.gov/36539202/) pipeline. The user can define two critical parameters for collinearity analysis:
+
+* **Anchor Points:** Genes that are shared between two elements in the same relative position.
+* **Gaps:** Genes that are not shared in the region but are located between shared anchor genes.
+
+For the purpose of clustering, we use two specific collinearity metrics:
+1.  **General Collinearity Percentage (GCP):**
+    * This value is returned by syntenet, which employs the [MCScanX algorithm](https://pubmed.ncbi.nlm.nih.gov/22217600/), and represents the total collinearity of the pair.
+    * MCScanX calculates GCP using the formula:
+        $$GCP= \frac{\sum CG}{\sum TG} \times 100$$
+        where $CG$ equals the total number of collinear genes between the two elements, and $TG$ represents the total number of genes in both elements combined.
+
+2.  **Element Collinearity Percentage (ECP):**
+    * This value is calculated by the tool using the syntenet output and the gene prediction annotation for both elements. Two ECP values are calculated, one for each element in the pair.
+    * ECP is calculated by the following formula:
+        $$ECP_x= \frac{\sum CG_x}{\sum TG_x} \times 100$$
+        where $CG_x$ equals the total number of non-duplicate collinear genes in element $x$, and $TG_x$ represents the total number of genes in element $x$.
+
+A preliminary filter is performed by removing any pair with a GCP below 8%, as initial testing indicated these pairs consistently represented false positives. After this basic filtering, the final pairs can be returned using one of four criteria-based modes:
+
+1.  **Raw Mode:**
+    * Returns all pairs remaining after the basic GCP $< 8\%$ filtering.
+    * **WARNING:** This mode may yield a high rate of false positives and requires significant manual effort to confirm the results.
+2.  **Strong Syntenic Pairs (SSP):**
+    * Returns all pairs with a **GCP $ \ge 41\%$**.
+    * For pairs with a relatively large difference in length and gene content, this mode also accepts pairs where $ECP_x \ge 45\%$ and the ratio between the ECPs is at least $1.8$, meaning $\frac{ECP_x}{ECP_y} \ge 1.8$.
+3.  **Blastn Filter (FilterBlast):**
+    * This was the initial filtering approach design for the tool, inspired by the BLAST result cleaning process described in [Westerberg et al. 2021](https://pubmed.ncbi.nlm.nih.gov/38218923/) before LTR network construction.
+    * All pairs not considered SSP are further analyzed using an all-versus-all blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/yass.php).
+    * The raw BLAST results are processed through the following steps to define the final maintained pairs:
+        * Remove hits below user-defined thresholds for fragment size and identity percentage.
+        * Merge overlapping hits.
+        * Remove resulting hit/overlap regions below a user-defined threshold.
+        * Calculate the sequence coverage of all hits between the two elements.
+        * Filter out pairs that have a coverage below a user-defined threshold.
+4.  **Metric-Based Filter (FilterMetric):**
+    * This secondary filtering approach is inspired by the [ClusterBlast]((https://docs.antismash.secondarymetabolites.org/modules/clusterblast/)) ranking system.
+    * All pairs are analyzed using a metric system calculated from the syntenet collinearity file and the raw DIAMOND search data. The GCP and ECP of the pair are subsequently updated based on the metric score.
+    * Metric System Details:
+        * Identify anchor pairs from the collinearity file and defined the expected points as $Anchor\ pairs \times 2$.
+        * Select these anchor pairs from each DIAMOND search direction ($x \rightarrow y$ and $y \rightarrow x$). **Note:** Because the MCScanX algorithm does not require hits to be reciprocal to define an anchor point, we search individually for each direction.
+        * Filter hits with a length $< 100 \text{aa}$ and identity percentage $< 60\%$.
+        * Each remaining hit contributes **1 point**. Reciprocal hits for a single anchor pair thus return **2 points**.
+        * Bonus Points: Hits with identity percentage $\ge 95\%$ receive $0.1$ extra point per $200 \text{aa}$ of alignment length. Example: A hit with $98\%$ identity and $350 \text{aa}$ alignment length gives $0.175$ extra points.
+        * **Acceptance Criteria:** A pair is accepted if the obtained points are equal to or higher than the number of anchor points defined by the user. If the user-defined anchor point parameter is less than 6, the minimum required point total defaults to **6** to prevent false positive results from using a low anchor threshold.
+        * **GCP/ECP Update:** A ratio is defined as $\frac{Obtain\_points}{Expected\_points}$. The GCP and ECP of the pair are then updated by multiplying them by this ratio. **Note:** If a pair's ratio is higher than $1$ (due to bonus points), the ratio is capped at $1$ to prevent GCP or ECP from exceeding $100\%$.
+
+Once the final set of filtered pairs is obtained, a graph-based clustering process is performed:
+
+1.  **Graph Creation:** A weighted undirected graph is created using the GCP as the edge weight. Elements without any connection are excluded from the graph.
+2.  **Cluster Definition:** A cluster is defined as a set of connected elements. **Note:** Due to the nature of connected components, not all elements inside a cluster may have a direct connection between them, and therefore might not share any sequence or cargo similarity.
+3.  **Subclustering:** For further resolution, spectral clustering is performed iteratively, starting with $k=2$ (where $k$ is the desired number of clusters) on clusters that meet a minimum size defined by the user. This process follows:
+    * **3.1. Clustering:** Perform spectral clustering using the current $k$ value.
+    * **3.2. Filtering:** Subclusters are filtered based on two criteria:
+        * 1) No subcluster has a number of elements below a user-defined threshold.
+        * 2) The Modularity score is higher than a user-defined threshold.
+    * **3.3. Decision:** Based on the filtering result, a decision is taken:
+        * Pass: If both criteria are met, the modularity score threshold is updated to the current $k$ modularity score, $k$ is incremented ($k = k + 1$), and the process returns to step 3.1.
+        * Fail: If either criterion fails, the subclusters from the previous $k$ value are maintained. If this occurs on the first iteration, no subclusters are identified.
 
 ### ClusterCharacterization
 
@@ -329,11 +380,11 @@ This script perform eight steps per cluster to analyzed:
  6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
  6.2. Specific core: Orthogroups that are present in at least 80% of the elements for subclusters generated at a 0.8 height of the hierarchical tree of cargo content.
    6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
-   6.2.2. If subslusters are presen, identify core genes in each one that have at least 5 elements using the same logic of general core.
+   6.2.2. If subslusters are present, identify core genes in each one that have at least 5 elements using the same logic of general core.
 7. If subclusters are present it try to identify putative cargo movement events and try to avoid 'General core' genes.
-8. Determine if there are discordances at 'Clade' lavel between Cargo hierarchical clustering and Captain phylogenetic tree.
+8. Determine if there are discordances at 'Clade' level between Cargo hierarchical clustering and Captain phylogenetic tree.
 
-Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -t <integer> ]
+Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -t <integer> --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -345,6 +396,26 @@ Optional args:
 --overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)
 -help: Display this help message.
 ```
+
+This command is designed to characterize the cargo gene dynamics within each element cluster. The script initially performs a hierarchical clustering tree of the elements within the cluster to visually identify their evolutionary history . It also attempts to identify any nesting events between elements inside the cluster. If your input results originate from a Starfish run, the identified nesting events should match those found in the `*.elements.feat` metadata file.
+
+The main goal of this command is to identify two relevant groups of genes within each cluster:
+
+* **Core Genes:**
+    * We use a loose definition of "core gene" in this context. While core genes are present in $95\%-98\%$ of genomes, this strict threshold is inappropriate here due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this tool.
+    * Therefore, "core genes" here are defined as those present in at least $80\%$ of the elements in a cluster or subcluster.
+    * **Rationale:** Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster/subcluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in the element over evolutionary time.
+
+* **Movement Genes:**
+    * This set of genes is identified based on specific presence/absence patterns that suggest their introduction into a different element was caused by horizontal gene movement from one element to another.
+    * This analysis is performed only between subclusters (as defined by the [SyntenyClustering](#SyntenyClustering) command), meaning comparisons are not conducted on a pairwise, element-by-element basis.
+
+Finally, the command attempts to determine discordances between the Captain phylogenetic tree and the cargo hierarchical clustering. The comparison is deliberately made at the 'clade' level (instead of comparing individual elements) due to the inherent uncertainty of bifurcations and polytomies in the Captain tree. This process occurs as follows:
+
+1.  **Captain Tree Transformation:** The Captain phylogenetic tree is transformed into a hierarchical cluster tree.
+2.  **Clade Identification:** A suitable number of clusters, which we are calling 'clades', is identified within the transformed Captain tree.
+3.  **Cargo Subclustering:** The cargo hierarchical cluster tree is then subclustered into the same number of 'clades' as identified in the Captain tree.
+4.  **Comparison:** The resulting subcluster structures from the cargo and Captain trees are formally compared to identify discordances.
 
 ### OrthogroupsOverrepresentation
 
@@ -362,10 +433,10 @@ This script perform three steps:
  1.2 MoveAssociated: Orthogoups that were identify as part of a putative movement event between subclusters by the ClusterCharacterization command.
  2.3 All: All orthogroups identify by the ClusterCharacterization command.
  2.4 Overrepresented: Orthogroups that were identified as Overrepresented by the OrthogroupsOverrepresentation command.
-2. Perform the characterization of the Orthogroup proteins with four approaches:
+2. Perform the characterization of the Orthogroup proteins with three approaches:
  2.1 InterProScan: Using all default applications except COILS and MOBIDB.
- 2.3 Foldseek: Search for homologs proteins against a database based on the secondary structure.
- 2.4 hhblits: Search domains against PfamA database.
+ 2.2 Foldseek: Search for homologs proteins against a database based on the secondary structure.
+ 2.3 hhblits: Search domains against PfamA database.
 3. Summarize the results of the previous step:
  3.1 Internal summary: For each Orthogroups summarize the results per protein in a csv
  3.2 General summary: Return a summary for the Orthogroup under the assumption that all proteins in each Orthogroups have the same function. It return only those 'chracteristics' that are shared for at least 50% of the proteins in the Orthogroup.
@@ -384,6 +455,25 @@ Optional args:
 --overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsAnnotation (Default: off).
 -help: Display this help message.
 ```
+
+The goal of this command is not to perform a deep analysis into the functional annotation of genes in orthogroups of interest. Instead, it is designed for exploratory analysis on the putative function of these genes, allowing users to quickly gain ideas about possible functions and select specific genes/orthogroups to conduct more in-depth analyses using their preferred approaches.
+
+The main logic behind this command is the assumption that all proteins within the same orthogroup share the same function. Therefore, a general summary of annotations is generated for any function or domain present in at least $50\%$ of the elements within an orthogroup.
+
+This command employs three distinct annotation approaches:
+
+1.  **InterProScan:**
+    * The command-line distribution of the well-known InterProScan software to identify domains within a protein. 
+
+2.  **Foldseek:**
+    * This software compares a query protein's 3D structure against a database of known protein 3D structures.
+    * Since we only have the amino acid sequences, Foldseek can transform the amino acid sequences into the 3Di-alphabet sequence using Protein 'structure-sequence' T5 (Prost5) models.
+    * Two databases are supported for this tool: PDB and AlphaFold. We recommend using the AlphaFold database due to its larger size, which provides a higher probability of finding a match.
+
+3.  **HHblits:**
+    * The result from this approach is returned for the whole orthogroup, as this software compares a multiple sequence alignment against a database of HMM profiles. 
+    * For this tool, we use the Pfam-A database designed for HHblits.
+    * **Note:** Users should be aware that the distributed Pfam-A database for this specific software is outdated.
 
 ### TEPrediction
 

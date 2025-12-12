@@ -32,12 +32,12 @@ function print_help() {
      6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
      6.2. Specific core: Orthogroups that are present in at least 80% of the elements for subclusters generated at a 0.8 height of the hierarchical tree of cargo content.
        6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
-       6.2.2. If subslusters are presen, identify core genes in each one that have at least 5 elements using the same logic of general core.
+       6.2.2. If subslusters are present, identify core genes in each one that have at least 5 elements using the same logic of general core.
    7. If subclusters are present it try to identify putative cargo movement events and try to avoid 'General core' genes.
-   8. Determine if there are discordances at 'Clade' lavel between Cargo hierarchical clustering and Captain phylogenetic tree.
+   8. Determine if there are discordances at 'Clade' level between Cargo hierarchical clustering and Captain phylogenetic tree.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -t <integer> ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."

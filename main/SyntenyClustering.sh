@@ -46,7 +46,7 @@ function print_help() {
    echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
    echo "-s, --minSize: The minimum desired size for any final sub-cluster (Default: 2)."
-   echo "-th, --threshold: The minimum modularity score for a split to be accepted (Default: 0.05) [range: -0.5 - 1.0]."
+   echo "-th, --threshold: The minimum modularity score for a set of subcluster to be accepted (Default: 0.05) [range: -0.5 - 1.0]."
    echo ""
    echo "Required args with Default in 'FilterBlast' mode:"
    echo "-fs, --fragmentSize: The minimum fragment size of a blast alignment to be used for blastn filter (Default: 2000) [range: 1000, 5000]."
@@ -158,10 +158,10 @@ process_diamond() {
         diamond blastp -q "$query" -d "$db" -o "$outfile" --fast -k0 --max-hsps 1 --evalue 1e-5 --matrix PAM30 --query-cover 90 -p "$threads" --quiet
         
         # The rest of the loop is adjusted to use the new species_name variable
-        awk '{print $2}' "$outfile" | sed 's/_.*//g' | sort | uniq > "${temp_dir}hit"
+        awk '{print $2}' "$outfile" | awk -F '_' '{print $1}' | sed 's/[^[:print:]]//g' | sort | uniq > "${temp_dir}hit"
         
         # Grep the hits against the list of all species to process each pair
-        grep -f "${temp_dir}hit" "${temp_dir}all" | while read -r line
+        grep -w -f "${temp_dir}hit" "${temp_dir}all" | while read -r line
         do
             local TARGET="$line"
             if [[ "$species_name" != "$TARGET" ]]

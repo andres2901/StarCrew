@@ -145,7 +145,7 @@ Header_processing() {
     {
         original_header = $1
         cleaned_header = original_header
-        gsub(/[^a-zA-Z0-9_]/, "", cleaned_header)
+        gsub(/[^a-zA-Z0-9]/, "", cleaned_header)
         initials = substr(cleaned_header, 1, 5)
         print initials, original_header
     }
@@ -166,52 +166,52 @@ Header_processing() {
     State=0
 
     # Loop through all headers and apply the renaming logic
-while read -r initials original_header; do
-    State=$(($State + 1))
+    while read -r initials original_header; do
+        State=$(($State + 1))
  
-    # Get the count for the current initial group
-    group_count=$(grep -w "^[[:space:]]*[0-9]*[[:space:]]*$initials$" ${working_dir}/temp/temp_initial_counts.tsv | awk '{print $1}')
+        # Get the count for the current initial group
+        group_count=$(grep -w "^[[:space:]]*[0-9]*[[:space:]]*$initials$" ${working_dir}/temp/temp_initial_counts.tsv | awk '{print $1}')
  
-    # Clean the header for processing
-    cleaned_header=$(echo "$original_header" | sed 's/[^a-zA-Z0-9_]//g')
+        # Clean the header for processing
+        cleaned_header=$(echo "$original_header" | sed 's/[^a-zA-Z0-9]//g')
  
-    new_header=""
+        new_header=""
  
-    # Check if this header belongs to an over-threshold group
-    if [ "$group_count" -gt "$max_initial_count" ]; then
-        # Check if the header's own last 5 characters can be used
-        current_last5=$(echo "$cleaned_header" | tail -c 6)
+        # Check if this header belongs to an over-threshold group
+        if [ "$group_count" -gt "$max_initial_count" ]; then
+            # Check if the header's own last 5 characters can be used
+            current_last5=$(echo "$cleaned_header" | tail -c 6)
         
-        # Check if the last 5 chars are a valid length and not already used
-        if [ "${#current_last5}" -eq 5 ] && ! grep -q "^$current_last5$" "$temp_used_ids"; then
-            new_header="$current_last5"
-            echo "$new_header" >> "$temp_used_ids" # <-- TRACK THE LAST5 ID IMMEDIATELY
-        else
-            # Fallback to generating a unique ID and ENSURE it is new
-            while true; do
-                UNIQUE_ID=$(base62 "$ID_COUNTER")
-                # Pad to 5 characters with '0'
-                PADDED_ID=$(printf "%05s" "$UNIQUE_ID" | sed 's/ /0/g')
+            # Check if the last 5 chars are a valid length and not already used
+            if [ "${#current_last5}" -eq 5 ] && ! grep -q "^$current_last5$" "$temp_used_ids"; then
+                new_header="$current_last5"
+                echo "$new_header" >> "$temp_used_ids" # <-- TRACK THE LAST5 ID IMMEDIATELY
+            else
+                # Fallback to generating a unique ID and ENSURE it is new
+                while true; do
+                    UNIQUE_ID=$(base62 "$ID_COUNTER")
+                    # Pad to 5 characters with '0'
+                    PADDED_ID=$(printf "%05s" "$UNIQUE_ID" | sed 's/ /0/g')
 
-                # **CRITICAL FIX: Check if the generated ID is already used**
-                if ! grep -q "^$PADDED_ID$" "$temp_used_ids"; then
-                    new_header="$PADDED_ID"
-                    echo "$new_header" >> "$temp_used_ids" # <-- TRACK THE BASE62 ID IMMEDIATELY
-                    ID_COUNTER=$((ID_COUNTER + 1))
-                    break # Exit the while true loop
-                fi
-                ID_COUNTER=$((ID_COUNTER + 1)) # Increment if collision found and try again
-            done
+                    # **CRITICAL FIX: Check if the generated ID is already used**
+                    if ! grep -q "^$PADDED_ID$" "$temp_used_ids"; then
+                        new_header="$PADDED_ID"
+                        echo "$new_header" >> "$temp_used_ids" # <-- TRACK THE BASE62 ID IMMEDIATELY
+                        ID_COUNTER=$((ID_COUNTER + 1))
+                        break # Exit the while true loop
+                    fi
+                    ID_COUNTER=$((ID_COUNTER + 1)) # Increment if collision found and try again
+                done
+            fi
+        else
+            # The group is within the limit, use the full cleaned header
+            new_header="$cleaned_header"
+            # Only track if it's a 5-char header, to prevent collisions with
+            # the last-5-char logic later on.
+            if [ "${#new_header}" -eq 5 ]; then
+                echo "$new_header" >> "$temp_used_ids"
+            fi
         fi
-    else
-        # The group is within the limit, use the full cleaned header
-        new_header="$cleaned_header"
-        # Only track if it's a 5-char header, to prevent collisions with
-        # the last-5-char logic later on.
-        if [ "${#new_header}" -eq 5 ]; then
-             echo "$new_header" >> "$temp_used_ids"
-        fi
-    fi
  
         # Print to the temporary file use for renamed
         echo -e "$new_header\t$original_header" >> ${working_dir}/temp/temp_association.tsv
