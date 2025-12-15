@@ -31,8 +31,8 @@ function print_help() {
      2.4 Overrepresented: Orthogroups that were identified as Overrepresented by the OrthogroupsOverrepresentation command.
    2. Perform the characterization of the Orthogroup proteins with four approaches:
      2.1 InterProScan: Using all default applications except COILS and MOBIDB.
-     2.3 Foldseek: Search for homologs proteins against a database based on the secondary structure.
-     2.4 hhblits: Search domains against PfamA database.
+     2.3 Foldseek: Search for homologs proteins against a database based on the 3D structure.
+     2.4 hhblits: Search domains against the PfamA database.
    3. Summarize the results of the previous step:
      3.1 Internal summary: For each Orthogroups summarize the results per protein in a csv
      3.2 General summary: Return a summary for the Orthogroup under the assumption that all proteins in each Orthogroups have the same function.

@@ -318,6 +318,10 @@ check_auxiliary_scripts() {
             exit 1
         fi
     elif [[ $command == "SyntenyClustering" ]]; then
+        if [[ ! -f "${auxiliary_path}/PreCluster.py" ]]; then
+            echo "Error: File '${auxiliary_path}/PreCluster.py' does not exist."
+            exit 1
+        fi
         if [[ ! -f "${auxiliary_path}/Blast_CleanUp.py" ]]; then
             echo "Error: File '${auxiliary_path}/Blast_CleanUp.py' does not exist."
             exit 1
@@ -359,6 +363,10 @@ check_auxiliary_scripts() {
         fi
         if [[ ! -f "${auxiliary_path}/merge.py" ]]; then
             echo "Error: file '${auxiliary_path}/merge.py' does not exist."
+            exit 1
+        fi
+        if [[ ! -f "${auxiliary_path}/PreCluster.py" ]]; then
+            echo "Error: File '${auxiliary_path}/PreCluster.py' does not exist."
             exit 1
         fi
         if [[ ! -f "${auxiliary_path}/Blast_CleanUp.py" ]]; then

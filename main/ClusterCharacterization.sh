@@ -21,8 +21,8 @@ fi
 
 # Function to print help message
 function print_help() {
-   echo -e "Script to run the characterization of each selected cluster.
-   This script perform eight steps per cluster to analyzed:
+   echo -e "Script to run the characterization of each cluster.
+   This script perform eight steps per cluster:
    1. Identify orthogroups through OrthoFinder.
    2. Perform all-vs-all Blastn for synteny visualization.
    3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.

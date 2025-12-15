@@ -66,10 +66,10 @@ function print_help() {
    echo -e "Script to identify captain genes within each element and construct a phylogenetic tree based on these captains.
    It executes five main steps:
    1. Run hmmscan using hmm profiles of specific domains in captains against the proteome of each element.
-   2. Processes the data to identify Captains and regions suitable for phylogenetic analysis. Three minimum confidence levels can be used for Captain identification:
-      2.1 Only a match with the Captain HMM profile from Starfish (\033[01;31mWARNING\033[m: This may lead to false positive identifications and result in an unreliable phylogenetic analysis).
+   2. Processes the data to identify Captains and regions suitable for phylogenetic analysis. Three confidence levels can be used for Captain identification:
+      2.1 Only a match with the Captain HMM profile from Starfish \033[01;31mWARNING\033[m: This may lead to false positive identifications and result in an unreliable phylogenetic analysis.
       2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
-      2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with the Integrase catalytic core HMM profile.
+      2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with HMM profiles associated with the YR Recombinase Active Site.
    3. For elements lacking a confident Captain gene, the script searches for a putative Captain pseudogene at the beginning and end of the element.
    4. Aligns exonic sequences using MACSE (with amino acid output) and preprocesses the alignment with Clipkit.
    5. Runs maximum-likelihood phylogenetic tree inference, when there at least two unique captain sequences:
