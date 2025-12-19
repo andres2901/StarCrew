@@ -30,28 +30,28 @@ else
 fi
 
 # Check conda environment
-Conda_environment_presence=$(conda info --envs | grep -w -c "StarClust")
+Conda_environment_presence=$(conda info --envs | grep -w -c "StarCrew")
 
 if [[ $Conda_environment_presence -eq 0 ]]; then
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Creating conda environment with required libraries...\n"
 
-    conda env create -f ${Main_dir}/StarClust_environment.yml
-    source activate StarClust
+    conda env create -f ${Main_dir}/StarCrew_environment.yml
+    source activate StarCrew
 
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Checking environment installation...\n"
     check_required_software "All"
     
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Checking main directory...\n"
     check_main_directory "${Main_dir}"
-    chmod +x ${Main_dir}/bin/StarClust
+    chmod +x ${Main_dir}/bin/StarCrew
 else
-    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] There's an existing 'StarClust' environment, checking if everything is installed...\n"
-    source activate StarClust
+    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] There's an existing 'StarCrew' environment, checking if everything is installed...\n"
+    source activate StarCrew
     check_required_software "All"
 
     echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Checking main directory...\n"
     check_main_directory "${Main_dir}"
-    chmod +x ${Main_dir}/bin/StarClust
+    chmod +x ${Main_dir}/bin/StarCrew
 fi
 
 echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] Intalling gggenomes and Checking the correct installation of R packages...\n"
@@ -173,12 +173,6 @@ tar -zxvf pfamA_35.0.tar.gz
 rm pfamA_35.0.tar.gz
 
 cd ${databases_dir}
-echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] Downloading Mycomobilome database...\n"
-
-curl -O "https://zenodo.org/records/17037469/files/MycoMobilome_v1.0.tar.gz"
-tar -zxvf MycoMobilome_v1.0.tar.gz
-mv MycoMobilome_v1.0/ MycoMobilome_db
-rm MycoMobilome_v1.0.tar.gz
 
 echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] Checking full instalation..."
 

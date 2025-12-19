@@ -12,8 +12,8 @@ check_databases "${database_path}" "$(basename -s .sh "$0" )"
 foldseek_path="${database_path}/Foldseek/"
 hhsuite_path="${database_path}/hhsuite/"
 
-Interpro_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../interproscan-5.76-107.0/"
-check_intrepro_software "${Interpro_path}"
+Interpro_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../interproscan/"
+check_interpro_software "${Interpro_path}"
 Interpro_path=$(realpath $Interpro_path)
 
 # ==============================================================================
@@ -45,7 +45,7 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All, Overrepresented]."
+   echo "-m, --mode: Define the orthogroups to be analyzed (Default = All) [Available mode: MoveAssociated, Core, All, Overrepresented]."
    echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = afdb_swissprot) [Available: pdb, afdb_swissprot]."
    echo "-t, --threads: Number of threads for all analysis (Default: 8)."
    echo ""
@@ -55,26 +55,34 @@ function print_help() {
 }
 
 check_clusters() {
-    # Modify based on the input file to compare with the current set of Clusters ID 
     local base_dir="$1"
-    local file="$2"
+    local Cluster_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Clusters" 2>/dev/null)
 
-    local cluster_original="$base_dir/cluster_file.txt"
-    ls -d ${base_dir}/Clusters/*/ | awk -F '/' '{print $(NF - 1)}' > ${cluster_original}
-
-    local diff=$(comm -13 <(sort ${cluster_original}) <(sort ${clusters_file}))
-
-    if [[ $diff != "" ]]; then
-        rm ${cluster_original} 
-        echo "ERROR: there are additional lines no compatible to current ClusterID in ${clusters_file}."
-        echo "Check for this lines: ${diff}"
-        exit 1
-    else
-        rm ${cluster_original}
+    if [[ $mode == "All" ]]; then
+        if [[ ! -f "${Cluster_dir}/ClusterOrthogroups.txt" ]]; then
+            echo "Error: ClusterOrthogroups.txt file is not find in '$Cluster_dir'." >&2
+            exit 1
+        else
+            clusters_file="${Cluster_dir}/ClusterOrthogroups.txt"
+        fi
+    elif [[ $mode == "MoveAssociated" ]]; then
+        if [[ ! -f "${Cluster_dir}/ClusterMovement.txt" ]]; then
+            echo "Error: ClusterMovement.txt file is not find in '$Cluster_dir'." >&2
+            exit 1
+        else
+            clusters_file="${Cluster_dir}/ClusterMovement.txt"
+        fi
+    elif [[ $mode == "Core" ]]; then
+        if [[ ! -f "${Cluster_dir}/ClusterCore.txt" ]]; then
+            echo "Error: ClusterCore.txt file is not find in '$Cluster_dir'." >&2
+            exit 1
+        else
+            clusters_file="${Cluster_dir}/ClusterCore.txt"
+        fi
     fi
 }
 
-check_directory_structure() {
+check_internal_directory_structure() {
     local base_dir="$1"
     
     # Locate required subdirectories and file
@@ -120,7 +128,7 @@ check_directory_structure() {
 organize_working_directory() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local ClusterAnnotation_dir="${base_dir}/Workspace/ClusterCharacterization/"
     local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
@@ -153,7 +161,7 @@ organize_working_directory() {
 run_foldseek() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
     local foldseek_results="${working_dir}/Foldseek/"
@@ -182,7 +190,7 @@ run_foldseek() {
 run_hhblits() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
     local hhblits_results="${working_dir}/hhblist/"
@@ -204,7 +212,7 @@ run_hhblits() {
 run_interproScan() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
     local interpro_results="${working_dir}/InterProScan/"
@@ -222,7 +230,7 @@ run_interproScan() {
 create_summary_table(){
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/OrthogroupsAnnotation/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local Orthogroups_dir="${working_dir}/Orthogroups/"
     local temp_dir="${working_dir}/temp/"
     local interpro_results="${working_dir}/InterProScan/"
@@ -289,9 +297,9 @@ create_summary_table(){
 
 organize_information() {
     local base_dir="$1"
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
 
-    local Annotation_dir="${base_dir}/$(basename -s .sh "$0" )/"
+    local Annotation_dir="${base_dir}/$(basename -s .sh "$0" )-${mode}/"
 
     mkdir -p ${Annotation_dir}
 
@@ -314,7 +322,6 @@ organize_information() {
 
 # Initialize variables
 Working_directory=""
-clusters_file=""
 mode="All"
 foldseekdb="afdb_swissprot"
 threads="8"
@@ -330,10 +337,6 @@ while [[ $# -gt 0 ]]; do
         -m|--mode)
             shift
             mode="$1"
-            ;;
-        -c|--clusters)
-            shift
-            clusters_file="$1"
             ;;
         -t|--threads)
             shift
@@ -374,6 +377,7 @@ echo "  Cluster file: " "$clusters_file"
 echo "  Mode: " "$mode"
 echo "  Foldseek database: " "$foldseekdb"
 echo "  Number of threads: " "$threads"
+echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
@@ -383,7 +387,7 @@ echo ""
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 
 # Check for mandatory argument and define the path as absolute
-if [[ -z "$Working_directory" || -z "$clusters_file" ]]; then
+if [[ -z "$Working_directory" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
@@ -397,15 +401,7 @@ else
     Working_directory=$(realpath $Working_directory)
 fi
 check_directory_structure "${Working_directory}"
-
-# Check if cluster file exist
-if [[ ! -f "$clusters_file" ]]; then
-    echo "Error: File '$clusters_file' does not exist."
-    exit 1
-else
-    clusters_file=$(realpath $clusters_file)
-fi
-check_clusters "${Working_directory}" "${clusters_file}"
+check_clusters "${Working_directory}"
 
 # Check if mode parameter is correct
 if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" ]]; then
@@ -437,18 +433,18 @@ check_required_software "$(basename -s .sh "$0" )"
 # Main Block
 # ==============================================================================
 
-cat ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
+awk '{print $1}' ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
 do
     internal_dir="${Working_directory}/Clusters/${ClusterId}/"
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
-    check_directory_structure "${internal_dir}"
+    check_internal_directory_structure "${internal_dir}"
 
     if $directory_flag; then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
         if $overwrite; then
             echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-            overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+            overwrite "${internal_dir}" "$(basename -s .sh "$0" )" "${mode}"
         fi
     
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
@@ -484,7 +480,9 @@ do
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Creating summary table..."
         create_summary_table "${internal_dir}"
-        rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
+        rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/temp/" 2> /dev/null
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
+        organize_information "${internal_dir}"
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding. \n"
     else
         echo -e "Cluster $ClusterId do not have the required directory for '$mode' mode. \n"

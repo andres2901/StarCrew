@@ -153,6 +153,7 @@ run_orthofinder() {
          }
          printf "%s%d\n", OFS, ROW_TOTAL;
         }' ${output_dir}/Results_characterization/Orthogroups/Orthogroups_UnassignedGenes.tsv | sed '1d' >> ${working_dir}/Orthogroups.GeneCount.tsv
+        cp ${output_dir}/Results_characterization/Orthogroups/Orthogroups.txt ${working_dir}/
     else
         orthofinder_flag=false
     fi
@@ -241,12 +242,14 @@ organize_information() {
         echo "Error in working directory"
     fi
 
-    if [[ -f "${working_dir}/CargoHC.nwk" ]]; then
-        cp ${working_dir}/CargoHC.nwk ${Characterization_dir}/CargoHierarchicalTree.nwk
+    if [[ $(find ${working_dir} -name "CargoHierarchicalTree*.nwk" 2> /dev/null | wc -l) -ge 1 ]]; then
+        cp ${working_dir}/CargoHierarchicalTree*.nwk ${Characterization_dir}/
+    else
+        echo -e "\033[01;31mWARNING\033[m: There's no Cargo hierarchical tree file in this cluster."
     fi
 
-    if [[ -d "${working_dir}/Images/" ]]; then
-        cp -r ${working_dir}/Images/ ${Characterization_dir}/
+    if [[ -d "${working_dir}/Figures/" ]]; then
+        cp -r ${working_dir}/Figures/ ${Characterization_dir}/
     fi
 
     if [[ -d "${working_dir}/Core_genes/" ]]; then
@@ -255,17 +258,15 @@ organize_information() {
         cp ${working_dir}/Core_genes-* ${Characterization_dir}/Core/
     fi
 
-    local movingFolders=$(ls "${working_dir}/*_moveOrthologs.txt" | wc -l | awk '{print $1}')
-
-    if [[ $movingFolders -ge 1 ]]; then
+    if [[ $(ls ${working_dir}/*_moveOrthologs.txt 2> /dev/null | wc -l) -ge 1 ]]; then
         mkdir -p ${Characterization_dir}/Movement_genes/
         ls ${working_dir}/*_moveOrthologs.txt | xargs -n1 basename -s .txt | while read line
         do
             local SubCluster=$(echo $line | awk -F '_' '{print $1}')
             mkdir -p ${Characterization_dir}/Movement_genes/${SubCluster}/
             cp -r ${working_dir}/${SubCluster}_moveOrthologs/ ${Characterization_dir}/Movement_genes/${SubCluster}/Orthogroups
-            cp ${SubCluster}_moveOrthologs.txt ${Characterization_dir}/Movement_genes/${SubCluster}/OrthogroupsID.txt
-            cp ${SubCluster}_moveOrthologsTable.csv ${Characterization_dir}/Movement_genes/${SubCluster}/Matrix.txt
+            cp ${working_dir}/${SubCluster}_moveOrthologs.txt ${Characterization_dir}/Movement_genes/${SubCluster}/OrthogroupsID.txt
+            cp ${working_dir}/${SubCluster}_moveOrthologsTable.csv ${Characterization_dir}/Movement_genes/${SubCluster}/Matrix.txt
         done
     fi
 }
@@ -378,6 +379,8 @@ do
         echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder in this cluster.\n"
         rm -r "${internal_dir}/Workspace/ClusterCharacterization/"
         continue
+    else
+        grep -w ${ClusterId} ${Working_directory}/Clusters/ClustersAnalyzed.txt >> ${Working_directory}/Clusters/ClusterOrthogroups.txt
     fi
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
@@ -388,8 +391,8 @@ do
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running characterization of the cluster..."
     Rscript ${auxiliary_path}/ClusterAnalysis.R -d "${internal_dir}/Workspace/ClusterCharacterization/" -s "${subcluster_number}" -c $captainremoval_number
 
-    mkdir -p "${internal_dir}/Workspace/ClusterCharacterization/Images"
-    mv ${internal_dir}/Workspace/ClusterCharacterization/*.svg "${internal_dir}/Workspace/ClusterCharacterization/Images/"
+    mkdir -p "${internal_dir}/Workspace/ClusterCharacterization/Figures"
+    mv ${internal_dir}/Workspace/ClusterCharacterization/*.svg "${internal_dir}/Workspace/ClusterCharacterization/Figures/"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for core genes..."
     check_core "${internal_dir}"

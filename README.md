@@ -1,10 +1,10 @@
-# StarClust: STARship CLUSTering tool
+# StarCREW: Starships CaRgo Exploration Wrapper
 
 ## Overview
 
-**StarClust** is a tool specifically designed to systematically analyze the cargo genes of Starship elements. The tool is composed of seven distinct commands and creates a well-organized project folder to facilitate downstream analysis. StarClust provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this tool is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
+**StarCREW** is a bash wrapper specifically designed to systematically analyze the cargo genes of Starship elements. The wrapper is composed of seven distinct commands and creates a well-organized project folder to facilitate downstream analysis. StarCREW provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this wrapper is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
 
-In addition to the main commands, StarClust is distributed with a diverse set of auxiliary scripts. Although these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1) a modified RIP-like signal calculator, 2) filtering genes or isoforms from a GFF file based on intron density, 3) extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) and other specific tasks.
+In addition to the main commands, StarCREW is distributed with a diverse set of auxiliary scripts. Although these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1) a modified RIP-like signal calculator, 2) filtering genes or isoforms from a GFF file based on intron density, 3) extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) and other specific tasks.
 
 ## Table of contents
 
@@ -26,18 +26,18 @@ In addition to the main commands, StarClust is distributed with a diverse set of
     - [OrthogroupsAnnotation](#OrthogroupsAnnotation)
 - [Project folder organization](#Project-folder-organization)
 - [Pipeline modes](#Pipeline-modes)
-- [Citing StarClust and software called by StarClust](#Citing-StarClust-and-software-called-by-StarClust)
+- [Citing StarCREW and software called by StarCREW](#Citing-StarCREW-and-software-called-by-StarCREW)
 - [License](#License)
 
 ## Requirements
 
 ### System requirements
 
-Waiting for full tool development to check the final requirements.
+Waiting for full wrapper development to check the final requirements.
 
 ### Software requirements
 
-This tool was specifically written to be run on Linux and requires the following software and dependencies to be installed and accessible via the system path:
+This wrapper was specifically written to be run on Linux and requires the following software and dependencies to be installed and accessible via the system path:
 
 - python 3.9.
 - java.
@@ -50,7 +50,7 @@ This tool was specifically written to be run on Linux and requires the following
 - iqtree3.
 - gotree.
 - orthofinder.
-- R v4.4.3 with the following packages: ape, reshape2, viridis, dplyr, gggenomes, scales, dendextend, NbClust, svglite, ggplot2=3.5.2, ggtree, syntenet, optparse.
+- R v4.4.3 with the following packages: ape, reshape2, viridis, dplyr, gggenomes, scales, dendextend, NbClust, svglite, ggplot2=3.5.2, ggtree, ggnewscale, syntenet, optparse.
 - metaeuk.
 - agat.
 - diamond.
@@ -70,20 +70,20 @@ The commands related to functional annotation and Transposable element identific
 
 ## Installation
 
-Before installation, ensure you have `Anaconda3` and `git` installed and accessible in your system path, as they are required for the full tool installation. After cloning, execute the `build_StarClust.sh` script to properly configure a conda environment, and install all necessary software dependencies and databases required by the tool's commands, as shown below:
+Before installation, ensure you have `Anaconda3` and `git` installed and accessible in your system path, as they are required for the full wrapper installation. After cloning, execute the `build_StarCREW.sh` script to properly configure a conda environment, and install all necessary software dependencies and databases required by the wrapper's commands, as shown below:
 
 ```
 # clone the repository
-git clone https://github.com/andres2901/StarClust.git
+git clone https://github.com/andres2901/StarCREW.git
 
 # Construct the environment and download require databases
-cd StarClust/
-bash build_StarClust.sh
+cd StarCREW/
+bash build_StarCREW.sh
 ```
 
 ## Input
 
-The tool currently supports two distinct types of input data. Generally, both modes require a minimum of two kind of information: the element nucleotide sequences in fasta format and a gene prediction in GFF3 format.
+StarCREW currently supports two distinct types of input data. Generally, both modes require a minimum of two kind of information: the element nucleotide sequences in fasta format and a gene prediction in GFF3 format.
 
 An optional metadata file can also be supplied, containing as much information as the user requires. However, the user must adhere to the following specifications:
 
@@ -109,7 +109,7 @@ This input mode is used when you have processed your dataset using the [Starfish
 
 **It is strongly recommended** that you first perform an initial inspection and removal of false positives, as described in the Starfish [step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial).
 
-To use this tool, you must have the results from both the `geneFinder` and `elementFinder` modules of Starfish. StarClust utilizes three resulting Starfish files and one user-constructed file:
+To use StarCREW, you must have the results from both the `geneFinder` and `elementFinder` modules of Starfish. StarCREW utilizes three resulting Starfish files and one user-constructed file:
 
 1.  **Elements File (Multifasta):**
     - This is the `*.elements.fna` file resulting from the `starfish summarize` command.
@@ -131,7 +131,7 @@ To use this tool, you must have the results from both the `geneFinder` and `elem
     - **Crucial Points:**
         - The `genome code` must be identical to the code used in the Starfish analysis.
         - The GFF path must point to the original GFF file, and not the files returned by the `starfish format` or `starfish format-ncbi` commands.
-        - This tool requires the gene, mRNA, intron, exon, and CDS information, and needs the original contig `seqID` to be maintained. The files returned by the `starfish format` or `starfish format-ncbi` commands only retain mRNA information and alter the IDs to suit the Starfish workflow.
+        - This wrapper requires the gene, mRNA, intron, exon, and CDS information, and needs the original contig `seqID` to be maintained. The files returned by the `starfish format` or `starfish format-ncbi` commands only retain mRNA information and alter the IDs to suit the Starfish workflow.
     - **Acquisition:** The user can obtain the necessary GFF file using the same command line as detailed in the Starfish step-by-step tutorial:
 
 ```
@@ -140,14 +140,14 @@ realpath gff3/* | perl -pe 's/^(.+?([^\/]+?).final.gff3)$/\2\t\1/' > ome2gff.txt
 
 ## Main commands
 
-The tool is composed of seven main commands. Most of these commands are sequential (meaning they must be run in a specific order) while others can be executed independently for specific purposes. The only command that is required for the rest of the workflow and must always be run first is the `StarClust Initialize` command, which generates the dedicated project folder.
+The wrapper is composed of seven main commands. Most of these commands are sequential (meaning they must be run in a specific order) while others can be executed independently for specific purposes. The only command that is required for the rest of the workflow and must always be run first is the `StarCREW Initialize` command, which generates the dedicated project folder.
 
 ### Initialize
 
 ```
 Script to organize the working directory to run the subsequent commands in the workflow.
 
-Syntax: StarClust Initialize [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -b <file_path> -s <character> -c <file_path> -M <file_path> --overwrite ]"
+Syntax: StarCREW Initialize [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -b <file_path> -s <character> -c <file_path> -M <file_path> --overwrite ]"
 
 Required args:
 -f, --fasta:  multifasta file wih the elements to study.
@@ -189,14 +189,14 @@ The command provides three main filtering approaches you can utilize:
     - The rationale behind this filter is to remove elements that may have undergone RIP or similar deleterious processes but do not exhibit a strong RIP-like signal.
     - The allowed range is based on previous literature concerning the general genome GC content of Pezizomycotina species.
 3. Gene Content Filtering: This filter removes elements that are empty or contain a very low number of cargo genes.
-    - Since the primary goal of this tool is to analyze cargo content, maintaining elements without sufficient cargo genes is inefficient. This filter ensures that only elements useful for downstream analysis are retained.
+    - Since the primary goal of this wrapper is to analyze cargo content, maintaining elements without sufficient cargo genes is inefficient. This filter ensures that only elements useful for downstream analysis are retained.
 
 When using the 'Starfish' input mode, the provided data undergoes specific preprocessing before entering the main pipeline:
 
 1.  **GFF Information Update:** The gene information from the original GFF files is extracted and updated based on the positions provided in the metadata file resulting from the Starfish run.
 2.  **Captain Gene Prediction:** As Starfish performs a *de novo* prediction of Captain genes, we must re-execute a similar approach to obtain the complete genetic information (exon, intron, CDS, etc.) for these genes. We use a modified version of the Starfish approach:
     - Using the YR recombinase database obtained from Starfish, MetaEuk is run against the nucleotide file, requiring a minimum sequence identity of 0.95 and a minimum coverage of 0.95.
-    - If a previous gene model exists at the same position, this tool selects the longest gene model. This differs from the Starfish logic, which consistently selects the MetaEuk gene model in such conflict cases.
+    - If a previous gene model exists at the same position, this command selects the longest gene model. This differs from the Starfish logic, which consistently selects the MetaEuk gene model in such conflict cases.
 
 ### CaptainIdentification
 
@@ -220,7 +220,7 @@ There are three available mode:
 -FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset..
 -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
 
-Syntax: StarClust CaptainIdentification [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> -ms <integer> --overwrite ]
+Syntax: StarCREW CaptainIdentification [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> -ms <integer> --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -281,13 +281,13 @@ It executes six main steps:
 3. Runs the interspecies synteny command of syntenet to identify regions with gene collinearity between elements.
 4. Summarizes the results of syntenet on four possible modes:
  a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. WARNING: This mode may yield a high rate of false positives.
- b. SSP: Return only pairs with strong synteny (Check tool documentation for more information).
+ b. SSP: Return only pairs with strong synteny (Check wrapper documentation for more information).
  c. FilterBlast: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level.
- d. FilterMetric: Filter and update collinearity based on a metric system (Check tool documentation for more information).
+ d. FilterMetric: Filter and update collinearity based on a metric system (Check wrapper documentation for more information).
 5. Defines initial clusters of elements and performs a spectral clustering process to identify potential subclusters.
 6. Organizes the final data output for each identified cluster.
 
-Syntax: StarClust SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> --captainInfo --overwrite ]
+Syntax: StarCREW SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> --captainInfo --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -333,7 +333,7 @@ A preliminary filter is performed by removing any pair with a GCP below 8%, as i
     - **WARNING:** This mode may yield a high rate of false positives and requires significant manual effort to confirm the results.
 2.  **Strong Syntenic Pairs (SSP):**
     - Returns all pairs with a $GCP \ge 41$%.
-    - For pairs with a relatively large difference in length and gene content, this mode also accepts pairs where $ECP_x \ge 45$% and the ratio between the ECPs is at least $1.8$, meaning $\frac{ECP_x}{ECP_y} \ge 1.8$.
+    - For pairs with a relatively large difference in length and/or gene content, this mode also accepts pairs where $ECP_x \ge 45$% and the ratio between the ECPs is at least $1.8$, meaning $\frac{ECP_x}{ECP_y} \ge 1.8$.
     - **Note:** These values were calculated during preliminary testing. They correspond to a threshold where no 'false positive' pairs were found, and a clear 'good' diagonal was visualized in a nucleotide dot-plot.
 3.  **Blastn Filter (FilterBlast):**
     - This was the initial filtering approach design for the command, inspired by the BLAST result cleaning process described in [Westerberg et al. 2021](https://pubmed.ncbi.nlm.nih.gov/38218923/) before LTR network construction.
@@ -376,7 +376,7 @@ After a successful run of the clustering command, the following files and direct
 - **main_cluster.txt**: MCL-formatted group file detailing the main clusters and the elements belonging to each one.
 - **sub_clusters.txt**: MCL-formatted group file detailing the subclusters and the elements belonging to each one.
 - **network_edges.txt**: A table containing the edge information necessary for visualization in Cytoscape. The weight column corresponds to the GCP (General Collinearity Percentage) value of the pair.
-- **node_attributes.txt**: A table containing the node (element) attributes required for visualization in Cytoscape. If metadata was provided during `StarClust Initialize`, that information will be appended to this file.
+- **node_attributes.txt**: A table containing the node (element) attributes required for visualization in Cytoscape. If metadata was provided during `StarCREW Initialize`, that information will be appended to this file.
 
 ### ClusterCharacterization
 
@@ -396,7 +396,7 @@ This script perform eight steps per cluster:
 7. If subclusters are present it try to identify putative cargo movement events and try to avoid 'General core' genes.
 8. Determine if there are discordances at 'Clade' level between Cargo hierarchical clustering and Captain phylogenetic tree.
 
-Syntax: StarClust ClusterCharacterization [ -help ] -w <directory_path> [ -t <integer> --overwrite ]
+Syntax: StarCREW ClusterCharacterization [ -help ] -w <directory_path> [ -t <integer> --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -414,7 +414,7 @@ This command is designed to characterize the cargo gene dynamics within each ele
 The main goal of this command is to identify two relevant groups of genes within each cluster:
 
 - **Core Genes:**
-    - We use a loose definition of "core gene" in this context. While core genes are generally defined as genes present in all genomes of a dataset, or in a less strict definition (often called soft core) as genes present in at least 95%-98% of genomes, this strict threshold is inappropriate here. This is due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this tool.
+    - We use a loose definition of "core gene" in this context. While core genes are generally defined as genes present in all genomes of a dataset, or in a less strict definition (often called soft core) as genes present in at least 95%-98% of genomes, this strict threshold is inappropriate here. This is due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this wrapper.
     - Therefore, "core genes" here are defined as those present in at least 80% of the elements in a cluster or subcluster.
     - Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster/subcluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in the element over evolutionary time.
 - **Movement Genes:**
@@ -442,13 +442,14 @@ After a successful run of the characterization command, the following files and 
         - A subfolder containing multifasta files of the protein sequences per orthogroup.
         - File(s) listing the gene IDs, named by the subcluster where the gene was identified.
         - A presence/absence matrix of these movement genes on the elements that allegedly participated in the movement.
-- **Images/**:
-    - This directory contains a set of resulting images. The number and specific images can vary depending on the information extracted from each cluster.
-    - Images that can be found include:
+- **Figures/**:
+    - This directory contains a set of resulting figures. The number and specific images can vary depending on the information extracted from each cluster.
+    - Figures that can be found include:
         - Heatmap of Cargo orthogroups.
         - Cargo hierarchical tree paired with a nucleotide synteny visualization.
-        - Tanglegram comparing the Captain phylogenetic tree and the cargo hierarchical clustering at the 'clade' level .
-        - Images showing nucleotide synteny visualization of elements between which cargo is putatively believed to have moved.
+        - Tanglegram comparing the Captain phylogenetic tree and the cargo hierarchical clustering at the 'clade' level.
+        - Figure showing nucleotide synteny visualization of elements between which cargo is putatively believed to have moved.
+        - Figure showing nucleotide synteny visualization of elements between which cargo is putatively believed to have moved.
 - **CargoHierarchicalTree.nwk**:
     - The hierarchical clustering tree of the cargo genes in Newick format.
 
@@ -476,7 +477,7 @@ This script perform three steps:
  3.1 Internal summary: For each Orthogroups summarize the results per protein in a csv
  3.2 General summary: Return a summary for the Orthogroup under the assumption that all proteins in each Orthogroups have the same function. It return only those 'chracteristics' that are shared for at least 50% of the proteins in the Orthogroup.
 
-Syntax: StarClust OrthogroupsAnnotation [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]
+Syntax: StarCREW OrthogroupsAnnotation [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -521,7 +522,7 @@ This script perform two steps:
 1. Run earlgrey TE prediction.
 2. Organize the results."
 
-Syntax: StarClust TEPrediction [ -help ] -w <directory_path> [ -d <string> -m <string> -t <integer> ]
+Syntax: StarCREW TEPrediction [ -help ] -w <directory_path> [ -d <string> -m <string> -t <integer> ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -542,7 +543,7 @@ After a successful run of the TE prediction command, the user should be able to 
 
 ## Project folder organization
 
-The project folder is created to allow all commands to run independently without creating file conflicts and to maintain the results organized. When you run the `StarClust Initialize` command, the directory structure will look like this:
+The project folder is created to allow all commands to run independently without creating file conflicts and to maintain the results organized. When you run the `StarCREW Initialize` command, the directory structure will look like this:
 
 ```
 WorkingDirectory/
@@ -570,31 +571,31 @@ The three main directories are organized as follows:
     - **Nucleotide/**: Fasta file containing the nucleotide sequence of the element.
     - **Protein/**: Multifasta files containing the protein sequence of each gene per element.
 - **metadata\_files/**: This directory stores metadata information. Two files are found here:
-    - `metadata.csv`: This file is only present if the user provided a metadata file to `StarClust Initialize`. It contains the metadata information for the elements that passed the filters, including the element's new header/ID.
+    - `metadata.csv`: This file is only present if the user provided a metadata file to `StarCREW Initialize`. It contains the metadata information for the elements that passed the filters, including the element's new header/ID.
     - `sequence\_head.csv`: An association file that maps the original element header/ID to the updated Project ID for all retained elements.
 - **Workspace/**: This folder is initially empty. Each command executed will create an individual folder inside `Workspace/` to store the intermediate files necessary to obtain the final results.
 
 In addition to the three main directories, five files can be found in the root project folder:
 
-- `Coordinate_file.txt`: Contains the coordinates of elements extracted from the `*.elements.feat` file. **Note:** Only available when running `StarClust Initialize` in 'Starfish' mode.
+- `Coordinate_file.txt`: Contains the coordinates of elements extracted from the `*.elements.feat` file. **Note:** Only available when running `StarCREW Initialize` in 'Starfish' mode.
 - `Elements_filterGC.txt`: A list of elements that were filtered out based on the GC content threshold. **Note:** Only available when using the `-gc` argument and filtering occurred.
 - `Elements_filterRIPlike.txt`: A list of elements that were filtered out based on the RIP-like signal threshold. **Note:** Only available when using the `-r` argument and filtering occurred.
 - `Gene_stats.txt`: A file containing statistics of the gene prediction within the elements. It stores three main statistics: gene number, average gene length (nucleotide), and average intergenic length.
 - `Sequences.fa`: A multifasta file of the elements with the updated headers.
 
-After running each command, a new folder containing the main output information will appear in the project root folder, named after the specific command, as detailed in the documentation for that command. The only exception to this naming is the `StarClust SyntenyClustering` command, which creates a dedicated `Cluster/` folder.
+After running each command, a new folder containing the main output information will appear in the project root folder, named after the specific command, as detailed in the documentation for that command. The only exception to this naming is the `StarCREW SyntenyClustering` command, which creates a dedicated `Cluster/` folder.
 
 ## Pipeline modes
 
-As previously mentioned, this tool can be used for multiple purposes and therefore some commands are sequential. Here, we're going to mention the two main purposes that this tool can be used to and how we recommend the sequential running of the pipelines.
+As previously mentioned, this wrapper can be used for multiple purposes and therefore some commands are sequential. Here, we're going to mention the two main purposes that this tool can be used to and how we recommend the sequential running of the pipelines.
 
-## Citing StarClust and software called by StarClust
+## Citing StarCREW and software called by StarCREW
 
-Please cite our work if you use `StarClust` in your research:
+Please cite our work if you use `StarCREW` in your research:
 
 < Here will go the citation to the paper when available >
 
-StarClust is a tool that calls different bioinformatic software, for that reason any publication of results obtained by StarClust required the citation of the tools that were called.
+StarCREW is a wrapper that calls different bioinformatic software, for that reason any publication of results obtained by StarCREW required the citation of the tools that were called.
 
 | Command | mode | Dependency | Citation |
 |:---:|:---:|:---| :---|

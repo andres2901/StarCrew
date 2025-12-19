@@ -622,8 +622,8 @@ check_directory_structure() {
 
 check_interpro_software() {
     local Interpro_path="$1"
-    if [[ ! -d "$Interpro_path" ]]; then
-        echo "Error: Sofware of Interpro software does not exist."
+    if [[ ! -d "${Interpro_path}" ]]; then
+        echo "Error: Folder of Interpro software does not exist."
         exit 1
     else
         if [[ ! -f "${Interpro_path}/interproscan.sh" ]]; then
@@ -693,27 +693,7 @@ check_databases() {
             fi
             
         fi
-    elif [[ $command == "TEPrediction" ]]; then
-        if [[ ! -d "$database_path/MycoMobilome_db/" ]]; then
-            echo "Error: file '$database_path/MycoMobilome_db/' does not exist."
-            exit 1
-        else
-            if [[ ! $(ls $database_path/MycoMobilome_db/*fasta | wc -l) -eq 3 ]]; then
-                echo "Error: There are missing files for MycoMobilome database."
-                exit 1
-            fi 
-        fi
     elif [[ $command == "All" ]]; then
-        if [[ ! -d "$database_path/MycoMobilome_db/" ]]; then
-            echo "Error: file '$database_path/MycoMobilome_db/' does not exist."
-            exit 1
-        else
-            if [[ ! $(ls $database_path/MycoMobilome_db/*.fasta | wc -l) -eq 3 ]]; then
-                echo "Error: There are missing files for MycoMobilome database."
-                exit 1
-            fi
-    
-        fi
         if [[ ! -d "$database_path" ]]; then
             echo "Error: Directory '$database_path' does not exist."
             exit 1

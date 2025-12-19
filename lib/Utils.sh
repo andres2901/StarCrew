@@ -21,6 +21,7 @@ printf "\rProgress $(date "+%Y-%m-%d %H:%M:%S") : [${_fill// /#}${_empty// /-}] 
 overwrite() {
     local working_dir="$1"
     local command="$2"
+    local mode="$3"
 
     local workspace="${working_dir}/Workspace/"
 
@@ -62,4 +63,17 @@ overwrite() {
             rm -r ${working_dir}/Data/Captainless_elements/
         fi
     fi
+
+    if [[ ${command} == "OrthogroupsAnnotation" ]]; then
+        if [[ -d "${working_dir}/${command}-${mode}/" ]]; then
+            echo "Removing '${command}-${mode}' folder from the working directory."
+            rm -r ${working_dir}/${command}-${mode}/
+        fi
+        if [[ -d "${workspace}/${command}-${mode}/" ]]; then
+            echo "Removing '${command}-${mode}' folder from the Workspace directory."
+            rm -r ${workspace}/${command}-${mode}/
+        fi
+    fi
+
+
 }

@@ -33,7 +33,7 @@ def handle_orthofinder_cmd_update(data):
     SEARCH_CMD_KEY = 'search_cmd'
     
     NEW_SEARCH_CMD = (
-        "diamond blastp --threads METHODTHREAD --ignore-warnings -d DATABASE -q INPUT -o OUTPUT --query-cover 90 --matrix SCOREMATRIX --gapopen GAPOPEN --gapextend GAPEXTEND --fast -p 1 --quiet -e 1e-5 --compress 1"
+        "diamond blastp --threads METHODTHREAD --ignore-warnings -d DATABASE -q INPUT -o OUTPUT --query-cover 80 --matrix SCOREMATRIX --gapopen GAPOPEN --gapextend GAPEXTEND --fast -p 1 --quiet -e 1e-5 --compress 1"
     )
 
     if DIAMOND_KEY in data and SEARCH_CMD_KEY in data[DIAMOND_KEY]:

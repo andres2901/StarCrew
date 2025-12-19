@@ -243,7 +243,7 @@ process_precluster() {
             State=$(($State + 1))
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running Syntenet for cluster '${State}'."
             Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Cluster_path}" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
-            cp "${Cluster_path}/Collinearity/*.collinearity" ${collinearity_path}/
+            cp ${Cluster_path}/Collinearity/*.collinearity ${collinearity_path}/
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Finished."
         done
     else
@@ -343,7 +343,7 @@ process_collinearity() {
 
     # Determine number of genes per element for percentage estimation
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Counting genes per element from GFF files..."
-    find "${gff_path}" -maxdepth 1 -type f -name "*.gff" -exec grep -c "gene" {} + | awk -F'/' '{ gsub(".gff:", "\t", $NF); print $NF }' | sort-k1,1  > "${temp_prefix}_genes_per_element.txt"
+    find "${gff_path}" -maxdepth 1 -type f -name "*.gff" -exec grep -c "gene" {} + | awk -F'/' '{ gsub(".gff:", "\t", $NF); print $NF }' | sort -k1,1  > "${temp_prefix}_genes_per_element.txt"
 
     # Determine the number of collinear genes per element
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Counting collinear genes from collinearity files..."
@@ -377,9 +377,9 @@ process_collinearity() {
 
     # Join the two previous files to generate a file for percentage estimation
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Joining gene count data..."
-    join "${temp_prefix}_collinear_genes.txt" "${temp_prefix}_genes_per_element.txt" | sort -k2 > "${temp_prefix}_join_1.txt"
-    join -1 2 -2 1 <(sort -k2,2 "${temp_prefix}_join_1.txt") "${temp_prefix}_genes_per_element.txt" | \
-        awk '{swap=$1;$1=$2;$2=swap;print $0}' | sort > "${temp_prefix}_join_2.txt"
+    join "${temp_prefix}_collinear_genes.txt" "${temp_prefix}_genes_per_element.txt" | sort -k2,2 > "${temp_prefix}_join_1.txt"
+    join -1 2 -2 1 "${temp_prefix}_join_1.txt" "${temp_prefix}_genes_per_element.txt" | \
+        awk '{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > "${temp_prefix}_join_2.txt"
 
     # Estimate percentage per element
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Estimating percentage of collinearity per element..."
@@ -452,7 +452,7 @@ process_collinearity() {
             # Filter low syntenic pairs
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering False Positive pairs..."
             awk '{OFS=";"} {print $1 OFS $2}' "${working_dir}/BlastnClean.out" > "${working_dir}/BlastnPairs.out"
-            join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage_low.txt" | sort) <(sed -e 's/;/-/' "${working_dir}/BlastnPairs.out" | sort) | sed 's/-/;/g' > "${temp_prefix}_Collinearity_percentage_lowSelected.txt"
+            join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage_low.txt" | sort -k1,1) <(sed -e 's/;/-/' "${working_dir}/BlastnPairs.out" | sort -k1,1) | sed 's/-/;/g' > "${temp_prefix}_Collinearity_percentage_lowSelected.txt"
             cat "${temp_prefix}_Collinearity_percentage_high.txt" "${temp_prefix}_Collinearity_percentage_lowSelected.txt" | sort -u > "${temp_prefix}_Collinearity_percentage_filter.txt"
         else
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Blast filtering is being skipped due to the absence of low syntenic pairs to evaluate..."
@@ -503,7 +503,7 @@ process_collinearity() {
         done
         echo ""
 
-        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' >> "${temp_dir}/Collinearity_percentage.txt"
+        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort -t ";" -k1,1) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort -t ";" -k1,1) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' >> "${temp_dir}/Collinearity_percentage.txt"
 
         # Final stage
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
@@ -905,7 +905,7 @@ check_required_software "$(basename -s .sh "$0" )"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
 organize_working_directory "${Working_directory}"
-echo "Metadata: " "${metadata_flag}"
+echo "  Metadata: " "${metadata_flag}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Preprocessing data for Diamond."
 Rscript ${auxiliary_path}/syntenetPreprocess.R "${Working_directory}/Workspace/$(basename -s .sh "$0" )/"

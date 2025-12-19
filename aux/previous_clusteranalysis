@@ -9,9 +9,9 @@ option_list <- list(
   make_option(c("-d", "--directory"), type="character", action = "store", default=NULL, 
               help="path of the working directory [default %default]",metavar="PATH"),
   make_option(c("-s", "--subclusters"), type="integer", action = "store", default=1,
-              help=" Number of subclusters get in the synteny analysis. Minimum value is equal to 1 when no subcluster were identified [default %default]", metavar="number"),
+              help=" Number of subclusters get in the synteny analysis", metavar="number"),
   make_option(c("-c", "--captainRemoval"), type="integer", action = "store", default=0,
-              help=" Number of elements removes from the original cluster [default %default]", metavar="number")
+              help=" Number of elements removes from the original cluster", metavar="number")
 )
 
 # Parse the command-line arguments
@@ -33,8 +33,6 @@ suppressPackageStartupMessages(library(gggenomes))
 suppressPackageStartupMessages(library(scales))
 suppressPackageStartupMessages(library(dendextend))
 suppressPackageStartupMessages(library(NbClust))
-suppressPackageStartupMessages(library(syntenet))
-suppressPackageStartupMessages(library(ggnewscale))
 
 if (!requireNamespace("ggplot2", quietly = TRUE)) {
    stop("Package \"ggplot2\" not installed. Please install it to run this script.", call. = FALSE)
@@ -66,12 +64,6 @@ if (!requireNamespace("dendextend", quietly = TRUE)) {
 if (!requireNamespace("NbClust", quietly = TRUE)) {
    stop("Package \"NbClust\" not installed. Please install it to run this script.", call. = FALSE)
 }
-if (!requireNamespace("syntenet", quietly = TRUE)) {
-   stop("Package \"syntenet\" not installed. Please install it to run this script.", call. = FALSE)
-}
-if (!requireNamespace("ggnewscale", quietly = TRUE)) {
-   stop("Package \"ggnewscale\" not installed. Please install it to run this script.", call. = FALSE)
-}
 
 # Function block
 
@@ -81,12 +73,12 @@ load_and_preprocess_data <- function(
     min_pident = 70
 ) {
   
-  #Define column names and specifications based on standard BLAST outfmt 6 + qlen and slen
+  # 1. Define BLAST Column Specifications
   blast_col_names <- c("qseqid", "sseqid", "qstart", "qend", "sstart", "send",
                        "pident", "length", "qlen", "slen")
   blast_col_classes <- c("character", "character", rep("numeric", 8))
   
-  # Read and Preprocess BLAST Results (blast_results)
+  # 2. Read and Preprocess BLAST Results (blast_results)
   blast_results <- read.delim(
     blast_file,
     header = FALSE,
@@ -97,7 +89,7 @@ load_and_preprocess_data <- function(
     # Filter out self-hits and low-identity hits
     filter(qseqid != sseqid, pident > min_pident)
   
-  # Create 'links' for gggenomes
+  # 3. Create Link Table (links)
   links <- blast_results %>%
     mutate(alignment_id = row_number()) %>%
     select(
@@ -106,7 +98,7 @@ load_and_preprocess_data <- function(
       pident, length
     )
   
-  # Create 'seqs' for gggenomes
+  # 4. Create Sequence Length Table (seqs)
   seqs <- bind_rows(
     blast_results %>% select(seq_id = qseqid, length = qlen),
     blast_results %>% select(seq_id = sseqid, length = slen)
@@ -116,24 +108,33 @@ load_and_preprocess_data <- function(
     summarize(length = max(length)) %>%
     ungroup()
   
-  # Extract gene locations and format for gggenomes visualization
-  annotation <- gff2GRangesList("Gff/")
-  genes <- as.data.frame(unlist(annotation)) %>%
-    filter(type == "gene") %>%
-    mutate(
-      seqnames = as.character(seqnames),
-      type = "CDS",
-      attribute = NA) %>%
-    select(seq_id = seqnames, start, end, strand, type, attribute,ID) 
-
-  Orthogroups <- read.table("Orthogroups.txt", sep = ":", col.names = c("Orthogroup","genes"))
+  # 5. Define GFF Column Specifications
+  gff_col_names <- c("seqname", "source", "feature", "start", "end", "score",
+                     "strand", "frame", "attribute")
+  gff_col_classes <- c(rep("character", 3), rep("numeric", 2), rep("character", 4))
   
+  # 6. Read and Preprocess GFF Features (genes)
+  genes <- read.delim(
+    gff_file,
+    header = FALSE,
+    comment.char = "#",
+    sep = "\t",
+    col.names = gff_col_names,
+    colClasses = gff_col_classes
+  ) %>%
+    filter(feature == "gene") %>%
+    select(seq_id = seqname, start, end, strand) %>%
+    mutate(
+      seq_id = as.character(seq_id),
+      type = "CDS"
+    )
+  
+  # 7. Return all processed data frames as a list
   return(list(
     blast_results = blast_results,
     links = links,
     seqs = seqs,
-    genes = genes,
-    orthogroups_table = Orthogroups
+    genes = genes
   ))
 }
 
@@ -141,30 +142,31 @@ perform_initial_clustering <- function(
     orthogroups_file = "Orthogroups.GeneCount.tsv"
 ) {
   
-  # Read OrthoFinder Gene Counts
+  # 1. Read OrthoFinder Gene Counts
   OrthoFinder <- read.table(
     orthogroups_file,
     header = TRUE,
     check.names = FALSE,
     row.names = 1
   )
-
-  # Remove the 'Total' column
+  
+  # 2. Preprocess: Remove the "Total" column
   OrthoFinder2 <- OrthoFinder[, !names(OrthoFinder) %in% c("Total")]
   
-  # Transpose: We want genomes as ROWS and orthogroups as COLUMNS
+  # 3. Transpose the matrix
   transposed_counts <- t(OrthoFinder2)
-
-  # Calculate distance using 'binary' (Jaccard-like): looks at presence vs absence
+  
+  # 4. Calculate Distance Matrix
   distance_mat <- dist(transposed_counts, method = 'binary')
   
-  # Perform UPGMA clustering
+  # 5. Perform Hierarchical Clustering
   Hierar_cl <- hclust(distance_mat, method = 'average')
   
-  # Cut tree at nearly 1.0 height to identify if there has been any break in the cluster connection
+  # 6. Identify Initial Number of Clusters
   fit_Orthofinder <- cutree(Hierar_cl, h = 0.99999999)
   Individual_clusters <- length(unique(fit_Orthofinder))
   
+  # 7. Return all processed objects as a list
   return(list(
     transposed_counts = transposed_counts,
     orthofinder_counts = OrthoFinder2,
@@ -173,63 +175,6 @@ perform_initial_clustering <- function(
     cluster_fit = fit_Orthofinder,
     Individual_clusters = Individual_clusters
   ))
-}
-
-core_genes_analysis <- function(    
-    ortho_counts,
-    Cluster,
-    Cluster_number = ""
-) {
-  
-  
-
-  # Define 'core' as genes absent in 20% or less of the total element in this cluster.
-  Whole_core <- ortho_counts[rowSums(ortho_counts < 1 ) <= ncol(ortho_counts)*0.2,]
-  core_genes <- rownames(Whole_core)
-
-  # Save results if 'core' genes were identified
-
-  if(length(core_genes) > 0) {
-
-    write.table(core_genes, file = paste("Core_genes-General",Cluster_number, ".txt", sep = ""),
-                        sep = '\t', row.names = F, col.names = F, quote = F)
-    write.csv(Whole_core, file = paste("Core_genes-General",Cluster_number, ".csv", sep = ""),
-                        row.names = T, quote = F)
-  }
-
-  # Use a high height (h=0.8) to split the cluster into subclusters
-  fit <- cutree(Cluster, h = 0.8)
-  # Initialize vector of 'specific core' genes
-  core_genes2 <- character()
-
-  # Only look for specific core genes if the cluster actually splits into sub-clusters.
-  if(length(unique(fit)) > 1) {
-    for(SubClusterId in 1:length(unique(fit))) {
-      # Extract the elements belonging to the current sub-cluster
-      OrthoFinder_subcluster <- subset(ortho_counts, select = names(fit[grep(SubClusterId,fit)]))
-
-      # Only analyze groups with more than 4 elements to ensure the "core" definition is meaningful.
-      if(ncol(OrthoFinder_subcluster) > 4) {
-        # Apply the same 20% absence threshold within this sub-cluster
-        OrthoFinder_subcluster <- OrthoFinder_subcluster[rowSums(OrthoFinder_subcluster < 1 ) <= ncol(OrthoFinder_subcluster)*0.2,]
-
-        # Save results for this specific sub-cluster if 'core' genes was identified
-        if(nrow(OrthoFinder_subcluster) > 0) {
-          core <- rownames(OrthoFinder_subcluster)
-          core_genes2 <- c(core_genes2,core)
-          write.table(core, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".txt", sep = ""),
-                        sep = '\t', row.names = F, col.names = F, quote = F)
-          write.csv(OrthoFinder_subcluster, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".csv", sep = ""),
-                        row.names = T, quote = F)
-        }
-      }
-    }
-  }
-
-  return(list(
-    general_core = core_genes,
-    specific_core = core_genes2
-    ))
 }
 
 analyze_individual_clusters <- function(
@@ -241,50 +186,48 @@ analyze_individual_clusters <- function(
     blast_links
 ) {
   
-  # Initialize the vector to track clusters that were successfully analyze
+  # Initialize the vector to track clusters that were successfully plotted
   Selected_clusters <- numeric()
   
   for (ClusterId in 1:Individual_clusters) {
-
-    # Extract genomes belonging to the current cluster
+    
+    # 1. Extract Cluster Matrix and Handle Single/Zero-Element Case
     Cluster_matrix <- transposase_OrthoFinder[grep(ClusterId, fit_Orthofinder), ]
     
-    # Logic to handle R's behavior of turning single-row matrices into vectors
     if (is.array(Cluster_matrix)) {
-      # Remove orthogroups with zero-count in this cluster
+      # Remove orthogroups with zero counts in this cluster
       Cluster_matrix <- Cluster_matrix[, colSums(abs(Cluster_matrix)) > 0]
     } else {
-      # Fallback for single-element clusters to prevent script failure
+      # Handle case where cluster might have one element by creating a false empty matrix
       Cluster_matrix <- matrix(, nrow = 1, ncol = 1)
       rownames(Cluster_matrix) <- names(fit_Orthofinder[grep(ClusterId,fit_Orthofinder)])
     }
     
-    # Only proceed if we have enough data (orthogroups) to build a hierarchical tree
+    # 2. Check for sufficient orthogroups for analysis
     if (ncol(Cluster_matrix) > 2) {
       
-      # Build Hierarchical tree
+      # 3. Create Hierarchical tree
       Cluster_distance <- dist(Cluster_matrix, method = 'binary')
       Cluster_Hier <- hclust(Cluster_distance, method = 'average')
       my_tree <- as.phylo(Cluster_Hier)
       
-      # Save Tree and Cluster list, if multiple clusters wher identified
+      # Save Tree and Cluster List
       if (Individual_clusters >= 2) {
-        write.tree(phy = my_tree, file = paste("CargoHierarchicalTree_Cluster", ClusterId, ".nwk", sep = ""))
+        write.tree(phy = my_tree, file = paste("CargoHC_Cluster", ClusterId, ".nwk", sep = ""))
         write.table(Cluster_Hier$labels, file = paste("Cluster", ClusterId, ".txt", sep = ""), sep = '\t', row.names = F, col.names = F, quote = F)
       } else {
-        write.tree(phy = my_tree, file = "CargoHierarchicalTree.nwk")
+        write.tree(phy = my_tree, file = "CargoHC.nwk")
       }
       
-      # Generated Heatmap of Orthogroups Presence/Absence
+      # 4. Create Heatmap Plot
       Cluster_melt <- reshape2::melt(Cluster_matrix, as.is = T)
       Profile_plot <- ggplot(data = Cluster_melt, aes(x = reorder(Var2, value), y = Var1, fill = value)) +
         geom_tile() +
         scale_fill_viridis(option = "rocket", direction = -1) +
         labs(y = "element", x = "Orthogroup") +
         theme(axis.text.x = element_blank())
-
-
-      # Save heatmap: modified dimensions based on the number of orthogroups and elements.
+      
+      # Save Profile Plot
       plot_width <- min(49, ncol(Cluster_matrix) * 0.2 + 2)
       plot_height <- min(49, nrow(Cluster_matrix))
       if (Individual_clusters >= 2) {
@@ -294,116 +237,83 @@ analyze_individual_clusters <- function(
         ggsave(Profile_plot, filename = "CargoHeatmap.svg",
                width = plot_width, height = plot_height)
       }
+      
+      # 5. Data Preparation for Synteny Plot
+      tree_sorted <- ladderize(my_tree, right = FALSE)
+      selected_seqs <- row.names(Cluster_matrix)
+      
+      seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs)
+      genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs)
+      
+      links_filtered <- blast_links %>%
+        filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
+        select(
+          seq_id = qseqid, start = qstart, end = qend,
+          seq_id2 = sseqid, start2 = sstart, end2 = send, pident
+        )
+      
+      # 6. Align Sequence Order with Phylogenetic Tree
+      p_tree_base <- ggtree::ggtree(tree_sorted, hang = 0.05) +
+        theme(plot.margin = unit(c(0.1, 0, 0.1, 0.1), "cm"))
+      tree_data <- p_tree_base$data
+      
+      # Determine sequence order based on tree tip position
+      tree_y_coords <- tree_data %>%
+        filter(isTip) %>%
+        select(seq_id = label, y) %>%
+        # Invert and shift y-coordinates to match gggenomes' top-down plotting order
+        mutate(y = max(y) - y + 1)
+      
+      ordered_seqs <- seqs_filtered %>%
+        inner_join(tree_y_coords, by = "seq_id") %>%
+        arrange(y)
+      
+      # 7. Create Phylogenetic and Genomic Plots
+      p_tree <- p_tree_base +
+        ggtree::geom_tiplab(align = TRUE, size = 3) +
+        ggtree::theme_tree2()
+      
+      max_seq_len <- max(ordered_seqs$length, na.rm = TRUE)
+      
+      p_genome <- gggenomes::gggenomes(
+        seqs = ordered_seqs,
+        links = links_filtered,
+        genes = genes_filtered
+      ) +
+        gggenomes::geom_seq(aes(y = y)) +
+        gggenomes::geom_gene(aes(y = y)) +
+        gggenomes::geom_link(aes(y = y, fill = pident), colour = NA) +
+        gggenomes::geom_bin_label(aes(y = y), x = -10) +
+        scale_x_continuous(
+          labels = label_number(accuracy = 1),
+          limits = c(0, max_seq_len)
+        ) +
+        theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
+      
+      # Combine plots (Requires the 'patchwork' package)
+      final_plot <- p_tree + p_genome
+      
+      # 8. Save Final Plot
+      plot_width_final <- min(49, max(16, round(max_seq_len * 0.0001) + round(max(tree_sorted$edge.length, na.rm = TRUE) * 10)))
+      plot_height_final <- min(49, nrow(Cluster_matrix))
+      
+      if (Individual_clusters >= 2) {
+        ggsave(final_plot, filename = paste("CargoSynteny_Cluster", ClusterId, ".svg", sep = ""),
+               width = plot_width_final, height = plot_height_final, limitsize = FALSE)
+        # Record successful cluster
+        Selected_clusters <- c(Selected_clusters, ClusterId)
+      } else {
+        ggsave(final_plot, filename = "CargoSynteny.svg",
+               width = plot_width_final, height = plot_height_final, limitsize = FALSE)
+      }
+      
     } else {
+      # 9. Handle Clusters with 0, 1, or 2 Orthogroups
       cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "WARNING: There are issues with the following element: ", as.character(rownames(Cluster_matrix)), "\n", sep = ""))
     }
   }
-
-  return(Selected_clusters)
-}
-
-plot_cluster_synteny <- function(
-    Cluster_matrix, 
-    orthogroup_table,
-    core_genes,   
-    seq_data,        
-    gene_data,      
-    blast_links,
-    Cluster_number = ""
-) {
   
-  # Generate hierarchical cluster tree
-  Cluster_distance <- dist(Cluster_matrix, method = 'binary')
-  Cluster_Hier <- hclust(Cluster_distance, method = 'average')
-  my_tree <- as.phylo(Cluster_Hier)
-      
-  # Data Preparation for Synteny Plot
-  tree_sorted <- ladderize(my_tree, right = FALSE)
-  selected_seqs <- row.names(Cluster_matrix)
-      
-  seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs)
-  genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs)
-
-  if( length(core_genes$specific_core) > 0 ) {
-    # Extract Gene IDs belonging to the specific core orthogroups
-    specific_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$specific_core,]
-    specific_vector <- unlist(strsplit(specific_table[,2],split = " "))
-    specific_vector <- specific_vector[ specific_vector != ""]
-
-    # Update the gene table
-    genes_filtered <- genes_filtered %>%
-      mutate(attribute = ifelse(ID %in% specific_vector, "specific", attribute))
-  }
-
-  if( length(core_genes$general_core) > 0 ) {
-    # Extract Gene IDs belonging to the general core orthogroups
-    general_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$general_core,]
-    general_vector <- unlist(strsplit(general_table[,2],split = " "))
-    general_vector <- general_vector[ general_vector != ""]
-
-    # Update the gene table: general core takes priority over 'specific' for coloring
-    genes_filtered <- genes_filtered %>%
-      mutate(attribute = ifelse(ID %in% general_vector, "general", attribute))
-  }
-
-  links_filtered <- blast_links %>%
-    filter(seq_id %in% selected_seqs | seq_id2 %in% selected_seqs)
-      
-  # Align Sequence Order with Phylogenetic Tree
-  p_tree_base <- ggtree::ggtree(tree_sorted, hang = 0.05) +
-    theme(plot.margin = unit(c(0.1, 0, 0.1, 0.1), "cm"))
-      
-  # Determine sequence order based on tree tip position
-  tree_y_coords <- p_tree_base$data %>%
-    filter(isTip) %>%
-    select(seq_id = label, y) %>%
-    mutate(y = max(y) - y + 1) # Flip Y axis to match top-down order
-      
-  ordered_seqs <- seqs_filtered %>%
-    inner_join(tree_y_coords, by = "seq_id") %>%
-    arrange(y)
-      
-  # Create tree plot
-  p_tree <- p_tree_base +
-    ggtree::geom_tiplab(align = TRUE, size = 3) +
-    ggtree::theme_tree2()
-      
-  max_seq_len <- max(ordered_seqs$length, na.rm = TRUE)
-      
-  p_genome <- gggenomes(
-    seqs = ordered_seqs,
-    links = links_filtered,
-    genes = genes_filtered
-   ) +
-   geom_seq(aes(y = y)) +
-   geom_gene(aes(y = y, fill = attribute), show.legend = T) +
-   scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4"), na.value = "cornsilk3", limits = c("general","specific")) + # Color genes based on the 'attribute'
-   new_scale_fill() + # Use a second scale for the link (BLAST) identity
-   geom_link(aes(y = y, fill = pident), colour = NA) +
-   scale_fill_continuous(name = "Alignment Identity (%)") +
-   geom_bin_label(aes(y = y), x = -10) +
-   scale_x_continuous(
-     labels = label_number(accuracy = 1),
-     limits = c(0, max_seq_len)
-   ) +
-   theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
-      
-  # Combine plots
-  final_plot <- p_tree + p_genome
-      
-  # 8. Save Final Plot
-  plot_width_final <- min(49, max(16, round(max_seq_len * 0.0001) + round(max(tree_sorted$edge.length, na.rm = TRUE) * 10)))
-  plot_height_final <- min(49, nrow(Cluster_matrix))
-      
-  if ( Cluster_number != "") {
-    ggsave(final_plot, filename = paste("CargoSynteny_Cluster", ClusterId, ".svg", sep = ""),
-      width = plot_width_final, height = plot_height_final, limitsize = FALSE)
-    # Record successful cluster
-    Selected_clusters <- c(Selected_clusters, ClusterId)
-  } else {
-    ggsave(final_plot, filename = "CargoSynteny.svg",
-      width = plot_width_final, height = plot_height_final, limitsize = FALSE)
-  }
+  return(Selected_clusters)
 }
 
 check_nesting <- function(
@@ -473,6 +383,49 @@ check_nesting <- function(
       }
     }
   }
+}
+
+core_genes_analysis <- function(    
+    ortho_counts,
+    Cluster,
+    Cluster_number = ""
+) {
+  core_genes2 <- vector()
+  #identify the possibility of general core genes
+  Whole_core <- ortho_counts[rowSums(ortho_counts < 1 ) <= ncol(ortho_counts)*0.2,]
+  core_genes <- rownames(Whole_core)
+
+  if(length(core_genes) > 0) {
+
+    write.table(core_genes, file = paste("Core_genes-General",Cluster_number, ".txt", sep = ""),
+                        sep = '\t', row.names = F, col.names = F, quote = F)
+    write.csv(Whole_core, file = paste("Core_genes-General",Cluster_number, ".csv", sep = ""),
+                        row.names = T, quote = F)
+  }
+
+  fit <- cutree(Cluster, h = 0.8)
+
+  if(length(unique(fit)) > 1) {
+    for(SubClusterId in 1:length(unique(fit))) {
+      OrthoFinder_subcluster <- subset(ortho_counts, select = names(fit[grep(SubClusterId,fit)]))
+      if(ncol(OrthoFinder_subcluster) > 4) {
+        OrthoFinder_subcluster <- OrthoFinder_subcluster[rowSums(OrthoFinder_subcluster < 1 ) <= ncol(OrthoFinder_subcluster)*0.2,]
+        if(nrow(OrthoFinder_subcluster) > 0) {
+          core <- rownames(OrthoFinder_subcluster)
+          core_genes2 <- c(core_genes2,core)
+          write.table(core, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".txt", sep = ""),
+                        sep = '\t', row.names = F, col.names = F, quote = F)
+          write.csv(OrthoFinder_subcluster, file = paste("Core_genes-Specific",SubClusterId,Cluster_number, ".csv", sep = ""),
+                        row.names = T, quote = F)
+        }
+      }
+    }
+  }
+
+  return(list(
+    general_core = core_genes,
+    specific_core = core_genes2
+    ))
 }
 
 gene_movement_analysis <- function(
@@ -554,7 +507,6 @@ gene_movement_analysis <- function(
   return(list(
     movement = single_movements,
     multiple = multiple_movements,
-    orthogroups= Gene_movement,
     elements_in = elements_cluster,
     elements_out = elements_other,
     K_analysis = test_NbClust
@@ -562,8 +514,7 @@ gene_movement_analysis <- function(
 }
 
 plot_subcluster_synteny <- function(
-    subcluster_number,
-    orthogroup_table,  
+    subcluster_number,  
     dist_matrix,    
     cluster_fit,    
     ortho_counts, 
@@ -694,35 +645,6 @@ plot_subcluster_synteny <- function(
         # Filtering data
         seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs2)
         genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs2)
-
-        if( length(core_genes$specific_core) > 0 ) {
-          # Identify genes in this
-          specific_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$specific_core,]
-          specific_vector <- unlist(strsplit(specific_table[,2],split = " "))
-          specific_vector <- specific_vector[ specific_vector != ""]
-
-          genes_filtered <- genes_filtered %>%
-            mutate(attribute = ifelse(ID %in% specific_vector, "specific", attribute))
-        }
-
-        if( length(core_genes$general_core) > 0 ) {
-          # Identify genes in this
-          general_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$general_core,]
-          general_vector <- unlist(strsplit(general_table[,2],split = " "))
-          general_vector <- general_vector[ general_vector != ""]
-
-          genes_filtered <- genes_filtered %>%
-            mutate(attribute = ifelse(ID %in% general_vector, "general", attribute))
-        }
-
-        # Print genes
-        movement_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% Movement$orthogroups,]
-        movement_vector <- unlist(strsplit(movement_table[,2],split = " "))
-        movement_vector <- movement_vector[ movement_vector != ""]
-
-        genes_filtered <- genes_filtered %>%
-          mutate(attribute = ifelse(ID %in% movement_vector, "Movement associated", attribute))
-
         links_filtered <- blast_links %>%
           filter(qseqid %in% selected_seqs2 | sseqid %in% selected_seqs2) %>%
           select(seq_id = qseqid, start = qstart, end = qend,
@@ -738,11 +660,8 @@ plot_subcluster_synteny <- function(
           genes = genes_filtered
         ) +
           geom_seq(aes(y = y)) +
-          geom_gene(aes(y = y, fill = attribute), show.legend = T) +
-          scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4", "Movement associated" = "darkorchid"), na.value = "cornsilk3", limits = c("general","specific", "Movement associated")) +
-          new_scale_fill() +
+          geom_gene(aes(y = y)) +
           geom_link(aes(y = y, fill = pident), colour = NA) +
-          scale_fill_continuous(name = "Alignment Identity (%)") +
           geom_bin_label(aes(y = y), x = -10) +
           scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
           theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
@@ -776,74 +695,47 @@ plot_subcluster_synteny <- function(
               OrthoFinder_subcluster <- ortho_counts[Gene_movement,selected_seqs2]
               OrthoFinder_subcluster <- OrthoFinder_subcluster[,colSums(OrthoFinder_subcluster) > 0]
 
-              Gene_movement <- rownames(OrthoFinder_subcluster)
-
               selected_seq2 <- colnames(OrthoFinder_subcluster)
 
               if(length(selected_seq2) >= 2) {
                 # Filtering data
-                seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs2)
-                genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs2)
-
-                if( length(core_genes$specific_core) > 0 ) {
-                  # Identify genes in this
-                  core_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$specific_core,]
-                  core_vector <- unlist(strsplit(core_table[,2],split = " "))
-                  core_vector <- core_vector[ core_vector != ""]
-
-                  genes_filtered <- genes_filtered %>%
-                  mutate(attribute = ifelse(ID %in% core_vector, "specific", attribute))
-                }
-
-                if( length(core_genes$general_core) > 0 ) {
-                  # Identify genes in this
-                  general_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$general_core,]
-                  general_vector <- unlist(strsplit(general_table[,2],split = " "))
-                  general_vector <- general_vector[ general_vector != ""]
- 
-                  genes_filtered <- genes_filtered %>%
-                  mutate(attribute = ifelse(ID %in% general_vector, "general", attribute))
-                }
-
-                # Identify genes in this
-                movement_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% Gene_movement,]
-                movement_vector <- unlist(strsplit(movement_table[,2],split = " "))
-                movement_vector <- movement_vector[ movement_vector != ""]
- 
-                genes_filtered <- genes_filtered %>%
-                  mutate(attribute = ifelse(ID %in% movement_vector, "Movement associated", attribute))
-
-                links_filtered <- blast_links %>%
-                filter(qseqid %in% selected_seqs2 & sseqid %in% selected_seqs2) %>%
-                select(seq_id = qseqid, start = qstart, end = qend,
+              seqs_filtered <- seq_data %>% filter(seq_id %in% selected_seqs2)
+              genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs2)
+              links_filtered <- blast_links %>%
+              filter(qseqid %in% selected_seqs2 & sseqid %in% selected_seqs2) %>%
+              select(seq_id = qseqid, start = qstart, end = qend,
                  seq_id2 = sseqid, start2 = sstart, end2 = send, pident)
         
-                # Ordering sequences
-                ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, selected_seqs2))
+              # Ordering sequences
+              ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, selected_seqs2))
 
-                if(nrow(links_filtered) >= 1){
-                  # Plotting (Synteny map)
-                  p_genome <- gggenomes(
-                  seqs = ordered_seqs,
-                  links = links_filtered,
-                  genes = genes_filtered
-                  ) +
-                  geom_seq(aes(y = y)) +
-                  geom_gene(aes(y = y, fill = attribute), show.legend = T) +
-                  scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4", "Movement associated" = "darkorchid"), na.value = "cornsilk3", limits = c("general","specific", "Movement associated")) +
-                  new_scale_fill() +
-                  geom_link(aes(y = y, fill = pident), colour = NA) +
-                  scale_fill_continuous(name = "Alignment Identity (%)") +
-                  geom_bin_label(aes(y = y), x = -10) +
-                  scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
-                  theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
+              if(nrow(links_filtered) >= 1){
+                # Plotting (Synteny map)
+                p_genome <- gggenomes(
+                seqs = ordered_seqs,
+                links = links_filtered,
+                genes = genes_filtered
+                ) +
+                geom_seq(aes(y = y)) +
+                geom_gene(aes(y = y)) +
+                geom_link(aes(y = y, fill = pident), colour = NA) +
+                geom_bin_label(aes(y = y), x = -10) +
+                scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
+                theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
         
-                  # Saving the plot
-                  ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, "-", i,"vs",j,".svg", sep = ""),
+                # Saving the plot
+                ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, "-", i,"vs",j,".svg", sep = ""),
                   width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
                   height = min(49, length(selected_seqs2)), limitsize = FALSE)
-                }
               }
+
+              }
+
+              #selected_seqs2 <- c(names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)][elements_cluster]),names(test_NbClust$Best.partition[grep(j,test_NbClust$Best.partition)][elements_other]))
+              #selected_seqs2 <- selected_seqs2[!is.na(selected_seqs2)]
+
+              
+              
           }
         }
       } else {
@@ -889,24 +781,18 @@ Selected_Cluster_ID <- analyze_individual_clusters(
     gene_data = data_list$genes,
     blast_links = data_list$blast_results)
 
-if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
+if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captainRemoval <= 1)){
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are possible core genes","\n", sep=""))
   
   core_genes <- core_genes_analysis(ortho_counts = clustering_data$orthofinder_counts, Cluster = clustering_data$Hierar_cl)
 
-  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Generating main plot","\n", sep=""))
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",arguments$subclusters," subclusters","\n", sep=""))
 
-  plot_cluster_synteny(Cluster_matrix=clustering_data$transposed_counts,orthogroup_table=data_list$orthogroups_table,core_genes=core_genes,seq_data=data_list$seqs,gene_data=data_list$genes,blast_links=data_list$links)
+  fit <- cutree(clustering_data$Hierar_cl, k = arguments$subclusters) # k is the number of subclusters from the first approach
+  New_dist <- as.matrix(clustering_data$distance_mat)
 
-  if(arguments$captainRemoval <= 1) {
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",arguments$subclusters," subclusters","\n", sep=""))
-
-    fit <- cutree(clustering_data$Hierar_cl, k = arguments$subclusters) # k is the number of subclusters from the first approach
-    New_dist <- as.matrix(clustering_data$distance_mat)
-
-    plot_subcluster_synteny(
+  plot_subcluster_synteny(
     subcluster_number = arguments$subclusters,
-    orthogroup_table = data_list$orthogroups_table,
     dist_matrix = New_dist,    
     cluster_fit = fit,    
     ortho_counts = clustering_data$orthofinder_counts, 
@@ -914,19 +800,23 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
     seq_data = data_list$seqs,        
     gene_data = data_list$genes,      
     blast_links = data_list$blast_results)
-  } else if(arguments$captainRemoval >= 2) {
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
 
-    test_NbClust <- NbClust(clustering_data$distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(clustering_data$distance_mat)-1), index = "ball")
-    test_fit <- cutree(clustering_data$Hierar_cl, h = 0.6)
-    K_number <- round(mean(c(length(unique(test_NbClust$Best.partition)), length(unique(fit)))))
-    fit <- cutree(clustering_data$Hierar_cl, k = K_number)
+} else if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2) & (arguments$captainRemoval >= 2)) {
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are possible core genes","\n", sep=""))
+  
+  core_genes <- core_genes_analysis(ortho_counts = clustering_data$orthofinder_counts, Cluster = clustering_data$Hierar_cl)
 
-    New_dist <- as.matrix(clustering_data$distance_mat)
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
 
-    plot_subcluster_synteny(
+  test_NbClust <- NbClust(clustering_data$distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(clustering_data$distance_mat)-1), index = "ball")
+  test_fit <- cutree(clustering_data$Hierar_cl, h = 0.6)
+  K_number <- round(mean(c(length(unique(test_NbClust$Best.partition)), length(unique(fit)))))
+  fit <- cutree(clustering_data$Hierar_cl, k = K_number)
+
+  New_dist <- as.matrix(clustering_data$distance_mat)
+
+  plot_subcluster_synteny(
     subcluster_number = K_number,
-    orthogroup_table = data_list$orthogroups_table,
     dist_matrix = New_dist,    
     cluster_fit = fit,    
     ortho_counts = clustering_data$orthofinder_counts, 
@@ -934,7 +824,6 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
     seq_data = data_list$seqs,        
     gene_data = data_list$genes,      
     blast_links = data_list$blast_results)
-  }
 
 } else if((clustering_data$Individual_clusters > 1) & (arguments$subclusters >= 2) & length(Selected_Cluster_ID) == 1) {
 
@@ -948,10 +837,6 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
   
   core_genes <- core_genes_analysis(ortho_counts = New_ortho_counts, Cluster = Hierar_cl,
     Cluster_number = paste("_Cluster", Selected_Cluster_ID, sep=""))
-
-  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Generating main plot","\n", sep=""))
-
-  plot_cluster_synteny(Cluster_matrix=Cluster_matrix,orthogroup_table=data_list$orthogroups_table,core_genes=core_genes,seq_data=data_list$seqs,gene_data=data_list$genes,blast_links=data_list$links, Cluster_number="1")
 
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters","\n", sep=""))
   
@@ -969,7 +854,6 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
 
   plot_subcluster_synteny(
     subcluster_number = K_number,
-    orthogroup_table = data_list$orthogroups_table,
     dist_matrix = New_dist,    
     cluster_fit = fit,    
     ortho_counts = clustering_data$orthofinder_counts,  
@@ -1005,11 +889,9 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
     core_genes <- core_genes_analysis(ortho_counts = New_ortho_counts, Cluster = Hierar_cl,
       Cluster_number = paste("_Cluster", MainClusterID, sep=""))
 
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Generating main plot","\n", sep=""))
-
-    plot_cluster_synteny(Cluster_matrix=Cluster_matrix,orthogroup_table=data_list$orthogroups_table,core_genes=core_genes,seq_data=data_list$seqs,gene_data=data_list$genes,blast_links=data_list$links, Cluster_number=MainClusterID)
-
     cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing subclusters in Cluster ",MainClusterID,"\n", sep=""))
+
+    
 
     test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(Cluster_matrix)-1), index = "ball")
     test_fit <- cutree(Hierar_cl, h = 0.6)
@@ -1020,7 +902,6 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
 
     plot_subcluster_synteny(
     subcluster_number = K_number,
-    orthogroup_table = data_list$orthogroups_table,
     dist_matrix = New_dist,    
     cluster_fit = fit,    
     ortho_counts = clustering_data$orthofinder_counts, 
@@ -1033,16 +914,13 @@ if((clustering_data$Individual_clusters == 1) & (arguments$subclusters >= 2)){
   } 
 } else{
   cat(paste("    [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","No subcluster to analyzed","\n", sep=""))
-  
-  if((clustering_data$Individual_clusters == 1) & (arguments$subclusters <= 1)) {
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are possible core genes","\n", sep=""))
-  
-    core_genes <- core_genes_analysis(ortho_counts = clustering_data$orthofinder_counts, Cluster = clustering_data$Hierar_cl)
-
-    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Generating plot","\n", sep=""))
-    plot_cluster_synteny(Cluster_matrix=clustering_data$transposed_counts,orthogroup_table=data_list$orthogroups_table,core_genes=core_genes,seq_data=data_list$seqs,gene_data=data_list$genes,blast_links=data_list$links)
-  }
 } 
+
+if((clustering_data$Individual_clusters == 1) & (arguments$subclusters == 1)) {
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are possible core genes","\n", sep=""))
+  
+  core_genes <- core_genes_analysis(ortho_counts = clustering_data$orthofinder_counts, Cluster = clustering_data$Hierar_cl)
+}
 
 if(clustering_data$Individual_clusters == 1) {
   cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing if there are differences between captain and cargo dendograms","\n", sep=""))
