@@ -44,12 +44,11 @@ This wrapper was specifically written to be run on Linux and requires the follow
 - hmmer.
 - python with the following packages: networkx, biopython, gffutils, pandas, numpy, scikit-learn.
 - seqkit.
-- earlgrey.
 - blast+.
 - clipkit.
 - iqtree3.
 - gotree.
-- orthofinder.
+- orthofinder v3.1.1.
 - R v4.4.3 with the following packages: ape, reshape2, viridis, dplyr, gggenomes, scales, dendextend, NbClust, svglite, ggplot2=3.5.2, ggtree, ggnewscale, syntenet, optparse.
 - metaeuk.
 - agat.

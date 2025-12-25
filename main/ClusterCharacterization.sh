@@ -5,6 +5,8 @@
 # ==============================================================================
 
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
+source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
+OMPI_MCA_opal_cuda_support=true
 
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 if [[ ! -d "$auxiliary_path" ]]; then
@@ -68,10 +70,10 @@ check_clusters() {
 check_captain_information() {
     local base_dir="$1"   
 
-    local captainPhylogeny="${base_dir}/CaptainPhylogeny.nw"
+    local captainPhylogeny="${base_dir}/CaptainIdentification/CaptainPhylogeny.nw"
 
     if [[ ! -f $captainPhylogeny ]]; then
-        echo "Error: captain phylogeny file does not exist in '$base_dir'."
+        echo "Error: captain phylogeny file does not exist in '${base_dir}/CaptainIdentification'."
         exit 1
     fi
 
@@ -94,12 +96,12 @@ organize_working_directory() {
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
 
-    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
-    local temp_dir="${base_dir}/Workspace/ClusterCharacterization/temp/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
 
     local full_gff="${working_dir}/Final_model.gff"
 
-    local captainPhylogeny="${base_dir}/CaptainPhylogeny.nw"
+    local captainPhylogeny="${base_dir}/CaptainIdentification/CaptainPhylogeny.nw"
 
     #if [[ -d "$working_dir" ]]; then
     #    echo "Error: There's a previous run in the Workspace."
@@ -126,13 +128,38 @@ organize_working_directory() {
 run_orthofinder() {
     local base_dir="$1"
 
-    local captainPhylogeny="${base_dir}/CaptainPhylogeny.nw"
-
-    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local captainPhylogeny="${working_dir}/CaptainPhylogeny.nw"
     local output_dir="${working_dir}/Orthofinder"
+    local temp_dir="${working_dir}/temp/"
 
-    orthofinder -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
+    local element_number=$(ls ${protein_dir} | wc -l)
+
+    if [[ ${element_number} -gt 500 ]]; then
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Cluster is too big. Dividing into two for Orthofinder run.."
+        ulimit -n 2048
+        gotree prune -i ${captainPhylogeny} --random "$(( $element_number / 2 ))" | gotree reroot midpoint -o ${temp_dir}/Captain_subtree.nw
+        gotree stats tips -i ${temp_dir}/Captain_subtree.nw | awk 'NR>1{print $4}' > ${temp_dir}/Tips.txt
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing information.."
+        mkdir ${temp_dir}/protein1 ${temp_dir}/protein2
+        ls ${protein_dir} | grep -f ${temp_dir}/Tips.txt | while read line
+        do
+            cp ${protein_dir}/${line} ${temp_dir}/protein1
+        done
+        ls ${protein_dir} | grep -v -f ${temp_dir}/Tips.txt | while read line
+        do
+            cp ${protein_dir}/${line} ${temp_dir}/protein2
+        done
+
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] First Orthofinder run.."
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${temp_dir}/protein1 -A mafft -S diamond -I 4 -T iqtree3 -s ${temp_dir}/Captain_subtree.nw --scores-v2 -o ${output_dir} -n Initial &> ${working_dir}/orthofinder1.log
+
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Second Orthofinder run.."
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -A mafft -S diamond -I 4 -T iqtree3 -s ${captainPhylogeny} --scores-v2 --assign ${temp_dir}/protein2 --core ${output_dir}/Results_Initial -n characterization &> ${working_dir}/orthofinder2.log
+    else
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
+    fi  
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
 
@@ -162,14 +189,14 @@ run_orthofinder() {
 run_blast() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local temp_dir="${working_dir}/temp/"
     local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local output_dir="${working_dir}/Orthofinder"
 
     cat ${nucleotide_dir}/*.fa > ${temp_dir}/sequence.fasta
 
-    makeblastdb -dbtype nucl -parse_seqids -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
+    makeblastdb -dbtype nucl -in ${temp_dir}/sequence.fasta -out ${temp_dir}/Cluster &>/dev/null
 
     blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
 
@@ -179,7 +206,7 @@ run_blast() {
 check_core() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local orthogroups_dir="${working_dir}/Orthofinder/Results_characterization/Orthogroup_Sequences/"
     local temp_dir="${working_dir}/temp/"
 
@@ -206,7 +233,7 @@ check_core() {
 check_movement() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/ClusterCharacterization/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local orthogroups_dir="${working_dir}/Orthofinder/Results_characterization/Orthogroup_Sequences/"
     local temp_dir="${working_dir}/temp/"
 
@@ -366,7 +393,7 @@ do
 
     if $overwrite; then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-        overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+        overwrite "${internal_dir}" "$(basename -s .sh "$0" )"
     fi
     
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
@@ -377,7 +404,7 @@ do
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
     if ! $orthofinder_flag; then
         echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder in this cluster.\n"
-        rm -r "${internal_dir}/Workspace/ClusterCharacterization/"
+        #rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )/"
         continue
     else
         grep -w ${ClusterId} ${Working_directory}/Clusters/ClustersAnalyzed.txt >> ${Working_directory}/Clusters/ClusterOrthogroups.txt
@@ -389,10 +416,10 @@ do
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running characterization of the cluster..."
-    Rscript ${auxiliary_path}/ClusterAnalysis.R -d "${internal_dir}/Workspace/ClusterCharacterization/" -s "${subcluster_number}" -c $captainremoval_number
+    Rscript ${auxiliary_path}/ClusterAnalysis.R -d "${internal_dir}/Workspace/$(basename -s .sh "$0" )/" -s "${subcluster_number}" -c $captainremoval_number
 
-    mkdir -p "${internal_dir}/Workspace/ClusterCharacterization/Figures"
-    mv ${internal_dir}/Workspace/ClusterCharacterization/*.svg "${internal_dir}/Workspace/ClusterCharacterization/Figures/"
+    mkdir -p "${internal_dir}/Workspace/$(basename -s .sh "$0" )/Figures"
+    mv ${internal_dir}/Workspace/$(basename -s .sh "$0" )/*.svg "${internal_dir}/Workspace/$(basename -s .sh "$0" )/Figures/"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking for core genes..."
     check_core "${internal_dir}"

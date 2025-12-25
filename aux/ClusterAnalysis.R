@@ -160,6 +160,7 @@ perform_initial_clustering <- function(
   
   # Perform UPGMA clustering
   Hierar_cl <- hclust(distance_mat, method = 'average')
+  Hierar_cl$height <- sort(Hierar_cl$height)
   
   # Cut tree at nearly 1.0 height to identify if there has been any break in the cluster connection
   fit_Orthofinder <- cutree(Hierar_cl, h = 0.99999999)
@@ -350,8 +351,7 @@ plot_cluster_synteny <- function(
     filter(seq_id %in% selected_seqs | seq_id2 %in% selected_seqs)
       
   # Align Sequence Order with Phylogenetic Tree
-  p_tree_base <- ggtree::ggtree(tree_sorted, hang = 0.05) +
-    theme(plot.margin = unit(c(0.1, 0, 0.1, 0.1), "cm"))
+  p_tree_base <- ggtree::ggtree(tree_sorted, layout = "rectangular")
       
   # Determine sequence order based on tree tip position
   tree_y_coords <- p_tree_base$data %>%
@@ -363,35 +363,33 @@ plot_cluster_synteny <- function(
     inner_join(tree_y_coords, by = "seq_id") %>%
     arrange(y)
       
-  # Create tree plot
-  p_tree <- p_tree_base +
-    ggtree::geom_tiplab(align = TRUE, size = 3) +
-    ggtree::theme_tree2()
-      
   max_seq_len <- max(ordered_seqs$length, na.rm = TRUE)
-      
+
+  p_tree <- p_tree_base +
+  ggtree::geom_tiplab(align = TRUE, size = ifelse(nrow(Cluster_matrix) < 100, 2.5, 3), family = "mono") +
+  ggtree::theme_tree2()
+
   p_genome <- gggenomes(
     seqs = ordered_seqs,
     links = links_filtered,
     genes = genes_filtered
-   ) +
-   geom_seq(aes(y = y)) +
-   geom_gene(aes(y = y, fill = attribute), show.legend = T) +
-   scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4"), na.value = "cornsilk3", limits = c("general","specific")) + # Color genes based on the 'attribute'
-   new_scale_fill() + # Use a second scale for the link (BLAST) identity
-   geom_link(aes(y = y, fill = pident), colour = NA) +
-   scale_fill_continuous(name = "Alignment Identity (%)") +
-   geom_bin_label(aes(y = y), x = -10) +
-   scale_x_continuous(
+    ) +
+    geom_seq(aes(y = y)) +
+    geom_gene(aes(y = y, fill = attribute), show.legend = T) +
+    scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4"), na.value = "cornsilk3", limits = c("general","specific")) + # Color genes based on the 'attribute'
+    new_scale_fill() + # Use a second scale for the link (BLAST) identity
+    geom_link(aes(y = y, fill = pident), colour = NA) +
+    scale_fill_continuous(name = "Alignment Identity (%)") +
+    geom_bin_label(aes(y = y), x = -10, size = ifelse(nrow(Cluster_matrix) < 50, 2.5, 3)) +
+    scale_x_continuous(
      labels = label_number(accuracy = 1),
-     limits = c(0, max_seq_len)
-   ) +
-   theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
+     limits = c(0, max_seq_len)) +
+    scale_y_continuous(expand = expansion(mult = 1.0001 * (nrow(Cluster_matrix) ^ -1.1728))) # Y scale is dependant on number of sequences to match the three vizualitation
       
   # Combine plots
   final_plot <- p_tree + p_genome
       
-  # 8. Save Final Plot
+  # Save Final Plot
   plot_width_final <- min(49, max(16, round(max_seq_len * 0.0001) + round(max(tree_sorted$edge.length, na.rm = TRUE) * 10)))
   plot_height_final <- min(49, nrow(Cluster_matrix))
       
@@ -412,28 +410,43 @@ check_nesting <- function(
   gene_data,      
   blast_links) {
 
+  # Iteration Through Every Element
   for(Element in 1:ncol(ortho_counts)) { 
     Element_name <- colnames(ortho_counts[Element])
+    # Identify orthogroups present in the current element (non-zero rows)
     Genes_element <- rownames(ortho_counts[Element_name] %>%  filter(!if_all(everything(), ~ .x == 0)))
+
+    # Create a reduced matrix containing only the orthogroups found in this Element
     reduced_orthofinder <- ortho_counts[Genes_element,]
+
+    # Filter for other elements that share at least 80% of these orthogroups (Candidates for being 'containers' of this element)
     reduced_orthofinder2 <- reduced_orthofinder[,colSums(reduced_orthofinder < 1) < nrow(reduced_orthofinder) * 0.2]
     if(is.data.frame(reduced_orthofinder2)){
+      # Remove the element itself from the comparison set
       reduced_orthofinder2 <- reduced_orthofinder2 %>% select(-all_of(Element_name))
       if(is.data.frame(reduced_orthofinder2)){
         for(comparison in 1:ncol(reduced_orthofinder2)) {
           Element_compare <- colnames(reduced_orthofinder2[comparison])
           Genes_compare <- rownames(ortho_counts[Element_compare] %>%  filter(!if_all(everything(), ~ .x == 0)))
+
+          # A 'container' element should be significantly larger (1.5x more orthogroups)
           if(length(Genes_compare) > (length(Genes_element) * 1.5)) {
 
+            # Extract links between the small element (query) and large element (subject)
             links_filtered2 <- blast_links %>%
             filter(qseqid %in% Element_name & sseqid %in% Element_compare) %>%
             select(seq_id = qseqid, start = qstart, end = qend,
                  seq_id2 = sseqid, start2 = sstart, end2 = send, pident)
 
+            # Retrieve total lengths of both sequences
             seq_idLength <- as.numeric(seq_data[seq_data$seq_id %in% unique(links_filtered2$seq_id),2])
             seq_id2Length <- as.numeric(seq_data[seq_data$seq_id %in% unique(links_filtered2$seq_id2),2])
 
-            if(xor((any(links_filtered2$start < seq_idLength*0.2) && any(links_filtered2$end > seq_idLength*0.8)),(any(links_filtered2$start2 < seq_id2Length*0.2) && any(links_filtered2$end2 > seq_id2Length*0.8)))) {
+            # Check if the hits cover the small element from start to end (0.2 to 0.8 [allow some issues with the boundaries of the small element])
+            is_nested_q <- any(links_filtered2$start < seq_idLength * 0.2) && any(links_filtered2$end > seq_idLength * 0.8)
+            is_nested_s <- any(links_filtered2$start2 < seq_id2Length * 0.2) && any(links_filtered2$end2 > seq_id2Length * 0.8)
+
+            if (xor(is_nested_q, is_nested_s)) {
               cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Element ", Element_name, " is nested in element ", Element_compare, "\n", sep = ""))
 
               selected_seq <- c(Element_name, Element_compare)
@@ -485,9 +498,8 @@ gene_movement_analysis <- function(
   ) {
 
   test_NbClust <- vector()
-  #elements_cluster <- vector()
-  #elements_other <- vector()
 
+  # Define Comparison Groups: Elements in the subcluster that are in the row; 'other' elements are potential donors/recipients from different subcluster
   if(big){
     elements_cluster <- rownames(matrix)
     elements_other <- colnames(matrix)
@@ -498,33 +510,45 @@ gene_movement_analysis <- function(
 
   selected_seqs2 <- c(elements_cluster,elements_other)
 
-  OrthoFinder_subcluster_cluster <- subset(ortho_counts, select = elements_cluster)
-  OrthoFinder_subcluster_cluster <- OrthoFinder_subcluster_cluster %>%  filter(!if_all(everything(), ~ .x == 0))
-  OrthoFinder_subcluster_other <- subset(ortho_counts, select = elements_other)
-  OrthoFinder_subcluster_other <- OrthoFinder_subcluster_other %>%  filter(!if_all(everything(), ~ .x == 0))
+  # Filter Orthogroup Profiles: Isolate genes present in the subcluster vs genes present in the 'other' group
+  OrthoFinder_subcluster_cluster <- subset(ortho_counts, select = elements_cluster) %>%
+    filter(!if_all(everything(), ~ .x == 0))
+  OrthoFinder_subcluster_other <- subset(ortho_counts, select = elements_other) %>%
+    filter(!if_all(everything(), ~ .x == 0))
+  #OrthoFinder_subcluster_cluster <- subset(ortho_counts, select = elements_cluster)
+  #OrthoFinder_subcluster_cluster <- OrthoFinder_subcluster_cluster %>%  filter(!if_all(everything(), ~ .x == 0))
+  #OrthoFinder_subcluster_other <- subset(ortho_counts, select = elements_other)
+  #OrthoFinder_subcluster_other <- OrthoFinder_subcluster_other %>%  filter(!if_all(everything(), ~ .x == 0))
 
+  # Movement = Genes in both groups MINUS the core genes of the cluster
   Gene_movement <- intersect(rownames(OrthoFinder_subcluster_cluster),rownames(OrthoFinder_subcluster_other))
-  Nesting_test <- Gene_movement
+  Nesting_test <- Gene_movement # Save raw intersection for nesting check
   Gene_movement <- Gene_movement[ ! Gene_movement %in% core_genes$general_core]
   
-
+  # Logic Branching: Nesting vs. Simple Movement vs. Multiple Events
+  # CASE A: Nesting Event (High overlap of total gene content)
   if(length(Nesting_test) >= nrow(OrthoFinder_subcluster_cluster)*0.8 || length(Nesting_test) >= nrow(OrthoFinder_subcluster_other)*0.8) {
     single_movements <- TRUE
     multiple_movements <- FALSE
     write.table(selected_seqs2, file = paste(Cluster_number,"SubCluster", subcluster_number, "_nestingEvent.txt", sep = ""),
                 sep = '\t', row.names = F, col.names = F, quote = F)
+  # CASE B: Movement with Multiple Potential Origins. Meaning that different genes belong to different putative movement donod/acceptors
   } else if(length(Gene_movement) > 0 && big) {
     single_movements <- TRUE
     OrthoFinder_subcluster <- ortho_counts[Gene_movement,selected_seqs2]
     OrthoFinder_subcluster <- OrthoFinder_subcluster[,colSums(OrthoFinder_subcluster) > 0]
 
+    # Refine element lists based on those actually carrying the moving genes
     elements_cluster <- elements_cluster[elements_cluster %in% colnames(OrthoFinder_subcluster)]
     elements_other <- elements_other[elements_other %in% colnames(OrthoFinder_subcluster)]
 
     transposase_OrthoFinder <- t(OrthoFinder_subcluster)
+
+    # Use NbClust to see if 'moving' genes cluster into distinct groups
     if(nrow(transposase_OrthoFinder) > 3 && ncol(transposase_OrthoFinder) > 3 ){
       distance_mat <- dist(transposase_OrthoFinder, method='binary')
       Hierar_cl <- hclust(distance_mat, method = 'average')
+      # Determine optimal number of clusters via the "Ball" index
       test_NbClust <- NbClust(distance_mat, method = "average", min.nc = 1, max.nc = min(6, nrow(transposase_OrthoFinder)-1), index = "ball")
  
       if(length(unique(test_NbClust$Best.partition)) > 1) {
@@ -535,14 +559,19 @@ gene_movement_analysis <- function(
     } else {
       multiple_movements <- FALSE
     }
+    # Save results
     write.table(Gene_movement, file = paste(Cluster_number,"SubCluster", subcluster_number, "_moveOrthologs.txt", sep = ""),
                 sep = '\t', row.names = F, col.names = F, quote = F)
     write.csv(OrthoFinder_subcluster, file = paste(Cluster_number,"SubCluster", subcluster_number, "_moveOrthologsTable.csv", sep = ""),
                 row.names = T, quote = F)
+
+  # CASE C: Simple Single Movement
   } else if(length(Gene_movement) > 0) {
     OrthoFinder_subcluster <- ortho_counts[Gene_movement,selected_seqs2]
     single_movements <- TRUE
     multiple_movements <- FALSE
+
+    # Save results
     write.table(Gene_movement, file = paste(Cluster_number,"SubCluster", subcluster_number, "_moveOrthologs.txt", sep = ""),
                 sep = '\t', row.names = F, col.names = F, quote = F)
     write.csv(OrthoFinder_subcluster, file = paste(Cluster_number,"SubCluster", subcluster_number, "_moveOrthologsTable.csv", sep = ""),
@@ -551,6 +580,8 @@ gene_movement_analysis <- function(
     single_movements <- FALSE
     multiple_movements <- FALSE
   }
+
+  # Return Results
   return(list(
     movement = single_movements,
     multiple = multiple_movements,
@@ -594,12 +625,12 @@ plot_subcluster_synteny <- function(
     selected_seqs2_defined <- FALSE
     multiple_movements <- FALSE
     
-    # --- Main Cluster Processing Logic ---
+    # Main Cluster Processing Logic
     if (is.matrix(matrix)) {
       # First reduction step
       reduce_matrix <- matrix[, colSums(matrix) < nrow(matrix) * 0.98]
       
-      # Block 1: Enough sequences for detailed reduction (>= nrow + 2)
+      # Block 1: There at least two sequence related to this subcluster
       if (ncol(reduce_matrix) >= nrow(reduce_matrix) + 2) {
         reduce_matrix <- reduce_matrix[, names(sort(colSums(reduce_matrix), decreasing = F))]
         reduce_matrix2 <- reduce_matrix[, (nrow(reduce_matrix) + 1):ncol(reduce_matrix)]
@@ -627,7 +658,7 @@ plot_subcluster_synteny <- function(
           test_NbClust <- Movement$K_analysis
         }
         
-      # Block 2: Simple reduction (ncol > nrow)
+      # Block 2: There's only one sequence related
       } else if (ncol(reduce_matrix) > nrow(reduce_matrix)) {
         reduce_matrix <- reduce_matrix[, names(sort(colSums(reduce_matrix), decreasing = F))]
         reduce_matrix <- reduce_matrix[order(reduce_matrix[,ncol(reduce_matrix)], decreasing = TRUE),]
@@ -688,7 +719,7 @@ plot_subcluster_synteny <- function(
         }
       }
       
-      # 4. Data preparation and Plotting (Runs only if sequences were selected)
+      # Data preparation and Plotting (Runs only if sequences were selected)
       if (selected_seqs2_defined & ! multiple_movements) {
         
         # Filtering data
@@ -696,7 +727,7 @@ plot_subcluster_synteny <- function(
         genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs2)
 
         if( length(core_genes$specific_core) > 0 ) {
-          # Identify genes in this
+          # Extract Gene IDs belonging to the specific core orthogroups
           specific_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$specific_core,]
           specific_vector <- unlist(strsplit(specific_table[,2],split = " "))
           specific_vector <- specific_vector[ specific_vector != ""]
@@ -706,7 +737,7 @@ plot_subcluster_synteny <- function(
         }
 
         if( length(core_genes$general_core) > 0 ) {
-          # Identify genes in this
+          # Extract Gene IDs belonging to the general core orthogroups
           general_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$general_core,]
           general_vector <- unlist(strsplit(general_table[,2],split = " "))
           general_vector <- general_vector[ general_vector != ""]
@@ -715,7 +746,7 @@ plot_subcluster_synteny <- function(
             mutate(attribute = ifelse(ID %in% general_vector, "general", attribute))
         }
 
-        # Print genes
+        # Extract Gene IDs belonging to the movement orthogroups
         movement_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% Movement$orthogroups,]
         movement_vector <- unlist(strsplit(movement_table[,2],split = " "))
         movement_vector <- movement_vector[ movement_vector != ""]
@@ -751,11 +782,13 @@ plot_subcluster_synteny <- function(
         ggsave(p_genome, filename = paste(Cluster_number,"CargoSynteny_SubCluster", ClusterId, ".svg", sep = ""),
                width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)),
                height = min(49, length(selected_seqs2)), limitsize = FALSE)
+      # Data preparation and Plotting when multiple origins of movement where identify
       } else if(selected_seqs2_defined & multiple_movements) {
 
         k_out_cluster <- unique(test_NbClust$Best.partition[elements_other])
         k_cluster <- unique(test_NbClust$Best.partition[elements_cluster])
 
+        # Plot each comparison
         for(i in k_cluster) {
           for(j in k_out_cluster) {
               cluster_seqs <- names(test_NbClust$Best.partition[grep(i,test_NbClust$Best.partition)][elements_cluster])
@@ -786,7 +819,7 @@ plot_subcluster_synteny <- function(
                 genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs2)
 
                 if( length(core_genes$specific_core) > 0 ) {
-                  # Identify genes in this
+                  # Extract Gene IDs belonging to the specific core orthogroups
                   core_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$specific_core,]
                   core_vector <- unlist(strsplit(core_table[,2],split = " "))
                   core_vector <- core_vector[ core_vector != ""]
@@ -796,7 +829,7 @@ plot_subcluster_synteny <- function(
                 }
 
                 if( length(core_genes$general_core) > 0 ) {
-                  # Identify genes in this
+                  # Extract Gene IDs belonging to the general core orthogroups
                   general_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$general_core,]
                   general_vector <- unlist(strsplit(general_table[,2],split = " "))
                   general_vector <- general_vector[ general_vector != ""]
@@ -805,7 +838,7 @@ plot_subcluster_synteny <- function(
                   mutate(attribute = ifelse(ID %in% general_vector, "general", attribute))
                 }
 
-                # Identify genes in this
+                # Extract Gene IDs belonging to the movement orthogroups
                 movement_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% Gene_movement,]
                 movement_vector <- unlist(strsplit(movement_table[,2],split = " "))
                 movement_vector <- movement_vector[ movement_vector != ""]
@@ -872,10 +905,10 @@ clustering_data <- perform_initial_clustering()
 
 cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Checking for nesting events ","\n", sep = ""))
 
-check_nesting(ortho_counts = clustering_data$orthofinder_counts,
-    seq_data = data_list$seqs,
-    gene_data = data_list$genes,
-    blast_links = data_list$blast_results)
+# check_nesting(ortho_counts = clustering_data$orthofinder_counts,
+#    seq_data = data_list$seqs,
+#    gene_data = data_list$genes,
+#    blast_links = data_list$blast_results)
 
 # Process Clusters
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",clustering_data$Individual_clusters," individual cluster(s) identified","\n", sep=""))

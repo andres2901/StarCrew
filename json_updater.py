@@ -28,50 +28,56 @@ def save_json(file_path, data):
 # --- MODIFICATION HANDLERS ---
 
 def handle_orthofinder_cmd_update(data):
-    """Handles the diamond search_cmd modification (Example 1)."""
-    DIAMOND_KEY = 'diamond'
-    SEARCH_CMD_KEY = 'search_cmd'
+    """Updates search_cmd for diamond and diamond_ultra_sensitive with distinct values."""
     
-    NEW_SEARCH_CMD = (
-        "diamond blastp --threads METHODTHREAD --ignore-warnings -d DATABASE -q INPUT -o OUTPUT --query-cover 80 --matrix SCOREMATRIX --gapopen GAPOPEN --gapextend GAPEXTEND --fast -p 1 --quiet -e 1e-5 --compress 1"
-    )
+    # Define a dictionary where each key has its own unique command string
+    # I have updated 'diamond_ultra_sensitive' to include the --ultra-sensitive flag as an example
+    modifications = {
+        "diamond": (
+            "diamond blastp --threads METHODTHREAD --ignore-warnings -d DATABASE -q INPUT -o OUTPUT "
+            "--query-cover 80 --matrix SCOREMATRIX --gapopen GAPOPEN --gapextend GAPEXTEND "
+            "--fast --hit-membuf --quiet -e 1e-5 --compress 1"
+        ),
+        "diamond_ultra_sens": (
+            "diamond blastp --threads METHODTHREAD --ignore-warnings -d DATABASE -q INPUT -o OUTPUT "
+            "--query-cover 50 --matrix SCOREMATRIX --gapopen GAPOPEN --gapextend GAPEXTEND "
+            "--ultra-sensitive --hit-membuf --quiet -e 1e-5 --compress 1"
+        )
+    }
 
-    if DIAMOND_KEY in data and SEARCH_CMD_KEY in data[DIAMOND_KEY]:
-        data[DIAMOND_KEY][SEARCH_CMD_KEY] = NEW_SEARCH_CMD
-        print("\nModified 'diamond' -> 'search_cmd' value.")
-        return True
-    else:
-        print("\nWarning: Could not find 'diamond' or 'search_cmd' for update. Skipping.")
-        return False
+    any_modified = False
+
+    for key, new_command in modifications.items():
+        if key in data and 'search_cmd' in data[key]:
+            data[key]['search_cmd'] = new_command
+            print(f"Modified '{key}' -> 'search_cmd' with unique parameters.")
+            any_modified = True
+        else:
+            print(f"Warning: Key '{key}' not found. Skipping.")
+
+    return any_modified
 
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
     
-    # Simple argument check for required arguments
     if len(sys.argv) < 3:
-        print("Usage:")
-        print("OrthoFinder Command Update: python json_updater.py <file_path> --cmd-update")
+        print("Usage: python json_updater.py <file_path> --cmd-update")
         sys.exit(1)
 
     file_path = sys.argv[1]
     mode = sys.argv[2]
     
-    # 1. Load the JSON data
     config_data = load_json(file_path)
-    
     modified = False
     
-    # 2. Select and run the correct modification handler based on the mode
     if mode == '--cmd-update':
         print("\n--- Running OrthoFinder Command Update Mode ---")
         modified = handle_orthofinder_cmd_update(config_data)
-        
     else:
-        print(f"Error: Unknown mode '{mode}'. Use '--cmd-update'.")
+        print(f"❌ Error: Unknown mode '{mode}'. Use '--cmd-update'.")
         sys.exit(1)
 
-    # 3. Save the JSON data if modifications were made
     if modified:
         save_json(file_path, config_data)
     else:
-        print("\nOperation finished, but no relevant changes were applied.")
+        print("\nOperation finished, but no changes were applied.")

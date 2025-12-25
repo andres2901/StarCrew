@@ -157,7 +157,7 @@ process_diamond() {
         local outfile="${results_temp_dir}/${species_name}.tsv"
         
         # Perform the blastp search using the full query path
-        diamond blastp -q "$query" -d "$db" -o "$outfile" --fast -k0 --max-hsps 1 --evalue 1e-5 --matrix PAM30 --query-cover 90 -p "$threads" --quiet
+        diamond blastp -q "$query" -d "$db" -o "$outfile" --fast -k0 --max-hsps 1 --evalue 1e-5 --matrix PAM30 --query-cover 90 -p "$threads" --quiet --hit-membuf
         
         # The rest of the loop is adjusted to use the new species_name variable
         awk '{print $2}' "$outfile" | awk -F '_' '{print $1}' | sed 's/[^[:print:]]//g' | sort | uniq > "${temp_dir}hit"

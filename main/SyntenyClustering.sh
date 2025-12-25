@@ -21,27 +21,27 @@ fi
 
 # Function to print help message
 function print_help() {
-   echo -e "Script to run the syntenet pipeline using DIAMOND for sequence similarity search, summarizes the results, and organizes the output data.
+   echo -e "Script to perform clustering of elements based of the syntenet pipeline using DIAMOND for sequence similarity search.
    It executes six main steps:
    1. Executes the initial data preprocessing step required by the syntenet pipeline.
    2. Runs DIAMOND using the preprocessed data.
-   3. Runs the interspecies synteny command of syntenet to identify regions with gene collinearity.
+   3. Runs the interspecies synteny command of syntenet to identify regions with gene collinearity between elements.
    4. Summarizes the results of syntenet on four possible modes:
      a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. \033[01;31mWARNING\033[m: This mode may yield a high rate of false positives.
-     b. SSP: Return only pairs with strong synteny.
+     b. SSP: Return only pairs with strong synteny (Check tool documentation for more information).
      c. FilterBlast: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level.
-     d. FilterMetric: Filter and update collinearity based on a metric system.
+     d. FilterMetric: Filter and update collinearity based on a metric system (Check tool documentation for more information).
    5. Defines initial clusters of elements and performs a spectral clustering process to identify potential subclusters.
    6. Organizes the final data output for each identified cluster.
    "
    echo ""
-   echo "Syntax: SAT $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> --captainInfo --overwrite ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -n <integer> -s <integer> -t <integer> -th <float> -p <string> --captainInfo --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = FilterMetric) [Available mode: Raw, SSP, FilterBlast, FilterMetric]."
+   echo "-m, --mode: Specified the mode to run the summarizing process of synteny results (Default = FilterBlast) [Available mode: Raw, SSP, FilterBlast, FilterMetric]."
    echo "-a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default = 8) [range: 3 - 25]."
    echo "-g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default = 8) [range: 5 - 25]."
    echo "-n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4)."
@@ -71,6 +71,7 @@ organize_working_directory() {
     local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local metadata_dir=$(find "$base_dir" -maxdepth 1 -type d -name "metadata_files" 2>/dev/null)
 
     local cluster_dir="${base_dir}/Clusters/"
     local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
@@ -94,8 +95,8 @@ organize_working_directory() {
     cp -r ${exon_dir} ${working_dir}
 
 
-    if [[ -f "${data_dir}/metadata.csv" ]]; then
-        cp "${data_dir}/metadata.csv" ${working_dir}
+    if [[ -f "${metadata_dir}/metadata.csv" ]]; then
+        cp "${metadata_dir}/metadata.csv" ${working_dir}
         metadata_flag=true
     fi
 }
@@ -168,6 +169,7 @@ process_diamond() {
             if [[ "$species_name" != "$TARGET" ]]
             then
                 grep "${TARGET}_" "$outfile" > "${diamond_results_dir}/${species_name}_${TARGET}.tsv"
+                echo -e "${species_name}""\t""${TARGET}" >> "${temp_dir}/Diamond_files.txt"
             else
                 # Special case for self-comparison
                 grep ".*_${line}\.[0-9]*.*_${line}\.[0-9]*" "$outfile" > "${diamond_results_dir}/${species_name}_${TARGET}.tsv"
@@ -179,6 +181,76 @@ process_diamond() {
     done
 
     echo ""
+}
+
+process_precluster() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local temp_dir="${working_dir}/temp/"
+    
+    local collinearity_path="${working_dir}/Collinearity"
+    local preCluster="${working_dir}/precluster"
+    mkdir -p "${preCluster}"
+
+    # Locate required subdirectories and define output path
+    local gff_path=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+    local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+    local diamond_results_dir=$(find "$working_dir" -maxdepth 1 -type d -name "DiamondResults" 2>/dev/null)
+
+    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Starting pre-cluster process..."
+
+    python ${auxiliary_path}/PreCluster.py -i "${temp_dir}/Diamond_files.txt" -o "${temp_dir}" &>/dev/null
+
+    Total_states=$(wc -l ${temp_dir}/Clusters.txt | awk '{print $1}')
+    State=0
+
+    if [[ ${Total_states} -ge 2 ]]; then
+
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing information for '${Total_states}' cluster..."
+
+        local OLD_IFS="$IFS"
+        IFS=$'\t'
+
+        while read -r cluster_id values_string; do
+            State=$(($State + 1))
+
+            IFS=' ' read -r -a values_array <<< "$values_string"
+        
+            mkdir -p "${preCluster}/${cluster_id}"
+            mkdir -p "${preCluster}/${cluster_id}/Protein"
+            mkdir -p "${preCluster}/${cluster_id}/Gff"
+            mkdir -p "${preCluster}/${cluster_id}/DiamondResults"
+        
+            for value in "${values_array[@]}"; do
+                cp ${gff_path}/${value}.gff ${preCluster}/${cluster_id}/Gff/
+                cp ${protein_dir}/${value}.fa ${preCluster}/${cluster_id}/Protein/
+                cp ${diamond_results_dir}/${value}* ${preCluster}/${cluster_id}/DiamondResults/
+            done
+
+            ProgressBar $State $Total_states
+        done < "${temp_dir}/Clusters.txt"
+
+        # Restore the original IFS at the end of the function.
+        IFS="$OLD_IFS"
+        echo ""
+
+        State=0
+
+        mkdir -p "${collinearity_path}"
+        ls -d ${preCluster}/*/ | while read Cluster_path
+        do
+            State=$(($State + 1))
+            echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Running Syntenet for cluster '${State}'."
+            Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Cluster_path}" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
+            find ${Cluster_path}/Collinearity/ -type f -name "*.collinearity" -exec cp {} ${collinearity_path}/ \;
+            # cp ${Cluster_path}/Collinearity/*.collinearity ${collinearity_path}/
+            echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Finished."
+        done
+    else
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] No subcluster was found, running the full database..."
+        Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${working_dir}" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
+    fi
 }
 
 blastn_all_vs_all() {
@@ -272,7 +344,7 @@ process_collinearity() {
 
     # Determine number of genes per element for percentage estimation
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Counting genes per element from GFF files..."
-    find "${gff_path}" -maxdepth 1 -type f -name "*.gff" -exec grep -c "gene" {} + | awk -F'/' '{ gsub(".gff:", "\t", $NF); print $NF }' | sort-k1,1  > "${temp_prefix}_genes_per_element.txt"
+    find "${gff_path}" -maxdepth 1 -type f -name "*.gff" -exec grep -c "gene" {} + | awk -F'/' '{ gsub(".gff:", "\t", $NF); print $NF }' | sort -k1,1  > "${temp_prefix}_genes_per_element.txt"
 
     # Determine the number of collinear genes per element
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Counting collinear genes from collinearity files..."
@@ -306,9 +378,9 @@ process_collinearity() {
 
     # Join the two previous files to generate a file for percentage estimation
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Joining gene count data..."
-    join "${temp_prefix}_collinear_genes.txt" "${temp_prefix}_genes_per_element.txt" | sort -k2 > "${temp_prefix}_join_1.txt"
-    join -1 2 -2 1 <(sort -k2,2 "${temp_prefix}_join_1.txt") "${temp_prefix}_genes_per_element.txt" | \
-        awk '{swap=$1;$1=$2;$2=swap;print $0}' | sort > "${temp_prefix}_join_2.txt"
+    join "${temp_prefix}_collinear_genes.txt" "${temp_prefix}_genes_per_element.txt" | sort -k2,2 > "${temp_prefix}_join_1.txt"
+    join -1 2 -2 1 "${temp_prefix}_join_1.txt" "${temp_prefix}_genes_per_element.txt" | \
+        awk '{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > "${temp_prefix}_join_2.txt"
 
     # Estimate percentage per element
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Estimating percentage of collinearity per element..."
@@ -381,7 +453,7 @@ process_collinearity() {
             # Filter low syntenic pairs
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering False Positive pairs..."
             awk '{OFS=";"} {print $1 OFS $2}' "${working_dir}/BlastnClean.out" > "${working_dir}/BlastnPairs.out"
-            join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage_low.txt" | sort) <(sed -e 's/;/-/' "${working_dir}/BlastnPairs.out" | sort) | sed 's/-/;/g' > "${temp_prefix}_Collinearity_percentage_lowSelected.txt"
+            join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage_low.txt" | sort -k1,1) <(sed -e 's/;/-/' "${working_dir}/BlastnPairs.out" | sort -k1,1) | sed 's/-/;/g' > "${temp_prefix}_Collinearity_percentage_lowSelected.txt"
             cat "${temp_prefix}_Collinearity_percentage_high.txt" "${temp_prefix}_Collinearity_percentage_lowSelected.txt" | sort -u > "${temp_prefix}_Collinearity_percentage_filter.txt"
         else
             echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Blast filtering is being skipped due to the absence of low syntenic pairs to evaluate..."
@@ -432,7 +504,7 @@ process_collinearity() {
         done
         echo ""
 
-        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' >> "${temp_dir}/Collinearity_percentage.txt"
+        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort -t ";" -k1,1) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort -t ";" -k1,1) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' >> "${temp_dir}/Collinearity_percentage.txt"
 
         # Final stage
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."
@@ -551,7 +623,7 @@ process_cluster_file() {
 
 # Initialize variables
 Working_directory=""
-mode="FilterMetric"
+mode="FilterBlast"
 anchorPoints="8"
 gaps="8"
 minNodes="4"
@@ -562,6 +634,7 @@ merge_size="5000"
 identity="70.0"
 coverage="20.0"
 threads="8"
+precluster=false
 captainInfo=false
 overwrite=false
 help_flag=false
@@ -617,6 +690,9 @@ while [[ $# -gt 0 ]]; do
             shift
             threads="$1"
             ;;
+        --preCluster)
+            precluster=true
+            ;;
         --captainInfo)
             captainInfo=true
             ;;
@@ -654,6 +730,7 @@ echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
 echo "  Minimum size of sub-cluster: " "$minSize"
 echo "  Modularity score threshold for Spectral clustering: " "$threshold"
 echo "  Number of threads: " "$threads"
+echo "  Pre-Clustering process: " "$precluster"
 echo "  Captain information: " "$captainInfo"
 echo "  Overwrite previous run: " "$overwrite"
 echo ""
@@ -829,6 +906,7 @@ check_required_software "$(basename -s .sh "$0" )"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
 organize_working_directory "${Working_directory}"
+echo "  Metadata: " "${metadata_flag}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Preprocessing data for Diamond."
 Rscript ${auxiliary_path}/syntenetPreprocess.R "${Working_directory}/Workspace/$(basename -s .sh "$0" )/"
@@ -838,9 +916,15 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running Diamond analysis."
 process_diamond "${Working_directory}"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running syntenet analysis."
-Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )/" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+if $precluster; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running syntenet analysis."
+    process_precluster "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+else
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running syntenet analysis."
+    Rscript ${auxiliary_path}/syntenetAnalysis.R  -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )/" -a "${anchorPoints}" -g "${gaps}" -t "${threads}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Summarizing syntenet results in '${mode}' mode."
 process_collinearity "${Working_directory}" "${mode}"
