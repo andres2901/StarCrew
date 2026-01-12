@@ -153,12 +153,12 @@ run_orthofinder() {
         done
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] First Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${temp_dir}/protein1 -A mafft -S diamond -I 4 -T iqtree3 -s ${temp_dir}/Captain_subtree.nw --scores-v2 -o ${output_dir} -n Initial &> ${working_dir}/orthofinder1.log
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${temp_dir}/protein1 -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${temp_dir}/Captain_subtree.nw --scores-v2 -o ${output_dir} -n Initial &> ${working_dir}/orthofinder1.log
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Second Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -A mafft -S diamond -I 4 -T iqtree3 -s ${captainPhylogeny} --scores-v2 --assign ${temp_dir}/protein2 --core ${output_dir}/Results_Initial -n characterization &> ${working_dir}/orthofinder2.log
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 --assign ${temp_dir}/protein2 --core ${output_dir}/Results_Initial -n characterization &> ${working_dir}/orthofinder2.log
     else
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
     fi  
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"

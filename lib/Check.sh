@@ -453,6 +453,12 @@ check_mode_parameter() {
             print_help
             exit 1
         fi
+    elif [[ $command == "OrthogroupsOverrepresentation" ]]; then
+        if [[ "$mode" != "Outliers" && "$mode" != "Enrichment" ]]; then
+            echo "Error: provided mode '$mode' is not accepted."
+            print_help
+            exit 1
+        fi
     else
     	echo "Error: command '$command' is incorrect."
     	exit 1
@@ -477,11 +483,6 @@ check_required_software() {
             echo "Error: Missing require function(s) for SyntenyClustering"
             exit 1
         fi
-    elif [[ $command == "TEPrediction" ]]; then
-        if [[ -z "$(which earlGreyAnnotationOnly)" ]]; then
-            echo "Error: Missing require function(s) for TEPrediction"
-            exit 1
-        fi
     elif [[ $command == "CaptainIdentification" ]]; then
         if [[ -z "$(which python)" || -z "$(which macse)" || -z "$(which hmmscan)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which clipkit)" || -z "$(which iqtree3)" || -z "$(which gotree)" ]]; then
             echo "Error: Missing require function(s) for CaptainIdentification"
@@ -490,6 +491,11 @@ check_required_software() {
     elif [[ $command == "ClusterCharacterization" ]]; then
         if [[ -z "$(which Rscript)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which orthofinder)" ]]; then
             echo "Error: Missing require function(s) for ClusterCharacterization"
+            exit 1
+        fi
+    elif [[ $command == "OrthogroupsOverrepresentation" ]]; then
+        if [[ -z "$(which orthofinder)" || -z "$(which gotree)" || -z "$(which Rscript)" ]]; then
+            echo "Error: Missing require function(s) for OrthogroupsOverrepresentation"
             exit 1
         fi
     elif [[ $command == "OrthogroupsAnnotation" ]]; then
@@ -506,8 +512,8 @@ check_required_software() {
             echo "Error: Missing require function(s) for SyntenyClustering"
             exit 1
         fi
-        if [[ -z "$(which earlGreyAnnotationOnly)" ]]; then
-            echo "Error: Missing require function(s) for TEPrediction"
+        if [[ -z "$(which orthofinder)" || -z "$(which gotree)" || -z "$(which Rscript)" ]]; then
+            echo "Error: Missing require function(s) for OrthogroupsOverrepresentation"
             exit 1
         fi
         if [[ -z "$(which python)" || -z "$(which macse)" || -z "$(which hmmscan)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which clipkit)" || -z "$(which iqtree3)" || -z "$(which gotree)" ]]; then

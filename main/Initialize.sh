@@ -232,8 +232,8 @@ Header_processing() {
     if $metadata; then
         local metadata_csv="${working_dir}/metadata_files/metadata.csv"
         head -n1 $metadata_path > $metadata_csv
-        sed -i -e 's/ElementID/ElemenID;ElementID_updated/' $metadata_csv
-        awk 'BEGIN{FS=OFS=";"}{if($2=="")$2="NA"; else if($3=="")$3="NA"; print}' $metadata_path > ${working_dir}/temp/temp_metadata.csv
+        sed -i -e 's/ElementID/ElementID;ElementID_updated/' $metadata_csv
+        awk 'BEGIN{FS=OFS=";"}{for (i = 1; i <= NF; i++) {if($i=="")$i="NA"}; print}' $metadata_path > ${working_dir}/temp/temp_metadata.csv
         join -1 2 -2 1 -t ';' <( sort -t ";" -k2,2 $association_csv) <(sort -t ";" -k1,1 ${working_dir}/temp/temp_metadata.csv) >> $metadata_csv
     else
         echo "    [$(date "+%Y-%m-%d %H:%M:%S")] Skipping metadata file update..."

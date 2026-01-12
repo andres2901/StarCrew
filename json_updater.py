@@ -41,7 +41,7 @@ def handle_orthofinder_cmd_update(data):
         "diamond_ultra_sens": (
             "diamond blastp --threads METHODTHREAD --ignore-warnings -d DATABASE -q INPUT -o OUTPUT "
             "--query-cover 50 --matrix SCOREMATRIX --gapopen GAPOPEN --gapextend GAPEXTEND "
-            "--ultra-sensitive --hit-membuf --quiet -e 1e-5 --compress 1"
+            "--ultra-sensitive --hit-membuf --quiet -e 0.001 --compress 1"
         )
     }
 

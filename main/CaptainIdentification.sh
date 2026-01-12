@@ -605,13 +605,11 @@ fi
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
 echo "  Mode: " "$mode"
-echo "  Minimum number of anchor points: " "$anchorPoints"
-echo "  Maximum number of gaps: " "$gaps"
-echo "  Minimum number of nodes for Spectral clustering: " "$minNodes"
-echo "  Minimum size of sub-cluster: " "$minSize"
-echo "  Modularity score threshold for Spectral clustering: " "$threshold"
-echo "  Number of threads: " "$threads"
-echo "  Minimum size of a Cluster to analyzed in 'Cluster' mode: " "${minimum_size}"
+echo "  Length: " "$length"
+echo "  Confidence level: " "$level"
+echo "  Range of analysis: " "$range"
+echo "  Minimum size of a Cluster to analyzed in 'Cluster' mode: " "$minimum_size"
+echo "  Threads: " "$threads"
 echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
@@ -758,6 +756,8 @@ then
     if $overwrite; then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
         overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+    else
+        Previous_captain_run=false
     fi
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"

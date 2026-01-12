@@ -57,7 +57,7 @@ function print_help() {
    echo "Optional args:"
    echo "-t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8)"
    echo "--preCluster: Perform a preclustering before syntenet analysis base on simple DIAMOND results. Recommended for big datasets (Default: off)"
-   echo "--captainInfo: Flag to check and used the captain exon/pseudoexon information for the cluster (Default: off)"
+   echo "--captainInfo: Flag to check and introduce the captain exon/pseudoexon information to each cluster (Default: off)"
    echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
    echo "-help: Display this help message."
 }
@@ -598,6 +598,7 @@ process_cluster_file() {
                     local Exon_value=$(grep "${value}\." "${Exon_file}" | awk -F '>' '{print $2}')
                     if [[ $Exon_value != "" ]]; then
                         seqkit grep --quiet -p $Exon_value ${cluster_dir}/${cluster_id}/Data/Exon/${value}.fa >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_exon.fa
+                        grep "^${value}\." ${ID_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/CaptainsID.txt
                     else
                         seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_pseudo.fa
                     fi

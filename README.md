@@ -21,7 +21,6 @@ In addition to the main commands, StarCREW is distributed with a diverse set of 
     - [CaptainIdentification](#CaptainIdentification)
     - [SyntenyClustering](#SyntenyClustering)
     - [OrthogroupsOverrepresentation](#OrthogroupsOverrepresentation)
-    - [TEPrediction](#TEPrediction)
     - [ClusterCharacterization](#ClusterCharacterization)
     - [OrthogroupsAnnotation](#OrthogroupsAnnotation)
 - [Project folder organization](#Project-folder-organization)
@@ -37,7 +36,7 @@ Waiting for full wrapper development to check the final requirements.
 
 ### Software requirements
 
-This wrapper was specifically written to be run on Linux and requires the following software and dependencies to be installed and accessible via the system path:
+This wrapper was specifically written for Linux and requires the following software and dependencies to be installed and accessible via the system path. The version numbers provided are those used during testing; for Python and R, these specific versions ensure the successful installation of all required packages, while for OrthoFinder newer versions have deprecated the --matrix argument, which would break the wrapper's workflow.
 
 - python 3.9.
 - java.
@@ -48,7 +47,7 @@ This wrapper was specifically written to be run on Linux and requires the follow
 - clipkit.
 - iqtree3.
 - gotree.
-- orthofinder v3.1.1.
+- orthofinder v3.1.0.
 - R v4.4.3 with the following packages: ape, reshape2, viridis, dplyr, gggenomes, scales, dendextend, NbClust, svglite, ggplot2=3.5.2, ggtree, ggnewscale, syntenet, optparse.
 - metaeuk.
 - agat.
@@ -359,13 +358,14 @@ Once the final set of filtered pairs is obtained, a graph-based clustering proce
 
 1.  **Graph Creation:** A weighted undirected graph is created using the GCP as the edge weight. Elements without any connection are excluded from the graph.
 2.  **Cluster Definition:** A cluster is defined as a set of connected elements. **Note:** Due to the nature of connected components, not all elements inside a cluster may have a direct connection between them, and therefore might not share any sequence or cargo similarity.
-3.  **Subclustering:** For further resolution, spectral clustering is performed iteratively, starting with $k=2$ (where $k$ is the desired number of clusters) on clusters that meet a minimum size defined by the user. This process follows:
-    - **3.1. Clustering:** Perform spectral clustering using the current $k$ value.
-    - **3.2. Filtering:** Subclusters are filtered based on two criteria:
+3.  **Subclustering:** For further resolution, an initial step of modularity  spectral clustering is performed iteratively on clusters that meet a minimum size defined by the user. This process follows:
+    - **3.1. Behavior check:** The Louvain method is performed to identify the inherent cluster behavior. If cluster behavior is detected, the algorithm proceeds with an initial $k$ value (the desired number of clusters) calculated as: $k = \max(2, \text{Clusters}_{\text{louvain}} - 2)$
+    - **3.2. Clustering:** Perform spectral clustering using the current $k$ value.
+    - **3.3. Filtering:** Subclusters are filtered based on two criteria:
         - 1) No subcluster has a number of elements below a user-defined threshold.
         - 2) The Modularity score is higher than a user-defined threshold.
-    - **3.3. Decision:** Based on the filtering result, a decision is taken:
-        - Pass: If both criteria are met, the modularity score threshold is updated to the current $k$ modularity score, $k$ is incremented ($k = k + 1$), and the process returns to step 3.1.
+    - **3.4. Decision:** Based on the filtering result, a decision is taken:
+        - Pass: If both criteria are met, the modularity score threshold is updated to the current $k$ modularity score, $k$ is incremented ($k = k + 1$), and the process returns to step 3.2.
         - Fail: If either criterion fails, the subclusters from the previous $k$ value are maintained. If this occurs on the first iteration, no subclusters are identified.
 
 After a successful run of the clustering command, the following files and directories should be found in the main output directory:
@@ -513,33 +513,6 @@ After a successful run of the annotation command, the following files and direct
 - **General_summary.csv**: A table summarizing the main annotation results. Each row in this table corresponds to a specific orthogroup.
 - **Orthogroups_summary/**: A folder containing the detailed results per orthogroup. In this case, each file within the folder corresponds to one orthogroup, and each row in the file's table corresponds to a protein belonging to that orthogroup.
 
-### TEPrediction
-
-```
-Script to predict TEs in the sequences based on earlgrey approach and Mycomobilome database.
-This script perform two steps:
-1. Run earlgrey TE prediction.
-2. Organize the results."
-
-Syntax: StarCREW TEPrediction [ -help ] -w <directory_path> [ -d <string> -m <string> -t <integer> ]
-
-Required args:
--w, --workingDirectory: Specify the working directory where all data are stored.
-
-Required args with Default:
--d, --database: Mycomobilome database to be use (Default = allConsensus) [Available type: allConsensus, proteinEvidence, unknown].
--m, --mode: Define the data that will be use for the TE prediction. This can be perform for all the data or for each cluster (Default = Cluster) [Available mode: Cluster, All]."
--t, --threads: Number of threads for earlgrey (Default = 8)
-
-Optional args:
---overwrite: Flag to overwrite in case there is already a previous run of TEPrediction (Default: off).
--help: Display this help message.
-```
-
-This script was specifically designed for the purpose of identifying putative Transposable Elements (TEs) located inside starships in case users haven't performed this step in their original genomes. It utilizes a recently developed, curated database of TEs sourced from fungi ([Mycomobilome](https://github.com/TobyBaril/MycoMobilome)). This command is designed to run independently and is not connected to, nor does it require, any of the other main workflow commands (except for the `Initialize` command, which is necessary to create the project folder structure).
-
-After a successful run of the TE prediction command, the user should be able to find the summary files from earlgrey. IN case, you want to know more about this files please read their [documentation](https://github.com/TobyBaril/MycoMobilome)
-
 ## Project folder organization
 
 The project folder is created to allow all commands to run independently without creating file conflicts and to maintain the results organized. When you run the `StarCREW Initialize` command, the directory structure will look like this:
@@ -605,7 +578,7 @@ StarCREW is a wrapper that calls different bioinformatic software, for that reas
 |`CaptainIdentification`| `AllID` | `hmmscan`, `seqkit`, `blast+`  | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`CaptainIdentification`| `Cluster`, `FullAll`| `hmmscan`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`ClusterCharacterization`| - | `orthofinder`, `DIAMOND`, `blast+`, `ape`, `ggtree`, `gggenomes` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Paradis et al. 2004](https://pubmed.ncbi.nlm.nih.gov/14734327/), [Yu et al. 2016](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12628), [Hackl et al. 2024](https://arxiv.org/abs/2411.13556) |
-|`OrthogroupsAnnotation`| - | `foldseek`, `mafft`, `hhblits`, `interproscan`,| [van Kempen et al 2024](https://pubmed.ncbi.nlm.nih.gov/37156916/), [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |
+|`OrthogroupsAnnotation`| - | `foldseek`, `ProstT5`, `mafft`, `hhblits`, `interproscan`| [van Kempen et al 2024](https://pubmed.ncbi.nlm.nih.gov/37156916/), [Heinzinger et al 2024](https://pubmed.ncbi.nlm.nih.gov/39633723/) [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |
 |`TEPrediction`| - | `earlgrey`, `Micomobilome` | [Baril et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38577785/), [Baril & Croll 2025](https://www.biorxiv.org/content/10.1101/2025.10.28.685023v1)  |
 
 ## License
