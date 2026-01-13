@@ -13,12 +13,18 @@ source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
 # Function to print help message
 function print_help() {
-    echo "Script to identify orthogroups that are overrepresented in the a specific dataset.
-    This script perform three steps:
-    1. Run earlgrey TE prediction.
-    2. Organize the results."
-    echo
-    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> -d <file_path> [ -m <string> -t <integer> ]"
+    echo "Script to identify orthogroups that are overrepresented in a specific dataset.
+    This script perform three major steps:
+    1. Run Orthofinder with DIAMOND ultra-sensitive mode.
+    2. Remove orthogroups assocaited with captains.
+    3. Perform the analysis depending on the selected mode:
+      3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kin of outlier identification:
+        3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + 1.5 * IQR.
+        3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: 3 * IQR.
+        3.1.3. Percentile: Identified orthogroups as outliers using as fence an specific percentile defined by the user.
+      3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata."
+    echo ""
+    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -r <string> -p <integer> -c <string> -v <string> -t <integer> { --overwrite | --skip-orthofinder } ]"
     echo ""
     echo "Required args:"
     echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -31,11 +37,14 @@ function print_help() {
     echo "-p, --percentile: In the case of percentile rule, the percentile that will be used (Default = 95) [Range: 90 - 99]"
     echo ""
     echo "Required args in 'Enrichment' mode:"
-    echo "-c, --column: column of the metadata file to be used."
-    echo "-v, --value: value from the column to be compare against the rest."
+    echo "-c, --column: column name of the variable in the metadata file to be used."
+    echo "-v, --value: value from the variable to be compare against the rest."
     echo ""
     echo "Optional args:"
     echo "-t, --threads: Number of threads (Default = 8)"
+    echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ). Not compatible wit '--skip-orthofinder' flag (Default: off)"
+    echo "--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode, rule or percentile of the analysis. 
+                              Not compatible with '--overwrite' flag (Default: off) "
     echo "-help: Display this help message."
 }
 
@@ -44,8 +53,8 @@ organize_working_directory() {
 
     local data_dir="${base_dir}/Data/"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
-    local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
+    local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/temp/"
 
     # Create required subdirectories
     mkdir -p ${working_dir}
@@ -85,7 +94,7 @@ organize_working_directory() {
 run_orthofinder() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local captainPhylogeny="${working_dir}/CaptainPhylogeny.nw"
     local output_dir="${working_dir}/Orthofinder"
@@ -146,7 +155,7 @@ run_orthofinder() {
 remove_captain_orthogroups() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
     local count_file="${working_dir}/Orthogroups.GeneCount.tsv"
     local gene_file="${working_dir}/Orthogroups.txt"
@@ -170,6 +179,8 @@ percentile="95"
 column=""
 value=""
 threads="8"
+overwrite=false
+skip_orthofinder=false
 help_flag=false
 
 while [[ $# -gt 0 ]]; do
@@ -202,6 +213,12 @@ while [[ $# -gt 0 ]]; do
             shift
             threads="$1"
             ;;
+        --overwrite)
+            overwrite=true
+            ;;
+        --skip-orthofinder)
+            skip_orthofinder=true
+            ;;
         -help)
             help_flag=true
             ;;
@@ -231,6 +248,8 @@ echo "  Rule for Outliers mode: " "$rule"
 echo "  Percentile: " "$percentile"
 echo "  Column in metadata for 'Enrichment' mode: " "$column"
 echo "  Value in metadata for 'Enrichment' mode: " "$value"
+echo "  Overwrite: " "$overwrite"
+echo "  Skip orthofinder: " "$skip_orthofinder"
 echo "  Number of threads: " "$threads"
 echo ""
 
@@ -298,6 +317,12 @@ if [[ "$mode" == "Enrichment" ]]; then
     fi
 fi
 
+# Check incompatible flags
+if [[ $overwrite && $skip_orthofinder ]]; then
+    echo "Error: '--overwrite' and '--skip-orthofinder' flags are both on and those are incompatible."
+    exit 1
+fi
+
 check_threads "$threads"
 
 # Check for software presence
@@ -307,70 +332,20 @@ check_required_software "$(basename -s .sh "$0" )"
 # Main Block
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running RobustGenePrediction Module with the following parameters:"
-echo "  database: ${database}"
-echo -e "  Mode: ${mode}\n"
-
-if [[ "${mode}" == "All" ]]
-then
-    # ==============================================================================
-    # Checking Working directory structure
-    # ==============================================================================
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
-    check_directory_structure "$Working_directory"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
-    organize_working_directory "${Working_directory}"
-
-    # ==============================================================================
-    # Run earlgrey
-    # ==============================================================================
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running earlGreyAnnotationOnly command..."
-    process_earlgrey "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
-
-    # ==============================================================================
-    # Organize results
-    # ==============================================================================
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Organizing results..."
-    organize_files "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished."
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
-
-elif [[ "${mode}" == "Cluster" ]]
-then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running in '${mode}' mode."
-    check_clusters "${Working_directory}" "${clusters_file}"
-    awk '{print $1}' ${Working_directory}/Clusters/SelectedClusters.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
-    do
-        internal_dir="${Working_directory}/Clusters/${ClusterId}/"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
-        check_directory_structure "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
-
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
-        organize_working_directory "${internal_dir}"
-
-        # ==============================================================================
-        # process earlgrey
-        # ==============================================================================
-
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: processing braker results.."
-        process_earlgrey "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
-
-        # ==============================================================================
-        # Running metaeuk for captain identification
-        # ==============================================================================
-
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running metaeuk for specialized captain prediction.."
-        organize_files "${internal_dir}"
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding. \n"
-    done
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
+if $overwrite; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
+    overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
 fi
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
+check_directory_structure "$Working_directory"
+echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
+organize_working_directory "${Working_directory}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running orthofinder..."
+run_orthofinder "${Working_directory}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Removing orthogroups associated with Captains..."
+remove_captain_orthogroups "${Working_directory}"

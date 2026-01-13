@@ -74,6 +74,4 @@ overwrite() {
             rm -r ${workspace}/${command}-${mode}/
         fi
     fi
-
-
 }
