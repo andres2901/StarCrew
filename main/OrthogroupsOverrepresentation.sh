@@ -13,18 +13,17 @@ source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
 # Function to print help message
 function print_help() {
-    echo "Script to identify orthogroups that are overrepresented in a specific dataset.
+    echo -e "Script to identify orthogroups that are overrepresented in a specific dataset.
     This script perform three major steps:
     1. Run Orthofinder with DIAMOND ultra-sensitive mode.
     2. Remove orthogroups assocaited with captains.
     3. Perform the analysis depending on the selected mode:
-      3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kin of outlier identification:
-        3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + 1.5 * IQR.
-        3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: 3 * IQR.
-        3.1.3. Percentile: Identified orthogroups as outliers using as fence an specific percentile defined by the user.
-      3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata."
+      3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kind of outlier identification:
+        3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0m * IQR.
+        3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0m^4MC * IQR.
+      3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test."
     echo ""
-    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -r <string> -p <integer> -c <string> -v <string> -t <integer> { --overwrite | --skip-orthofinder } ]"
+    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -n <integer> | -c <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]"
     echo ""
     echo "Required args:"
     echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -33,8 +32,8 @@ function print_help() {
     echo "-m, --mode: Define the mode that will be used to flag orthogroups (Default = Outliers) [Available mode: Outliers, Enrichment]."
     echo ""
     echo "Required args in 'Outliers' mode with Default:"
-    echo "-r, --rule: Define the IQR rule that is going to be used to defined outliers (Default = Standard) [Available mode: Standard, Skew, Percentile]."
-    echo "-p, --percentile: In the case of percentile rule, the percentile that will be used (Default = 95) [Range: 90 - 99]"
+    echo "-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Standard) [Available mode: Standard, Skew]."
+    echo "-n,--numberCoefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3]."
     echo ""
     echo "Required args in 'Enrichment' mode:"
     echo "-c, --column: column name of the variable in the metadata file to be used."
@@ -87,7 +86,9 @@ organize_working_directory() {
 
     if [[ -f "${metadata_dir}/metadata.csv" ]]; then
         cp "${metadata_dir}/metadata.csv" ${working_dir}
-        metadata_flag=true
+    else
+        echo "Error: metadata file was not found."
+        exit 1
     fi
 }
 
@@ -161,6 +162,16 @@ remove_captain_orthogroups() {
     local gene_file="${working_dir}/Orthogroups.txt"
     local captain_file="${working_dir}/CaptainsID.txt"
 
+    if [[ -f "${count_file}" || "${gene_file}" ]]; then
+        echo "Error: require files from orthofinder are missing."
+        exit 1
+    fi
+
+    if [[ -f "${captain_file}" ]]; then
+        echo "Error: require CAptain ID file is missing."
+        exit 1
+    fi
+
     grep -w -v -f ${captain_file} ${gene_file} > ${working_dir}/Orthogroups-captainless.txt
     awk -F ':' '{print $1}' ${working_dir}/Orthogroups-captainless.txt > ${temp_dir}/Orthogroups-captainlessID.txt
     head -n1 ${count_file} > ${working_dir}/Orthogroups.GeneCount-captainless.tsv
@@ -175,7 +186,7 @@ remove_captain_orthogroups() {
 Working_directory=""
 mode="Outliers"
 rule="Standard"
-percentile="95"
+coefficient="1.5"
 column=""
 value=""
 threads="8"
@@ -193,13 +204,13 @@ while [[ $# -gt 0 ]]; do
             shift
             mode="$1"
             ;;
-        -r|--rule)
+        -a|--approximation)
             shift
             rule="$1"
             ;;
-        -p|--percentile)
+        -n|--numberCoefficient)
             shift
-            percentile="$1"
+            coefficient="$1"
             ;;
         -c|--column)
             shift
@@ -244,8 +255,8 @@ fi
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
 echo "  Mode: " "$mode"
-echo "  Rule for Outliers mode: " "$rule"
-echo "  Percentile: " "$percentile"
+echo "  approximation for 'Outliers' mode: " "$rule"
+echo "  Coeeficient for fence definition: " "$coefficient"
 echo "  Column in metadata for 'Enrichment' mode: " "$column"
 echo "  Value in metadata for 'Enrichment' mode: " "$value"
 echo "  Overwrite: " "$overwrite"
@@ -317,9 +328,30 @@ if [[ "$mode" == "Enrichment" ]]; then
     fi
 fi
 
+# Check parameters in 'Outliers' mode
+if [[ "$mode" == "Outliers" ]]; then
+    if [[ "$rule" != "Standard" && "$rule" != "Skew" ]]; then
+        echo "Error: '$rule' approximation is not a valid value"
+        print_help
+        exit 1
+    fi
+
+    if [[ "$coefficient" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
+        if (( $(echo "$coefficient < 1.5" | bc -l) )) && (( $(echo "$coefficient > 3.0" | bc -l) )); then
+            echo "Error: '$coefficient' is not an accepted value for the fence coefficient."
+            print_help
+            exit 1
+        fi
+    else
+        echo "Error: '$coefficient' is not a float."
+        print_help
+        exit 1
+    fi
+fi
+
 # Check incompatible flags
 if [[ $overwrite && $skip_orthofinder ]]; then
-    echo "Error: '--overwrite' and '--skip-orthofinder' flags are both on and those are incompatible."
+    echo "Error: '--overwrite' and '--skip-orthofinder' flags are both 'on' and those are incompatible."
     exit 1
 fi
 
@@ -341,11 +373,15 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_direc
 check_directory_structure "$Working_directory"
 echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
-organize_working_directory "${Working_directory}"
+if ! $skip_orthofinder; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
+    organize_working_directory "${Working_directory}"
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running orthofinder..."
-run_orthofinder "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running orthofinder..."
+    run_orthofinder "${Working_directory}"
+else
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Skipping the working directory organization and orthofinder run."
+fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Removing orthogroups associated with Captains..."
 remove_captain_orthogroups "${Working_directory}"

@@ -38,24 +38,23 @@ Waiting for full wrapper development to check the final requirements.
 
 This wrapper was specifically written for Linux and requires the following software and dependencies to be installed and accessible via the system path. The version numbers provided are those used during testing; for Python and R, these specific versions ensure the successful installation of all required packages, while for OrthoFinder newer versions have deprecated the --matrix argument, which would break the wrapper's workflow.
 
-- python 3.9.
+- python v3.9 with the following packages: networkx v3.6.1, biopython v1.86, gffutils v0.13, pandas v2.3.3, numpy v2.3.5, scikit-learn v1.8.0.
 - java.
-- hmmer.
-- python with the following packages: networkx, biopython, gffutils, pandas, numpy, scikit-learn.
-- seqkit.
-- blast+.
-- clipkit.
-- iqtree3.
-- gotree.
+- hmmer v3.4.
+- seqkit 2.12.0.
+- blast+ v2.17.0.
+- clipkit v2.7.0.
+- iqtree3 3.0.1.
+- gotree v0.5.1.
 - orthofinder v3.1.0.
-- R v4.4.3 with the following packages: ape, reshape2, viridis, dplyr, gggenomes, scales, dendextend, NbClust, svglite, ggplot2=3.5.2, ggtree, ggnewscale, syntenet, optparse.
-- metaeuk.
-- agat.
-- diamond.
-- macse.
-- interproscan.
-- hhsuite.
-- foldseek.
+- R v4.4.3 with the following packages: ape v5.8.1, reshape2 v1.4.5, viridis v0.6.5, dplyr v1.1.4, gggenomes v1.1.2, scales v1.4.0, dendextend v1.19.1, NbClust v3.0.1, svglite v2.2.2, ggplot2 v3.5.2, ggtree v3.14.0, ggnewscale v0.5.2, syntenet v1.8.0, optparse v1.7.5.
+- metaeuk v7.bba0d80.
+- agat v1.5.1.
+- diamond v2.1.16.
+- macse v2.07.
+- interproscan .
+- hhsuite v3.3.0.
+- foldseek v10.941cd33.
 
 ### Database requirements
 
@@ -335,7 +334,7 @@ A preliminary filter is performed by removing any pair with a GCP below 8%, as i
     - **Note:** These values were calculated during preliminary testing. They correspond to a threshold where no 'false positive' pairs were found, and a clear 'good' diagonal was visualized in a nucleotide dot-plot.
 3.  **Blastn Filter (FilterBlast):**
     - This was the initial filtering approach design for the command, inspired by the BLAST result cleaning process described in [Westerberg et al. 2021](https://pubmed.ncbi.nlm.nih.gov/38218923/) before LTR network construction.
-    - All pairs not considered SSP are further analyzed using an all-versus-all blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/yass.php).
+    - All pairs not considered SSP are further analyzed using an all-versus-all blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/index.php).
     - The raw BLAST results are processed through the following steps to define the final maintained pairs:
         - Remove hits below user-defined thresholds for fragment size and identity percentage.
         - Merge overlapping hits.
@@ -455,8 +454,45 @@ After a successful run of the characterization command, the following files and 
 ### OrthogroupsOverrepresentation
 
 ```
-Waiting to be develop
+Script to identify orthogroups that are overrepresented in a specific dataset.
+This script perform three major steps:
+1. Run Orthofinder with DIAMOND ultra-sensitive mode.
+2. Remove orthogroups assocaited with captains.
+3. Perform the analysis depending on the selected mode:
+  3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kind of outlier identification:
+    3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + n * IQR.
+    3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + n*e^4MC * IQR.
+  3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test.
+
+Syntax: StarClust OrthogroupsOverrepresentation [ -help ] -w <directory_path> [ -m <string> { -a <string> -n <integer> | -c <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]
+
+Required args:
+-w, --workingDirectory: Specify the working directory where all data are stored.
+
+Required args with Default:
+-m, --mode: Define the mode that will be used to flag orthogroups (Default = Outliers) [Available mode: Outliers, Enrichment].
+
+Required args in 'Outliers' mode with Default:
+-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Standard) [Available mode: Standard, Skew].
+-n,--numberCoefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3].
+
+Required args in 'Enrichment' mode:
+-c, --column: column name of the variable in the metadata file to be used.
+-v, --value: value from the variable to be compare against the rest.
+ 
+Optional args:
+-t, --threads: Number of threads (Default = 8)
+--overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsOverrepresentation. Not compatible wit '--skip-orthofinder' flag (Default: off)
+--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode, rule or percentile of the analysis. Not compatible with '--overwrite' flag (Default: off)
+-help: Display this help message.
 ```
+
+This command is designed to identified orthogroups that are overrepresented in a dataset, meaning that statistically there is an enrichment of an orthogroup. Before running this command, the command `StarCREW CaptainIdentification` in 'FullAll' mode needs to be run. Initially, it will identified orthogroups using orthofinder with DIAMOND in ultra-sensitive mode, we made a modification to introduce a query cover threshold of 50% for this search. Then, all orthogroups that are associated with Captain proteins will be removed from the final dataset. All othogroups including singletons will be used to perform the statistical analysis base on the mode selected by the user:
+
+- **Outliers:** In this case a general comparison of orthogroup count will be taken. In general, the idea is to identified outliers using two different approximations of the Interquartile range (IQR) approximation. This value is calculated as follows: $\text{IQR} = \text{Q3} - \text{Q1}$, where $Q1$ representes the first quartile and Q3 represent the third quartile of the data. The two available approximations are:
+    - **Standard:** In this case the standard upper IQR fence is used to define outliers. This fence is calculated as: $\text{Fence} = \text{Q3} + n * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation.
+    - **Skew:** In general, orthogroup size distribution of cargo genes in Starships elements tend to have a right-skewed behaviour. In this cases, it is ideal to use an approach that take into accoun this type of behaviour. For IQR, there's a version that use the medcouple that is a metric for skewness. In this case, the upper fence is calculated as: $\text{Fence} = \text{Q3} + n^{4\text{MC}} * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation and $MC$ is the medcople metric for the dataset.
+- **Enrichment:** It identified orthogroups enriched in an specific group of elements based on a qualitative variable available in the metadata file of the elements using the one-sided Fisher's exact test and the Benjamini-Hochberg approach for p-value adjust for multiple comparison.
 
 ### OrthogroupsAnnotation
 
@@ -563,7 +599,7 @@ As previously mentioned, this wrapper can be used for multiple purposes and ther
 
 ## Citing StarCREW and software called by StarCREW
 
-Please cite our work if you use `StarCREW` in your research:
+Please cite our work if you use **StarCREW** in your research:
 
 < Here will go the citation to the paper when available >
 
@@ -579,8 +615,7 @@ StarCREW is a wrapper that calls different bioinformatic software, for that reas
 |`CaptainIdentification`| `Cluster`, `FullAll`| `hmmscan`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`ClusterCharacterization`| - | `orthofinder`, `DIAMOND`, `blast+`, `ape`, `ggtree`, `gggenomes` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Paradis et al. 2004](https://pubmed.ncbi.nlm.nih.gov/14734327/), [Yu et al. 2016](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12628), [Hackl et al. 2024](https://arxiv.org/abs/2411.13556) |
 |`OrthogroupsAnnotation`| - | `foldseek`, `ProstT5`, `mafft`, `hhblits`, `interproscan`| [van Kempen et al 2024](https://pubmed.ncbi.nlm.nih.gov/37156916/), [Heinzinger et al 2024](https://pubmed.ncbi.nlm.nih.gov/39633723/), [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |
-|`TEPrediction`| - | `earlgrey`, `Micomobilome` | [Baril et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38577785/), [Baril & Croll 2025](https://www.biorxiv.org/content/10.1101/2025.10.28.685023v1)  |
 
 ## License
 
-Waiting for License decision
+Waiting for License decision.

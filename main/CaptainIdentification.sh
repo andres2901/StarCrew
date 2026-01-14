@@ -730,7 +730,6 @@ then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
     Alignment "${Working_directory}"
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
 
     if $captainless_flag; then
         echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
@@ -838,7 +837,6 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
         Alignment "${internal_dir}"
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
         if $captainless_flag; then
             echo -e "  \033[01;31mWARNING\033[m: There is no captain identify in this set of data.\n"
             continue
