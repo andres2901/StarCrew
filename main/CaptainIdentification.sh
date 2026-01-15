@@ -388,8 +388,14 @@ Alignment() {
         #Remove sequences from the database
         seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_exons.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
     elif [[ ! -s "${pseudoExons}" && ! -s "${captain_file}" ]]; then
-        echo -e "\033[01;31mERROR\033[m:: there is no captain gene or pseudogene identify in this set of data"
+        echo -e "\033[01;31mERROR\033[m: there is no captain gene or pseudogene identify in this set of data"
         captainless_flag=true
+        return 1
+    fi
+
+    if [[ -f "${working_dir}/Captain_proteins_aligned.fa" ]]; then
+        echo "Error: \033[01;31mERROR\033[m: There has been an error with MACSE run and there is no output of it."
+        alingmentless_flag=true
         return 1
     fi
 
@@ -546,6 +552,7 @@ overwrite=false
 help_flag=false
 Previous_captain_run=false
 captainless_flag=false
+alingmentless_flag=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -719,8 +726,8 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
         Captain_pseudogene "${Working_directory}"
-        if [ -s "${internal_dir}/Workspace/$(basename -s .sh "$0" )/Captainless_elements.txt" ]; then
-            Removed_empty_elements "${internal_dir}"
+        if [ -s "${Working_directory}/Workspace/$(basename -s .sh "$0" )/Captainless_elements.txt" ]; then
+            Removed_empty_elements "${Working_directory}"
             echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
         fi
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
@@ -731,8 +738,7 @@ then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
     Alignment "${Working_directory}"
 
-    if $captainless_flag; then
-        echo -e "  \033[01;31mERROR\033[m: There is no captain identify in this set of data."
+    if [[ $captainless_flag || $alingmentless_flag ]]; then
         exit 1
     fi
 
@@ -837,8 +843,7 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
         Alignment "${internal_dir}"
-        if $captainless_flag; then
-            echo -e "  \033[01;31mWARNING\033[m: There is no captain identify in this set of data.\n"
+        if [[ $captainless_flag || $alingmentless_flag ]]; then
             continue
         fi
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."

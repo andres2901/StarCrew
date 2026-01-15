@@ -20,7 +20,7 @@ function print_help() {
     3. Perform the analysis depending on the selected mode:
       3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kind of outlier identification:
         3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0m * IQR.
-        3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0m^4MC * IQR.
+        3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0me^4MC * IQR.
       3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test."
     echo ""
     echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -n <integer> | -c <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]"
@@ -51,7 +51,6 @@ organize_working_directory() {
     local base_dir="$1"
 
     local data_dir="${base_dir}/Data/"
-
     local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
     local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/temp/"
 
@@ -61,6 +60,8 @@ organize_working_directory() {
 
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local metadata_dir=$(find "$base_dir" -maxdepth 1 -type d -name "metadata_files" 2>/dev/null)
+    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+
 
     local Captain_dir=$(find "$base_dir" -maxdepth 1 -type d -name "CaptainIdentification" 2>/dev/null)
     if [[ ! -d "$Captain_dir" ]]; then
@@ -81,14 +82,17 @@ organize_working_directory() {
     mkdir -p ${temp_dir}
 
     cp -r ${protein_dir} ${working_dir}
+    cp -r ${gff_dir} ${working_dir}
     cp ${Captain_dir}/CaptainsID.txt ${working_dir}
     cp ${Captain_dir}/CaptainPhylogeny.nw ${working_dir}
 
-    if [[ -f "${metadata_dir}/metadata.csv" ]]; then
-        cp "${metadata_dir}/metadata.csv" ${working_dir}
-    else
-        echo "Error: metadata file was not found."
-        exit 1
+    if [[ "${mode}" = "Enrichment" ]]; then
+        if [[ -f "${metadata_dir}/metadata.csv" ]]; then
+            cp "${metadata_dir}/metadata.csv" ${working_dir}
+        else
+            echo "Error: metadata file was not found."
+            exit 1
+        fi
     fi
 }
 
@@ -120,12 +124,12 @@ run_orthofinder() {
         done
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] First Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${temp_dir}/protein1 -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${temp_dir}/Captain_subtree.nw --scores-v2 -o ${output_dir} -n Initial &> ${working_dir}/orthofinder1.log
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${temp_dir}/protein1 -A mafft -S diamond_ultra_sens -I 4 -T iqtree3 --matrix PAM30 -s ${temp_dir}/Captain_subtree.nw --scores-v2 -o ${output_dir} -n Initial &> ${working_dir}/orthofinder1.log
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Second Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 --assign ${temp_dir}/protein2 --core ${output_dir}/Results_Initial -n characterization &> ${working_dir}/orthofinder2.log
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -A mafft -S diamond_ultra_sens -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 --assign ${temp_dir}/protein2 --core ${output_dir}/Results_Initial -n characterization &> ${working_dir}/orthofinder2.log
     else
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
     fi  
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
@@ -147,7 +151,7 @@ run_orthofinder() {
          }
          printf "%s%d\n", OFS, ROW_TOTAL;
         }' ${output_dir}/Results_characterization/Orthogroups/Orthogroups_UnassignedGenes.tsv | sed '1d' >> ${working_dir}/Orthogroups.GeneCount.tsv
-        cp ${output_dir}/Results_characterization/Orthogroups/Orthogroups.txt ${working_dir}/
+        cp ${output_dir}/Results_characterization/Orthogroups/Orthogroups.txt ${working_dir}
     else
         orthofinder_flag=false
     fi
@@ -168,7 +172,7 @@ remove_captain_orthogroups() {
     fi
 
     if [[ -f "${captain_file}" ]]; then
-        echo "Error: require CAptain ID file is missing."
+        echo "Error: require Captain ID file is missing."
         exit 1
     fi
 

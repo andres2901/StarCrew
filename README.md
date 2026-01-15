@@ -47,7 +47,7 @@ This wrapper was specifically written for Linux and requires the following softw
 - iqtree3 3.0.1.
 - gotree v0.5.1.
 - orthofinder v3.1.0.
-- R v4.4.3 with the following packages: ape v5.8.1, reshape2 v1.4.5, viridis v0.6.5, dplyr v1.1.4, gggenomes v1.1.2, scales v1.4.0, dendextend v1.19.1, NbClust v3.0.1, svglite v2.2.2, ggplot2 v3.5.2, ggtree v3.14.0, ggnewscale v0.5.2, syntenet v1.8.0, optparse v1.7.5.
+- R v4.4.3 with the following packages: ape v5.8.1, reshape2 v1.4.5, viridis v0.6.5, dplyr v1.1.4, gggenomes v1.1.2, scales v1.4.0, dendextend v1.19.1, NbClust v3.0.1, svglite v2.2.2, ggplot2 v3.5.2, ggtree v3.14.0, ggnewscale v0.5.2, syntenet v1.8.0, mrfdepth v1.0.17 optparse v1.7.5.
 - metaeuk v7.bba0d80.
 - agat v1.5.1.
 - diamond v2.1.16.
@@ -407,7 +407,7 @@ Optional args:
 -help: Display this help message.
 ```
 
-This command is designed to characterize the cargo gene dynamics within each element cluster. The script initially performs a hierarchical clustering tree of the elements within the cluster to visually identify their evolutionary history. It also attempts to identify any nesting events between elements inside the cluster. If your input results originate from a Starfish run, the identified nesting events should match those found in the `*.elements.feat` metadata file.
+This command is designed to characterize the cargo gene dynamics within each element cluster. The command initially performs a hierarchical clustering tree of the elements within the cluster to visually identify their evolutionary history using as information the Orthogroup gene count (including singletons). It also attempts to identify any nesting events between elements inside the cluster. If your input results originate from a Starfish run, the identified nesting events should match those found in the `*.elements.feat` metadata file.
 
 The main goal of this command is to identify two relevant groups of genes within each cluster:
 
@@ -461,7 +461,7 @@ This script perform three major steps:
 3. Perform the analysis depending on the selected mode:
   3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kind of outlier identification:
     3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + n * IQR.
-    3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + n*e^4MC * IQR.
+    3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + n*e^3MC * IQR.
   3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test.
 
 Syntax: StarClust OrthogroupsOverrepresentation [ -help ] -w <directory_path> [ -m <string> { -a <string> -n <integer> | -c <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]
@@ -487,11 +487,11 @@ Optional args:
 -help: Display this help message.
 ```
 
-This command is designed to identified orthogroups that are overrepresented in a dataset, meaning that statistically there is an enrichment of an orthogroup. Before running this command, the command `StarCREW CaptainIdentification` in 'FullAll' mode needs to be run. Initially, it will identified orthogroups using orthofinder with DIAMOND in ultra-sensitive mode, we made a modification to introduce a query cover threshold of 50% for this search. Then, all orthogroups that are associated with Captain proteins will be removed from the final dataset. All othogroups including singletons will be used to perform the statistical analysis base on the mode selected by the user:
+This command is designed to identified orthogroups that are overrepresented in a dataset, meaning that statistically there is an enrichment of an orthogroup. Before running this command, the command `StarCREW CaptainIdentification` in 'FullAll' mode needs to be run. All othogroups (This do not include singletons as the [ClusterCharacterization](#ClusterCharacterization) command) will be used to perform the statistical analysis base on the mode selected by the user:
 
 - **Outliers:** In this case a general comparison of orthogroup count will be taken. In general, the idea is to identified outliers using two different approximations of the Interquartile range (IQR) approximation. This value is calculated as follows: $\text{IQR} = \text{Q3} - \text{Q1}$, where $Q1$ representes the first quartile and Q3 represent the third quartile of the data. The two available approximations are:
     - **Standard:** In this case the standard upper IQR fence is used to define outliers. This fence is calculated as: $\text{Fence} = \text{Q3} + n * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation.
-    - **Skew:** In general, orthogroup size distribution of cargo genes in Starships elements tend to have a right-skewed behaviour. In this cases, it is ideal to use an approach that take into accoun this type of behaviour. For IQR, there's a version that use the medcouple that is a metric for skewness. In this case, the upper fence is calculated as: $\text{Fence} = \text{Q3} + n^{4\text{MC}} * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation and $MC$ is the medcople metric for the dataset.
+    - **Skew:** In general, orthogroup size distribution of cargo genes in Starships elements tend to have a right-skewed behaviour. In this cases, it is ideal to use an approach that take into accoun this type of behaviour. For IQR, there's a version that use the medcouple that is a metric for skewness. In this case, the upper fence is calculated as: $\text{Fence} = \text{Q3} + ne^{3\text{MC}} * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation and $MC$ is the medcople metric for the dataset.
 - **Enrichment:** It identified orthogroups enriched in an specific group of elements based on a qualitative variable available in the metadata file of the elements using the one-sided Fisher's exact test and the Benjamini-Hochberg approach for p-value adjust for multiple comparison.
 
 ### OrthogroupsAnnotation
@@ -580,7 +580,7 @@ The three main directories are organized as follows:
     - **Protein/**: Multifasta files containing the protein sequence of each gene per element.
 - **metadata\_files/**: This directory stores metadata information. Two files are found here:
     - `metadata.csv`: This file is only present if the user provided a metadata file to `StarCREW Initialize`. It contains the metadata information for the elements that passed the filters, including the element's new header/ID.
-    - `sequence\_head.csv`: An association file that maps the original element header/ID to the updated Project ID for all retained elements.
+    - `sequence_head.csv`: An association file that maps the original element header/ID to the updated Project ID for all retained elements.
 - **Workspace/**: This folder is initially empty. Each command executed will create an individual folder inside `Workspace/` to store the intermediate files necessary to obtain the final results.
 
 In addition to the three main directories, five files can be found in the root project folder:
@@ -595,7 +595,7 @@ After running each command, a new folder containing the main output information 
 
 ## Pipeline modes
 
-As previously mentioned, this wrapper can be used for multiple purposes and therefore some commands are sequential. Here, we're going to mention the two main purposes that this tool can be used to and how we recommend the sequential running of the pipelines.
+As previously mentioned, this wrapper is composed of a series of sequential 
 
 ## Citing StarCREW and software called by StarCREW
 

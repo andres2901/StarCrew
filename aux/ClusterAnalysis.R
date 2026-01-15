@@ -20,6 +20,8 @@ arguments <- parse_args(OptionParser(option_list = option_list))
 # Check for required arguments and flags
 if (is.null(arguments$directory)) {
   stop("Error: directory must be provided.", call.=FALSE)
+} else {
+  setwd(arguments$directory)
 }
 
 # Check software installation
@@ -891,8 +893,6 @@ plot_subcluster_synteny <- function(
 }
 
 # Start the process
-# Call directories in the Working directory
-setwd(arguments$directory)
 
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Reading data...","\n", sep=""))
 

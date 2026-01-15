@@ -26,6 +26,8 @@ arguments <- parse_args(OptionParser(option_list = option_list))
 # Check for required arguments and flags
 if (is.null(arguments$directory) | is.null(arguments$directory)) {
   stop("Error: a mandatory argument was not provided", call.=FALSE)
+} else {
+  setwd(arguments$directory)
 }
 
 # Check for argument mode and their sequential mandatory variables
@@ -52,7 +54,120 @@ if(arguments$mode != "Outliers" & arguments$mode != "Enrichment") {
 
 # Check software installation
 suppressPackageStartupMessages(library(syntenet))
+suppressPackageStartupMessages(library(mrfDepth))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(svglite))
+
 
 if (!requireNamespace("syntenet", quietly = TRUE)) {
    stop("Package \"syntenet\" not installed. Please install it to run this script.", call. = FALSE)
+}
+if (!requireNamespace("mrfDepth", quietly = TRUE)) {
+   stop("Package \"mrfDepth\" not installed. Please install it to run this script.", call. = FALSE)
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+   stop("Package \"ggplot2\" not installed. Please install it to run this script.", call. = FALSE)
+}
+if (!requireNamespace("svglite", quietly = TRUE)) {
+   stop("Package \"svglite\" not installed. Please install it to run this script.", call. = FALSE)
+}
+
+load_and_preprocess_data <- function(
+    orthofinder_count = "Orthogroups.GeneCount-captainless.tsv",
+    orthofinder_mcl = "Orthogroups-captainlessID.txt",
+    metadata_file = "metadata.csv"
+) {
+
+  # Read orthogrup counts and stay with the total number
+  OrthoFinder <- read.table(
+    orthofinder_count,
+    header = TRUE,
+    check.names = FALSE,
+    row.names = 1
+  )
+
+  OrthoFinder2 <- as.vector(OrthoFinder$Total)
+  names(OrthoFinder2) <- row.names(OrthoFinder)
+
+  # Extract gene locations and format for gggenomes visualization
+  annotation <- gff2GRangesList("Gff/")
+  genes <- as.data.frame(unlist(annotation)) %>%
+    filter(type == "gene") %>%
+    mutate(
+      seqnames = as.character(seqnames),
+      type = "CDS",
+      attribute = NA) %>%
+    select(seq_id = seqnames, start, end, strand, type, attribute,ID) 
+
+  # Read orthogroups MCL file
+  Orthogroups <- read.table("Orthogroups.txt", sep = ":", col.names = c("Orthogroup","genes"))
+
+  # Read metadata file if required
+  if(arguments$mode == "Enrichment") {
+    metadata <- read.csv(metadata_file, header = TRUE, sep = ";")
+  } else {
+    metadata <- vector() 
+  }
+  
+  return(list(
+    annotation = genes,
+    metadata = metadata,
+    orthogroups_mcl = Orthogroups,
+    orthocounts = OrthoFinder2
+  ))
+}
+
+process_outliers <- function(
+  orthocounts,
+  approximation,
+  coefficient
+) {
+
+  # Calculate IQR
+  Quartiles <- quantile(orthocounts, probs = c(0,0.25,0.5,0.75,1)) 
+  IQR <- Quartiles[4] - Quartiles[2]
+
+  # Calculate fence
+  if(approximation == "Standard") {
+    fence <- Quartiles[4] + (coefficient * IQR)
+  } else if(approximation == "Skew") {
+    MC <- medcouple(orthocounts, do.reflect = FALSE)
+    fence <- Quartiles[4] + (coefficient * exp(3 * MC[1]) * IQR)
+  }
+  
+  # Identify Outliers if any
+  Outliers <- orthocounts[orthocounts >= fence]
+
+  if(lenght(Outliers) >= ) {
+    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There has been outliers identified","\n", sep=""))
+    Outliers_dataframe <- as.data.frame(Outliers)
+    write.table(Outliers_dataframe, file = "Overrepresented_orthogroups.txt",
+                        sep = '\t', row.names = T, col.names = F, quote = F)
+  }
+
+  
+
+  # Create Figure
+  orthocounts_dataframe <- as.data.frame(orthocounts)
+  OrtSizeHist <- ggplot(orthocounts_dataframe, aes(x=orthocounts)) + geom_histogram(binwidth=1, fill="red") + geom_vline(aes(xintercept=fence), color="blue", linetype="dashed", linewidth=0.5) + xlab("Orthogroup total size")
+
+  ggsave(OrtSizeHist, filename = "OrthogroupsSizeHistogram.svg", width = 14, height = 7)
+}
+
+# Start the process
+
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Reading data...","\n", sep=""))
+
+data_list <- load_and_preprocess_data()
+
+# Process data
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Processing data in '",arguments$mode, "' mode","\n", sep=""))
+
+if(arguments$mode == "Outliers") {
+  process_outliers(
+    orthocounts = data_list$orthocounts,
+    approximation= arguments$approximation,
+    coefficient = arguments$coefficient)
+} else if(arguments$mode == "Enrichment") {
+  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Waiting to be develop","\n", sep=""))
 }
