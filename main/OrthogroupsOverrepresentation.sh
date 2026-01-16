@@ -23,7 +23,7 @@ function print_help() {
         3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0me^4MC * IQR.
       3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test."
     echo ""
-    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -n <integer> | -c <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]"
+    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> | -n <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]"
     echo ""
     echo "Required args:"
     echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -33,10 +33,10 @@ function print_help() {
     echo ""
     echo "Required args in 'Outliers' mode with Default:"
     echo "-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Standard) [Available mode: Standard, Skew]."
-    echo "-n,--numberCoefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3]."
+    echo "-c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3]."
     echo ""
     echo "Required args in 'Enrichment' mode:"
-    echo "-c, --column: column name of the variable in the metadata file to be used."
+    echo "-n, --name: column name of the variable in the metadata file to be used."
     echo "-v, --value: value from the variable to be compare against the rest."
     echo ""
     echo "Optional args:"
@@ -212,11 +212,11 @@ while [[ $# -gt 0 ]]; do
             shift
             rule="$1"
             ;;
-        -n|--numberCoefficient)
+        -c|--coefficient)
             shift
             coefficient="$1"
             ;;
-        -c|--column)
+        -n|--name)
             shift
             column="$1"
             ;;

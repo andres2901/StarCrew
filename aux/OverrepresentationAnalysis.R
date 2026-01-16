@@ -12,9 +12,9 @@ option_list <- list(
               help="Mode of Overrepresentation analysis [accepted mode: Outliers, Enrichment]", metavar="string"),
   make_option(c("-a", "--approximation"), type="character", action = "store", default=NULL,
               help="Define the IQR approximation that is going to be used to defined outliers in 'Outliers' mode [accepted approximation: Standard, Skew].", metavar="string"),
-  make_option(c("-n", "--coefficient"), type="float", action = "store", default=1.5,
+  make_option(c("-c", "--coefficient"), type="float", action = "store", default=1.5,
               help="Define the coefficient for fence definition in 'Outliers' mode [default %default] [range = 1.5 - 3].", metavar="number"),
-  make_option(c("-c", "--column"), type="character", action = "store", default=NULL,
+  make_option(c("-n", "--name"), type="character", action = "store", default=NULL,
               help="column name of the variable in the metadata file to be used.", metavar="string"),
   make_option(c("-v", "--value"), type="character", action = "store", default=NULL,
               help="value from the variable to be compare against the rest.", metavar="string")
@@ -46,7 +46,7 @@ if(arguments$mode != "Outliers" & arguments$mode != "Enrichment") {
       stop("Error: Provided coefficient for 'Otliers' mode is out of accepted range", call.=FALSE)
     }
   } else if(arguments$mode == "Enrichment"){
-    if (is.null(arguments$column) | is.null(arguments$value)) {
+    if (is.null(arguments$name) | is.null(arguments$value)) {
       stop("Error: a mandatory argument was not provided for 'Enrichment' mode.", call.=FALSE)
     }
   }
@@ -57,7 +57,8 @@ suppressPackageStartupMessages(library(syntenet))
 suppressPackageStartupMessages(library(mrfDepth))
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(svglite))
-
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(bc3net))
 
 if (!requireNamespace("syntenet", quietly = TRUE)) {
    stop("Package \"syntenet\" not installed. Please install it to run this script.", call. = FALSE)
@@ -70,6 +71,12 @@ if (!requireNamespace("ggplot2", quietly = TRUE)) {
 }
 if (!requireNamespace("svglite", quietly = TRUE)) {
    stop("Package \"svglite\" not installed. Please install it to run this script.", call. = FALSE)
+}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+   stop("Package \"dplyr\" not installed. Please install it to run this script.", call. = FALSE)
+}
+if (!requireNamespace("bc3net", quietly = TRUE)) {
+   stop("Package \"bc3net\" not installed. Please install it to run this script.", call. = FALSE)
 }
 
 load_and_preprocess_data <- function(
@@ -142,16 +149,48 @@ process_outliers <- function(
     cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There has been outliers identified","\n", sep=""))
     Outliers_dataframe <- as.data.frame(Outliers)
     write.table(Outliers_dataframe, file = "Overrepresented_orthogroups.txt",
-                        sep = '\t', row.names = T, col.names = F, quote = F)
+      sep = '\t', row.names = T, col.names = F, quote = F)
   }
-
-  
 
   # Create Figure
   orthocounts_dataframe <- as.data.frame(orthocounts)
   OrtSizeHist <- ggplot(orthocounts_dataframe, aes(x=orthocounts)) + geom_histogram(binwidth=1, fill="red") + geom_vline(aes(xintercept=fence), color="blue", linetype="dashed", linewidth=0.5) + xlab("Orthogroup total size")
 
   ggsave(OrtSizeHist, filename = "OrthogroupsSizeHistogram.svg", width = 14, height = 7)
+}
+
+process_enrichment <- function(
+  annotation,
+  orthogroups_mcl,
+  metadata,
+  variable_name,
+  value
+) {
+
+  #Create gene set for Orthogroups enrichment 
+  PreGene_list <- as.list(orthogroups_mcl$genes)
+  names(PreGene_list) <- orthogroups_mcl$Orthogroup
+
+  Gene_list <- lapply(PreGene_list, function(x) {
+  general_vector <- unlist(strsplit(x, split = " "))
+  general_vector <- general_vector[general_vector != ""]
+  return(general_vector)
+  })
+
+  # Create reference gene vector
+  Reference_gene <- unlist(Gene_list)
+
+  # Create candidate gene vector
+  ElementsIn <- metadata %>% filter(.data[[variable_name]] != value)
+  Genes_elements <- annotation %>% filter( seq_id %in% ElementsIn$ElementID_updated) %>% select(ID) %>% unlist()
+  Candidate_gene <- Reference_gene[Reference_gene %in% Genes_elements]
+
+  # Run enrinchment analysis
+  Enrichment_results <- enrichment(Candidate_gene, Reference_gene, Gene_list, adj = "fdr", verbose = FALSE)
+  write.table(Enrichment_results, file = "Enrichment_results.txt",
+    sep = '\t', row.names = F, col.names = T, quote = F)
+
+  Significant_results <- Enrichment_results[Enrichment_results$padj <= 0.05,]
 }
 
 # Start the process
@@ -169,5 +208,12 @@ if(arguments$mode == "Outliers") {
     approximation= arguments$approximation,
     coefficient = arguments$coefficient)
 } else if(arguments$mode == "Enrichment") {
-  cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Waiting to be develop","\n", sep=""))
+  process_enrichment(
+  annotation = data_list$annotation,
+  orthogroups_mcl = data_list$metadata,
+  metadata = data_list$metadata,
+  variable_name = arguments$name,
+  value = arguments$value)
 }
+
+cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Overrepresentation analysis have finish.","\n", sep=""))

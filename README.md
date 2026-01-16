@@ -47,7 +47,7 @@ This wrapper was specifically written for Linux and requires the following softw
 - iqtree3 3.0.1.
 - gotree v0.5.1.
 - orthofinder v3.1.0.
-- R v4.4.3 with the following packages: ape v5.8.1, reshape2 v1.4.5, viridis v0.6.5, dplyr v1.1.4, gggenomes v1.1.2, scales v1.4.0, dendextend v1.19.1, NbClust v3.0.1, svglite v2.2.2, ggplot2 v3.5.2, ggtree v3.14.0, ggnewscale v0.5.2, syntenet v1.8.0, mrfdepth v1.0.17 optparse v1.7.5.
+- R v4.4.3 with the following packages: ape v5.8.1, reshape2 v1.4.5, viridis v0.6.5, dplyr v1.1.4, gggenomes v1.1.2, scales v1.4.0, dendextend v1.19.1, NbClust v3.0.1, svglite v2.2.2, ggplot2 v3.5.2, ggtree v3.14.0, ggnewscale v0.5.2, syntenet v1.8.0, mrfdepth v1.0.17, optparse v1.7.5, bc3net v1.0.5.
 - metaeuk v7.bba0d80.
 - agat v1.5.1.
 - diamond v2.1.16.
