@@ -74,15 +74,4 @@ overwrite() {
             rm -r ${workspace}/${command}-${mode}/
         fi
     fi
-
-    if [[ ${command} == "OrthogroupsOverrepresentation" ]]; then
-        if [[ -d "${working_dir}/${command}-${mode}/" ]]; then
-            echo "Removing '${command}-${mode}' folder from the working directory."
-            rm -r ${working_dir}/${command}-${mode}/
-        fi
-        if [[ -d "${workspace}/${command}-${mode}/" ]]; then
-            echo "Removing '${command}-${mode}' folder from the Workspace directory."
-            rm -r ${workspace}/${command}-${mode}/
-        fi
-    fi
 }

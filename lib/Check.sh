@@ -435,12 +435,6 @@ check_mode_parameter() {
             print_help
             exit 1
         fi
-    elif [[ $command == "RobustGenePrediction" || $command == "BrakerGenePrediction" || $command == "TEPrediction" ]]; then
-    	if [[ "$mode" != "All" && "$mode" != "Cluster" ]]; then
-            echo "Error: provided mode '$mode' is not accepted."
-            print_help
-            exit 1
-        fi
     elif [[ $command == "CaptainIdentification" ]]; then
     	if [[ "$mode" != "FullAll" && "$mode" != "AllID"  && "$mode" != "Cluster" ]]; then
             echo "Error: provided mode '$mode' is not accepted."
@@ -448,7 +442,7 @@ check_mode_parameter() {
             exit 1
         fi
     elif [[ $command == "OrthogroupsAnnotation" ]]; then
-    	if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" ]]; then
+    	if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" && "$mode" != "Overrepresented" ]]; then
             echo "Error: provided mode '$mode' is not accepted."
             print_help
             exit 1
@@ -484,7 +478,7 @@ check_required_software() {
             exit 1
         fi
     elif [[ $command == "CaptainIdentification" ]]; then
-        if [[ -z "$(which python)" || -z "$(which macse)" || -z "$(which hmmscan)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which clipkit)" || -z "$(which iqtree3)" || -z "$(which gotree)" ]]; then
+        if [[ -z "$(which python)" || -z "$(which macse)" || -z "$(which hmmscan)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which clipkit)" || -z "$(which iqtree3)" || -z "$(which gotree)" || -z "$(which mafft)" ]]; then
             echo "Error: Missing require function(s) for CaptainIdentification"
             exit 1
         fi

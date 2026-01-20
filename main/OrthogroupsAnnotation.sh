@@ -82,6 +82,21 @@ check_clusters() {
     fi
 }
 
+check_overrepresentation() {
+    local base_dir="$1"
+    local overrepresentation_dir=$(find "$base_dir" -maxdepth 1 -type d -name "OrthogroupsOverrepresentation" 2>/dev/null)
+
+    if [[ ! -d "${overrepresentation_dir}" ]]; then
+        echo "Error: 'OrthogroupsOverrepresentation' folder do not exist. Please run 'OrthogroupsOverrepresentation' command." >&2
+        exit 1
+    else
+        if [[ ! -d "${overrepresentation_dir}/Orthogroups/" ]]; then
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] There's no 'Orthogroups' folder in 'overrepresentation_dir' folder. Check if there is any Overrepresented Orthogroup in this dataset."
+            exit 0
+        fi
+    fi
+}
+
 check_internal_directory_structure() {
     local base_dir="$1"
     
@@ -156,6 +171,28 @@ organize_working_directory() {
         local CoreGenes_dir=$(find "$ClusterAnnotation_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
         cp ${CoreGenes_dir}/* ${Orthogroups_dir}/
     fi
+}
+
+organize_working_directory_overrepresentation() {
+    local base_dir="$1"
+
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
+    local overrepresented_dir=$(find "$base_dir" -maxdepth 1 -type d -name "OrthogroupsOverrepresentation" 2>/dev/null)
+    local Orthogroups_dir="${working_dir}/Orthogroups/"
+    local temp_dir="${working_dir}/temp/"
+
+    if [[ -d "$working_dir" ]]; then
+        echo "Error: There's a previous run in the Workspace."
+        echo "If you want to overwrite this previous run, add the '--overwrite' flag to the command line."
+        exit 1
+    fi
+
+    mkdir -p ${working_dir}
+    mkdir -p ${Orthogroups_dir}
+    mkdir -p ${temp_dir}
+
+    local data_dir=$(find "$overrepresented_dir" -maxdepth 3 -type d -name "Orthogroups" 2>/dev/null)
+    cp ${data_dir}/* ${Orthogroups_dir}/
 }
 
 run_foldseek() {
@@ -404,11 +441,7 @@ check_directory_structure "${Working_directory}"
 check_clusters "${Working_directory}"
 
 # Check if mode parameter is correct
-if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" ]]; then
-    echo "Error: provided mode '$mode' is not accepted."
-    print_help
-    exit 1
-fi
+check_mode_parameter "${mode}" "$(basename -s .sh "$0" )"
 
 # Check thread parameter
 if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
@@ -433,59 +466,76 @@ check_required_software "$(basename -s .sh "$0" )"
 # Main Block
 # ==============================================================================
 
-awk '{print $1}' ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
-do
-    internal_dir="${Working_directory}/Clusters/${ClusterId}/"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
-    check_internal_directory_structure "${internal_dir}"
+if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; then
+    awk '{print $1}' ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
+    do
+        internal_dir="${Working_directory}/Clusters/${ClusterId}/"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
+        check_internal_directory_structure "${internal_dir}"
 
-    if $directory_flag; then
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
-        if $overwrite; then
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-            overwrite "${internal_dir}" "$(basename -s .sh "$0" )" "${mode}"
-        fi
+        if $directory_flag; then
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
+            if $overwrite; then
+                echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
+                overwrite "${internal_dir}" "$(basename -s .sh "$0" )" "${mode}"
+            fi
     
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
-        organize_working_directory "${internal_dir}"
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
+            organize_working_directory "${internal_dir}"
 
-        # ==============================================================================
-        # Running InterProScan
-        # ==============================================================================
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running InterProScan..."
+            run_interproScan "${internal_dir}"
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running InterProScan..."
-        run_interproScan "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running foldseek..."
+            run_foldseek "${internal_dir}"
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
-        # ==============================================================================
-        # Running Foldseek
-        # ==============================================================================
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running hhblits..."
+            run_hhblits "${internal_dir}"
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running foldseek..."
-        run_foldseek "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Creating summary table..."
+            create_summary_table "${internal_dir}"
+            rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/temp/" 2> /dev/null
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
+            organize_information "${internal_dir}"
+            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding. \n"
+        else
+            echo -e "Cluster $ClusterId do not have the required directory for '$mode' mode. \n"
+        fi
+    done
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 
-        # ==============================================================================
-        # Running hhblits
-        # ==============================================================================
+elif [[ ${mode} == "Overrepresented" ]]; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
+    check_overrepresentation "${Working_directory}"
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running hhblits..."
-        run_hhblits "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
-
-        # ==============================================================================
-        # Creating Summary table
-        # ==============================================================================
-
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Creating summary table..."
-        create_summary_table "${internal_dir}"
-        rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/temp/" 2> /dev/null
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
-        organize_information "${internal_dir}"
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding. \n"
-    else
-        echo -e "Cluster $ClusterId do not have the required directory for '$mode' mode. \n"
+    if $overwrite; then
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
+        overwrite "${Working_directory}" "$(basename -s .sh "$0" )" "${mode}"
     fi
-done
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
+    organize_working_directory_overrepresentation "${Working_directory}"
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running InterProScan..."
+    run_interproScan "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Running foldseek..."
+    run_foldseek "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running hhblits..."
+    run_hhblits "${Working_directory}"
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding."
+
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Creating summary table..."
+    create_summary_table "${Working_directory}"
+    rm -r "${Working_directory}/Workspace/$(basename -s .sh "$0" )-${mode}/temp/" 2> /dev/null
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
+    organize_information "${Working_directory}"
+    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding. \n"
+fi

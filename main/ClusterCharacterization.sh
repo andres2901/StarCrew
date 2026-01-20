@@ -136,30 +136,7 @@ run_orthofinder() {
 
     local element_number=$(ls ${protein_dir} | wc -l)
 
-    if [[ ${element_number} -gt 500 ]]; then
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Cluster is too big. Dividing into two for Orthofinder run.."
-        ulimit -n 2048
-        gotree prune -i ${captainPhylogeny} --random "$(( $element_number / 2 ))" | gotree reroot midpoint -o ${temp_dir}/Captain_subtree.nw
-        gotree stats tips -i ${temp_dir}/Captain_subtree.nw | awk 'NR>1{print $4}' > ${temp_dir}/Tips.txt
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing information.."
-        mkdir ${temp_dir}/protein1 ${temp_dir}/protein2
-        ls ${protein_dir} | grep -f ${temp_dir}/Tips.txt | while read line
-        do
-            cp ${protein_dir}/${line} ${temp_dir}/protein1
-        done
-        ls ${protein_dir} | grep -v -f ${temp_dir}/Tips.txt | while read line
-        do
-            cp ${protein_dir}/${line} ${temp_dir}/protein2
-        done
-
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] First Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${temp_dir}/protein1 -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${temp_dir}/Captain_subtree.nw --scores-v2 -o ${output_dir} -n Initial &> ${working_dir}/orthofinder1.log
-
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Second Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 --assign ${temp_dir}/protein2 --core ${output_dir}/Results_Initial -n characterization &> ${working_dir}/orthofinder2.log
-    else
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
-    fi  
+    orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
 

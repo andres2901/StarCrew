@@ -12,12 +12,14 @@ option_list <- list(
               help="Mode of Overrepresentation analysis [accepted mode: Outliers, Enrichment]", metavar="string"),
   make_option(c("-a", "--approximation"), type="character", action = "store", default=NULL,
               help="Define the IQR approximation that is going to be used to defined outliers in 'Outliers' mode [accepted approximation: Standard, Skew].", metavar="string"),
-  make_option(c("-c", "--coefficient"), type="float", action = "store", default=1.5,
+  make_option(c("-c", "--coefficient"), type="numeric", action = "store", default=1.5,
               help="Define the coefficient for fence definition in 'Outliers' mode [default %default] [range = 1.5 - 3].", metavar="number"),
   make_option(c("-n", "--name"), type="character", action = "store", default=NULL,
               help="column name of the variable in the metadata file to be used.", metavar="string"),
   make_option(c("-v", "--value"), type="character", action = "store", default=NULL,
-              help="value from the variable to be compare against the rest.", metavar="string")
+              help="value from the variable to be compare against the rest.", metavar="string"),
+  make_option(c("-p", "--psignificant"), type="numeric", action = "store", default=0.05,
+              help="value from the variable to be compare against the rest.", metavar="number")
 )
 
 # Parse the command-line arguments
@@ -81,7 +83,7 @@ if (!requireNamespace("bc3net", quietly = TRUE)) {
 
 load_and_preprocess_data <- function(
     orthofinder_count = "Orthogroups.GeneCount-captainless.tsv",
-    orthofinder_mcl = "Orthogroups-captainlessID.txt",
+    orthofinder_mcl = "Orthogroups-captainless.txt",
     metadata_file = "metadata.csv"
 ) {
 
@@ -107,11 +109,18 @@ load_and_preprocess_data <- function(
     select(seq_id = seqnames, start, end, strand, type, attribute,ID) 
 
   # Read orthogroups MCL file
-  Orthogroups <- read.table("Orthogroups.txt", sep = ":", col.names = c("Orthogroup","genes"))
+  Orthogroups <- read.table(orthofinder_mcl, sep = ":", col.names = c("Orthogroup","genes"))
 
   # Read metadata file if required
   if(arguments$mode == "Enrichment") {
     metadata <- read.csv(metadata_file, header = TRUE, sep = ";")
+    col_classes <- c(rep("character", length(metadata)))
+    metadata <- read.delim(
+      metadata_file,
+      header = TRUE,
+      sep = ";",
+      colClasses = col_classes
+    )
   } else {
     metadata <- vector() 
   }
@@ -143,9 +152,9 @@ process_outliers <- function(
   }
   
   # Identify Outliers if any
-  Outliers <- orthocounts[orthocounts >= fence]
+  Outliers <- orthocounts[orthocounts > fence]
 
-  if(lenght(Outliers) >= ) {
+  if(length(Outliers) >= 1) {
     cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There has been outliers identified","\n", sep=""))
     Outliers_dataframe <- as.data.frame(Outliers)
     write.table(Outliers_dataframe, file = "Overrepresented_orthogroups.txt",
@@ -181,7 +190,7 @@ process_enrichment <- function(
   Reference_gene <- unlist(Gene_list)
 
   # Create candidate gene vector
-  ElementsIn <- metadata %>% filter(.data[[variable_name]] != value)
+  ElementsIn <- metadata %>% filter(.data[[variable_name]] == value)
   Genes_elements <- annotation %>% filter( seq_id %in% ElementsIn$ElementID_updated) %>% select(ID) %>% unlist()
   Candidate_gene <- Reference_gene[Reference_gene %in% Genes_elements]
 
@@ -190,7 +199,13 @@ process_enrichment <- function(
   write.table(Enrichment_results, file = "Enrichment_results.txt",
     sep = '\t', row.names = F, col.names = T, quote = F)
 
-  Significant_results <- Enrichment_results[Enrichment_results$padj <= 0.05,]
+  Significant_results <- Enrichment_results[Enrichment_results$padj <= arguments$psignificant,]
+
+  if(length(Significant_results$padj) >= 1) {
+    cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","There has been enrich orthogroups identified","\n", sep=""))
+    write.table(Significant_results, file = "Enrich_orthogroups.txt",
+      sep = '\t', row.names = F, col.names = F, quote = F)
+  }
 }
 
 # Start the process
@@ -210,7 +225,7 @@ if(arguments$mode == "Outliers") {
 } else if(arguments$mode == "Enrichment") {
   process_enrichment(
   annotation = data_list$annotation,
-  orthogroups_mcl = data_list$metadata,
+  orthogroups_mcl = data_list$orthogroups_mcl,
   metadata = data_list$metadata,
   variable_name = arguments$name,
   value = arguments$value)

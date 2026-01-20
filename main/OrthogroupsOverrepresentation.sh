@@ -7,6 +7,14 @@
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
+auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
+if [[ ! -d "$auxiliary_path" ]]; then
+    echo "Error: directory '$auxiliary_path' does not exist."
+    exit 1
+else
+    auxiliary_path=$(realpath $auxiliary_path)
+fi
+
 # ==============================================================================
 # Function block
 # ==============================================================================
@@ -18,12 +26,12 @@ function print_help() {
     1. Run Orthofinder with DIAMOND ultra-sensitive mode.
     2. Remove orthogroups assocaited with captains.
     3. Perform the analysis depending on the selected mode:
-      3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kind of outlier identification:
+      3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) upper fence [IQR = Q3 - Q1], depending on two approches for this kind of outlier identification:
         3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0m * IQR.
         3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0me^4MC * IQR.
       3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test."
     echo ""
-    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> | -n <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]"
+    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> | -n <string> -v <string> -p <float> } -t <integer> { --overwrite | --skip-orthofinder } ]"
     echo ""
     echo "Required args:"
     echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -32,12 +40,15 @@ function print_help() {
     echo "-m, --mode: Define the mode that will be used to flag orthogroups (Default = Outliers) [Available mode: Outliers, Enrichment]."
     echo ""
     echo "Required args in 'Outliers' mode with Default:"
-    echo "-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Standard) [Available mode: Standard, Skew]."
+    echo "-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Skew) [Available mode: Standard, Skew]."
     echo "-c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3]."
     echo ""
     echo "Required args in 'Enrichment' mode:"
     echo "-n, --name: column name of the variable in the metadata file to be used."
     echo "-v, --value: value from the variable to be compare against the rest."
+    echo ""
+    echo "Required args in 'Enrichment' mode with Default:"
+    echo "-p, --pValue: p-value to determined if an orthogroup is significantly enriched (Default = 0.05) [range: 0.001 - 0.1]."
     echo ""
     echo "Optional args:"
     echo "-t, --threads: Number of threads (Default = 8)"
@@ -51,8 +62,14 @@ organize_working_directory() {
     local base_dir="$1"
 
     local data_dir="${base_dir}/Data/"
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
-    local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/temp/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local temp_dir="${working_dir}/temp/"
+
+    if [[ -d "$working_dir" ]]; then
+        echo "Error: There's a previous run in the Workspace."
+        echo "If you want to overwrite this previous run, add the '--overwrite' or '--skip-orthofinder' flag to the command line."
+        exit 1
+    fi
 
     # Create required subdirectories
     mkdir -p ${working_dir}
@@ -72,10 +89,6 @@ organize_working_directory() {
             echo "Error: No captain ID file was found."
             exit 1
         fi
-        if [[ ! -f "${Captain_dir}/CaptainPhylogeny.nw" ]]; then
-            echo "Error: No captain phylogeny file was found."
-            exit 1
-        fi
     fi
 
     mkdir -p ${working_dir}
@@ -84,7 +97,13 @@ organize_working_directory() {
     cp -r ${protein_dir} ${working_dir}
     cp -r ${gff_dir} ${working_dir}
     cp ${Captain_dir}/CaptainsID.txt ${working_dir}
-    cp ${Captain_dir}/CaptainPhylogeny.nw ${working_dir}
+    if [[ -f "${Captain_dir}/CaptainPhylogeny.nw" ]]; then
+        cp ${Captain_dir}/CaptainPhylogeny.nw ${working_dir}
+        captain_phylogeny=true
+    else
+        captain_phylogeny=false
+    fi
+    
 
     if [[ "${mode}" = "Enrichment" ]]; then
         if [[ -f "${metadata_dir}/metadata.csv" ]]; then
@@ -99,7 +118,7 @@ organize_working_directory() {
 run_orthofinder() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local protein_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local captainPhylogeny="${working_dir}/CaptainPhylogeny.nw"
     local output_dir="${working_dir}/Orthofinder"
@@ -108,29 +127,18 @@ run_orthofinder() {
     local element_number=$(ls ${protein_dir} | wc -l)
 
     if [[ ${element_number} -gt 500 ]]; then
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Cluster is too big. Dividing into two for Orthofinder run.."
-        ulimit -n $((element_number + 128))
-        gotree prune -i ${captainPhylogeny} --random "$(( $element_number / 2 ))" | gotree reroot midpoint -o ${temp_dir}/Captain_subtree.nw
-        gotree stats tips -i ${temp_dir}/Captain_subtree.nw | awk 'NR>1{print $4}' > ${temp_dir}/Tips.txt
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing information.."
-        mkdir ${temp_dir}/protein1 ${temp_dir}/protein2
-        ls ${protein_dir} | grep -f ${temp_dir}/Tips.txt | while read line
-        do
-            cp ${protein_dir}/${line} ${temp_dir}/protein1
-        done
-        ls ${protein_dir} | grep -v -f ${temp_dir}/Tips.txt | while read line
-        do
-            cp ${protein_dir}/${line} ${temp_dir}/protein2
-        done
-
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] First Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${temp_dir}/protein1 -A mafft -S diamond_ultra_sens -I 4 -T iqtree3 --matrix PAM30 -s ${temp_dir}/Captain_subtree.nw --scores-v2 -o ${output_dir} -n Initial &> ${working_dir}/orthofinder1.log
-
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Second Orthofinder run.."
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -A mafft -S diamond_ultra_sens -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 --assign ${temp_dir}/protein2 --core ${output_dir}/Results_Initial -n characterization &> ${working_dir}/orthofinder2.log
-    else
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
+        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Cluster is too big. Checking and modifying if necessary the soft limit of open files..."
+        if [[ $(ulimit -Sn) -lt "$((element_number + 512))" ]]; then
+            ulimit -n "$((element_number + 512))"
+        fi
     fi  
+
+    if $captain_phylogeny; then
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization
+    else
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 --scores-v2 -o ${output_dir} -n characterization
+        #&> ${working_dir}/orthofinder.log
+    fi
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
 
@@ -160,18 +168,18 @@ run_orthofinder() {
 remove_captain_orthogroups() {
     local base_dir="$1"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )-${mode}/"
-    local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+    local temp_dir="${working_dir}/temp/"
     local count_file="${working_dir}/Orthogroups.GeneCount.tsv"
     local gene_file="${working_dir}/Orthogroups.txt"
     local captain_file="${working_dir}/CaptainsID.txt"
 
-    if [[ -f "${count_file}" || "${gene_file}" ]]; then
+    if [[ ! -f "${count_file}" || ! -f "${gene_file}" ]]; then
         echo "Error: require files from orthofinder are missing."
         exit 1
     fi
 
-    if [[ -f "${captain_file}" ]]; then
+    if [[ ! -f "${captain_file}" ]]; then
         echo "Error: require Captain ID file is missing."
         exit 1
     fi
@@ -182,6 +190,47 @@ remove_captain_orthogroups() {
     grep -w -f ${temp_dir}/Orthogroups-captainlessID.txt ${count_file} >> ${working_dir}/Orthogroups.GeneCount-captainless.tsv
 }
 
+organize_information() {
+    local base_dir="$1"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )"
+    local orthogroups_dir="${working_dir}/Orthofinder/Results_characterization/Orthogroup_Sequences/"
+
+    local Overrepresented_dir="${base_dir}/$(basename -s .sh "$0" )/"
+    mkdir -p ${Overrepresented_dir}
+
+    if [[ ! -d "${working_dir}" ]]; then
+        echo "Error in working directory"
+        exit 1
+    fi
+
+    if [[ -f "${working_dir}/OrthogroupsSizeHistogram.svg" ]]; then
+        cp ${working_dir}/OrthogroupsSizeHistogram.svg ${Overrepresented_dir}
+    fi
+
+    if [[ -f "${working_dir}/Overrepresented_orthogroups.txt" ]]; then
+        cp ${working_dir}/Overrepresented_orthogroups.txt ${Overrepresented_dir}
+        mkdir -p ${Overrepresented_dir}/Orthogroups/
+        awk '{print $1}' ${working_dir}/Overrepresented_orthogroups.txt | while read Orthogroup
+        do 
+            cp ${orthogroups_dir}/${Orthogroup}.fa ${Overrepresented_dir}/Orthogroups/
+        done
+    fi
+
+    if [[ -f "${working_dir}/Enrichment_results.txt" ]]; then
+        cp ${working_dir}/Enrichment_results.txt ${Overrepresented_dir}
+    fi
+
+    if [[ -f "${working_dir}/Enrich_orthogroups.txt" ]]; then
+        cp ${working_dir}/Enrich_orthogroups.txt ${Overrepresented_dir}
+        mkdir -p ${Overrepresented_dir}/Orthogroups/
+        awk '{print $1}' ${working_dir}/Enrich_orthogroups.txt | while read Orthogroup
+        do 
+            cp ${orthogroups_dir}/${Orthogroup}.fa ${Overrepresented_dir}/Orthogroups/
+        done
+    fi
+
+}
+
 # ==============================================================================
 # Variables block
 # ==============================================================================
@@ -189,10 +238,11 @@ remove_captain_orthogroups() {
 # Initialize variables
 Working_directory=""
 mode="Outliers"
-rule="Standard"
+rule="Skew"
 coefficient="1.5"
 column=""
 value=""
+pvalue="0.05"
 threads="8"
 overwrite=false
 skip_orthofinder=false
@@ -223,6 +273,10 @@ while [[ $# -gt 0 ]]; do
         -v|--value)
             shift
             value="$1"
+            ;;
+        -p|--pValue)
+            shift
+            pvalue="$1"
             ;;
         -t|--threads)
             shift
@@ -263,6 +317,7 @@ echo "  approximation for 'Outliers' mode: " "$rule"
 echo "  Coeeficient for fence definition: " "$coefficient"
 echo "  Column in metadata for 'Enrichment' mode: " "$column"
 echo "  Value in metadata for 'Enrichment' mode: " "$value"
+echo "  p-Value in 'Enrichment' mode:" "$pvalue"
 echo "  Overwrite: " "$overwrite"
 echo "  Skip orthofinder: " "$skip_orthofinder"
 echo "  Number of threads: " "$threads"
@@ -303,6 +358,20 @@ if [[ "$mode" == "Enrichment" ]]; then
         print_help
         exit 1
     fi
+
+    if [[ "$pvalue" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
+        if (( $(echo "$pvalue < 0.001" | bc -l) )) || (( $(echo "$pvalue > 0.1" | bc -l) )); then
+            echo "Error: '$pvalue' is not an accepted value for p-value."
+            print_help
+            exit 1
+        fi
+    else
+        echo "Error: '$pvalue' is not a float."
+        print_help
+        exit 1
+    fi
+
+
     if [[ ! -f "${Working_directory}/metadata_files/metadata.csv" ]]; then
         echo "Error: metadata file wasn't found in the working folder"
         exit 1
@@ -319,7 +388,7 @@ if [[ "$mode" == "Enrichment" ]]; then
         if [[ "$value" == "NA" ]]; then
             echo "Error: 'Enrichment' mode do not accept to analyze 'NA' as target value"
         else
-            value_number=$(cut -d ";" -f $column_number metadata.csv | grep -c)
+            value_number=$(cut -d ";" -f $column_number ${Working_directory}/metadata_files/metadata.csv | grep -c "$value")
 
             if [[ $value_number -eq 0 ]]; then
                 echo "Error: provide value '$value' do not exist in the column '$column' of metadata."
@@ -341,7 +410,7 @@ if [[ "$mode" == "Outliers" ]]; then
     fi
 
     if [[ "$coefficient" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
-        if (( $(echo "$coefficient < 1.5" | bc -l) )) && (( $(echo "$coefficient > 3.0" | bc -l) )); then
+        if (( $(echo "$coefficient < 1.5" | bc -l) )) || (( $(echo "$coefficient > 3.0" | bc -l) )); then
             echo "Error: '$coefficient' is not an accepted value for the fence coefficient."
             print_help
             exit 1
@@ -354,11 +423,12 @@ if [[ "$mode" == "Outliers" ]]; then
 fi
 
 # Check incompatible flags
-if [[ $overwrite && $skip_orthofinder ]]; then
+if $overwrite && $skip_orthofinder; then
     echo "Error: '--overwrite' and '--skip-orthofinder' flags are both 'on' and those are incompatible."
     exit 1
 fi
 
+# Check threads
 check_threads "$threads"
 
 # Check for software presence
@@ -370,7 +440,7 @@ check_required_software "$(basename -s .sh "$0" )"
 
 if $overwrite; then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-    overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+    overwrite "${Working_directory}" "$(basename -s .sh "$0" )" "${mode}"
 fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
@@ -389,3 +459,9 @@ fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Removing orthogroups associated with Captains..."
 remove_captain_orthogroups "${Working_directory}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Performing analysis..."
+Rscript ${auxiliary_path}/OverrepresentationAnalysis.R -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )" -m "${mode}" -a "${rule}" -c "${coefficient}" -n "${column}" -v "${value}" -p "${pvalue}"
+
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
+organize_information "${Working_directory}"

@@ -808,7 +808,7 @@ if [[ ! "$minSize" =~ ^[0-9]+$ ]]; then
 fi
 
 if [[ "$threshold" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
-    if (( $(echo "$threshold < -0.5" | bc -l) )) && (( $(echo "$threshold > 1.0" | bc -l) )); then
+    if (( $(echo "$threshold < -0.5" | bc -l) )) || (( $(echo "$threshold > 1.0" | bc -l) )); then
         echo "Error: '$threshold' is not an accepted value for clustering modularity score."
         print_help
         exit 1
@@ -860,7 +860,7 @@ if [[ $mode == "FilterBlast" ]]; then
         exit 1
     fi
     if [[ "$coverage" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
-        if (( $(echo "$coverage < 10.0" | bc -l) )) && (( $(echo "$coverage > 50.0" | bc -l) )); then
+        if (( $(echo "$coverage < 10.0" | bc -l) )) || (( $(echo "$coverage > 50.0" | bc -l) )); then
             echo "Error: '$coverage' is not an accepted value for clustering modularity score."
             print_help
             exit 1

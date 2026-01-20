@@ -71,7 +71,7 @@ function print_help() {
       2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
       2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with HMM profiles associated with the YR Recombinase Active Site.
    3. For elements lacking a confident Captain gene, the script searches for a putative Captain pseudogene at the beginning and end of the element.
-   4. Aligns exonic sequences using MACSE (with amino acid output) and preprocesses the alignment with Clipkit.
+   4. Aligns exonic sequences using MACSE (with amino acid output) and processes the alignment with Clipkit depending on the mode
    5. Runs maximum-likelihood phylogenetic tree inference, when there at least two unique captain sequences:
       5.1 Run IQ-TREE with 1000 UFBotstrap and 1000 sh-aLRT if there at least 4 unique sequence, in other case run it without support.
       5.2 Collapsed near-zero and low-support (when available) branches.
@@ -79,7 +79,7 @@ function print_help() {
 
    There are three available mode:
    -Cluster: Analyzes and performs all five steps per cluster, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
-   -FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset..
+   -FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
    -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
    "
    echo
@@ -89,7 +89,7 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: specified the mode (Default = AllID) [Available mode: Cluster, FullAll, AllID]."
+   echo "-m, --mode: specified the mode (Default = AllID) [Available mode: Cluster, FullAll, FullAll-MAFFT, AllID]."
    echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 250) [range: 200 - 800]."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
    echo "-r, --rangeKb:The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]"
@@ -98,7 +98,7 @@ function print_help() {
    echo "-ms, --minSize: Minimum size of a Cluster to be include in the analysis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
    echo ""
    echo "Optional args:"
-   echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
+   echo "-t, --threads: Number of threads to use for phylogenetic tree inference and MAFFT in 'FullAll-MAFFT' mode (Default: 1)."
    echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
    echo "-help: Display this help message."
 }
@@ -227,6 +227,10 @@ Captain_identification() {
     local empty_elements="${working_dir}/EmptyElements.txt"
 
     python ${auxiliary_path}/hmmscan_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}" --range_kb "${range}" >/dev/null
+
+    if [[ ${mode} == "FullAll-MAFFT" ]]; then
+        mv ${empty_elements} ${working_dir}/Captainless_elements.txt
+    fi
 }
 
 Captain_pseudogene() {
@@ -728,9 +732,8 @@ then
         Captain_pseudogene "${Working_directory}"
         if [ -s "${Working_directory}/Workspace/$(basename -s .sh "$0" )/Captainless_elements.txt" ]; then
             Removed_empty_elements "${Working_directory}"
-            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this cluster."
+            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
         fi
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
     else
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] There's information from a previous run. Steps 1, 2 and 3 will be skipped..."
     fi
