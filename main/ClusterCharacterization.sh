@@ -136,6 +136,10 @@ run_orthofinder() {
 
     local element_number=$(ls ${protein_dir} | wc -l)
 
+    if [[ $(ulimit -Sn) -lt "$((element_number + 124))" ]]; then
+        echo -e "\033[01;31mWARNING\033[m:: The system limits on the number of files a process can open is probably too low and Orthofinder could fail. Please increase it at least to '$((element_number + 124))' using the 'ulimit -n' command."
+    fi 
+
     orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"

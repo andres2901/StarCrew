@@ -474,12 +474,15 @@ Required args with Default:
 
 Required args in 'Outliers' mode with Default:
 -a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Standard) [Available mode: Standard, Skew].
--n,--numberCoefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3].
+-c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3].
 
 Required args in 'Enrichment' mode:
--c, --column: column name of the variable in the metadata file to be used.
+-n, --name: column name of the variable in the metadata file to be used.
 -v, --value: value from the variable to be compare against the rest.
- 
+
+Required args in 'Enrichment' mode with Default:
+-p, --pValue: p-value to determined if an orthogroup is significantly enriched (Default = 0.05) [range: 0.001 - 0.1].
+
 Optional args:
 -t, --threads: Number of threads (Default = 8)
 --overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsOverrepresentation. Not compatible wit '--skip-orthofinder' flag (Default: off)
@@ -487,12 +490,20 @@ Optional args:
 -help: Display this help message.
 ```
 
-This command is designed to identified orthogroups that are overrepresented in a dataset, meaning that statistically there is an enrichment of an orthogroup. Before running this command, the command `StarCREW CaptainIdentification` in 'FullAll' mode needs to be run. All othogroups (This do not include singletons as the [ClusterCharacterization](#ClusterCharacterization) command) will be used to perform the statistical analysis base on the mode selected by the user:
+This command is designed to identify orthogroups that migth be enrich in a given dataset. Before running this command, the command `StarCREW CaptainIdentification` needs to be run. All othogroups (including singletons) will be used to perform the statistical analysis base on the mode selected by the user:
 
-- **Outliers:** In this case a general comparison of orthogroup count will be taken. In general, the idea is to identified outliers using two different approximations of the Interquartile range (IQR) approximation. This value is calculated as follows: $\text{IQR} = \text{Q3} - \text{Q1}$, where $Q1$ representes the first quartile and Q3 represent the third quartile of the data. The two available approximations are:
+- **Outliers:** In this case a general comparison of orthogroup count will be taken. In general, the idea is to identified outliers using two different approximations of the Interquartile range (IQR) fence. The IQR is calculated as follows: $\text{IQR} = \text{Q3} - \text{Q1}$, where $Q1$ and Q3 represent the first and third quartile of the data, respectively. The two available approximations are:
     - **Standard:** In this case the standard upper IQR fence is used to define outliers. This fence is calculated as: $\text{Fence} = \text{Q3} + n * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation.
     - **Skew:** In general, orthogroup size distribution of cargo genes in Starships elements tend to have a right-skewed behaviour. In this cases, it is ideal to use an approach that take into accoun this type of behaviour. For IQR, there's a version that use the medcouple that is a metric for skewness. In this case, the upper fence is calculated as: $\text{Fence} = \text{Q3} + ne^{3\text{MC}} * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation and $MC$ is the medcople metric for the dataset.
 - **Enrichment:** It identified orthogroups enriched in an specific group of elements based on a qualitative variable available in the metadata file of the elements using the one-sided Fisher's exact test and the Benjamini-Hochberg approach for p-value adjust for multiple comparison.
+
+After a successful run of the annotation command, the following files and directories should be found in the main output directory:
+
+- **Orthogroups/:** A folder containing the FASTA files for orthogroups identified as outliers or enriched, depending on the selected running mode. This folder will only be created if such orthogroups are successfully identified.
+- **OrthogroupsSizeHistogram.svg:** Histogram of the orthogroups size that include a dotted line delimitating the upper fence use in 'Outliers' mode.
+- **Overrepresented_orthogroups.txt:** A TSV file detailing the Orthogroup ID and size for those identified as outliers.
+- **Enrihment_results.txt** A TSV file containing the full results of the Fisher’s exact test.
+- **Enrich_orthogroups.txt:** A TSV file specifically filtering for orthogroups with significant p-values from the Fisher’s exact test. If no significant orthogroups are identified, this file will not be generated.
 
 ### OrthogroupsAnnotation
 
@@ -595,7 +606,11 @@ After running each command, a new folder containing the main output information 
 
 ## Pipeline modes
 
-As previously mentioned, this wrapper is composed of a series of sequential 
+As previously mentioned, this wrapper is composed of a series of sequential commands. It can perform two distinct types of analysis depending on the research objectives: Cargo Gene Dynamics and Enrichment Analysis. 
+
+![Workflow diagram](docs/Figures/Workflow.svg)
+
+In the workflow diagram, the blue stars indicate the specific commands where data filtering is performed: `Initialize` and `CaptainIdentification`. Also, the `CaptainIdentification` is the only command that must be used twice during the cargo gene dynamic analysis, where the first time is using the 'AllID' mode and the second time the 'Cluster' mode. Finally, both analysis can be performed in parallel within a single project folder without any interference between them.
 
 ## Citing StarCREW and software called by StarCREW
 
@@ -609,11 +624,13 @@ StarCREW is a wrapper that calls different bioinformatic software, for that reas
 |:---:|:---:|:---| :---|
 |`Initialize`| `Starfish` | `seqkit`, `agat`, `metaeuk` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Dainat](https://nbisweden.github.io/AGAT/how_to_cite/), [Karin et al. 2020](https://pubmed.ncbi.nlm.nih.gov/32245390/) |
 | `Initialize` | `Simple` | `seqkit`, `agat` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Dainat](https://nbisweden.github.io/AGAT/how_to_cite/) |
-|`SyntenyClustering`| `Raw`, `SSP`, `FilterMetric` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html) |
+|`SyntenyClustering`| `Raw`, `SSP`, `FilterMetric` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/) |
 |`SyntenyClustering`| `FilterBlast` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `blast+` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`CaptainIdentification`| `AllID` | `hmmscan`, `seqkit`, `blast+`  | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`CaptainIdentification`| `Cluster`, `FullAll`| `hmmscan`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`ClusterCharacterization`| - | `orthofinder`, `DIAMOND`, `blast+`, `ape`, `ggtree`, `gggenomes` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Paradis et al. 2004](https://pubmed.ncbi.nlm.nih.gov/14734327/), [Yu et al. 2016](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12628), [Hackl et al. 2024](https://arxiv.org/abs/2411.13556) |
+|`OrthogroupsOverrepresented`| `Outliers` | `orthofinder`| [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Heinzinger et al 2024](https://pubmed.ncbi.nlm.nih.gov/39633723/), [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |
+|`OrthogroupsOverrepresented`| `enrichment` | `orthofinder`, `bc3net` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [de Matos SImoes & Emmert-Streib 2012](https://pubmed.ncbi.nlm.nih.gov/22479422/) |
 |`OrthogroupsAnnotation`| - | `foldseek`, `ProstT5`, `mafft`, `hhblits`, `interproscan`| [van Kempen et al 2024](https://pubmed.ncbi.nlm.nih.gov/37156916/), [Heinzinger et al 2024](https://pubmed.ncbi.nlm.nih.gov/39633723/), [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |
 
 ## License

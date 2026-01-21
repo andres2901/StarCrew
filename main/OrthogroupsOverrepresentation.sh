@@ -126,11 +126,10 @@ run_orthofinder() {
 
     local element_number=$(ls ${protein_dir} | wc -l)
 
-    if [[ ${element_number} -gt 500 ]]; then
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Cluster is too big. Checking and modifying if necessary the soft limit of open files..."
-        if [[ $(ulimit -Sn) -lt "$((element_number + 512))" ]]; then
-            ulimit -n "$((element_number + 512))"
-        fi
+    echo "$(ulimit -Sn)"
+
+    if [[ $(ulimit -Sn) -lt "$((element_number + 124))" ]]; then
+        echo -e "Error: The system limits on the number of files a process can open is probably too low. Please increase it at least to '$((element_number + 124))'."
     fi  
 
     if $captain_phylogeny; then
@@ -393,7 +392,7 @@ if [[ "$mode" == "Enrichment" ]]; then
             if [[ $value_number -eq 0 ]]; then
                 echo "Error: provide value '$value' do not exist in the column '$column' of metadata."
                 exit 1
-            elif [[ $value_number -le 10 ]]; then
+            elif [[ $value_number -lt 10 ]]; then
                 echo "Error: provide value '$value' have an n of '$value_number' and it's too low for enrichment analysis."
                 exit 1
             fi
