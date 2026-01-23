@@ -126,10 +126,10 @@ run_orthofinder() {
 
     local element_number=$(ls ${protein_dir} | wc -l)
 
-    echo "$(ulimit -Sn)"
+    echo ""
 
     if [[ $(ulimit -Sn) -lt "$((element_number + 124))" ]]; then
-        echo -e "Error: The system limits on the number of files a process can open is probably too low. Please increase it at least to '$((element_number + 124))'."
+        echo -e "Error: The system limits on the number of files a process can open is probably too low (Current: '$(ulimit -Sn)'). Please increase it at least to '$((element_number + 124))' or more."
     fi  
 
     if $captain_phylogeny; then

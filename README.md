@@ -2,7 +2,7 @@
 
 ## Overview
 
-**StarCREW** is a bash wrapper specifically designed to systematically analyze the cargo genes of Starship elements. The wrapper is composed of seven distinct commands and creates a well-organized project folder to facilitate downstream analysis. StarCREW provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this wrapper is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
+**StarCREW** is a bash wrapper specifically designed to systematically analyze the cargo genes of Starship elements. The wrapper is composed of six distinct commands and creates a well-organized project folder to facilitate downstream analysis. StarCREW provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this wrapper is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
 
 In addition to the main commands, StarCREW is distributed with a diverse set of auxiliary scripts. Although these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1) a modified RIP-like signal calculator, 2) filtering genes or isoforms from a GFF file based on intron density, 3) extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) and other specific tasks.
 
@@ -36,7 +36,7 @@ Waiting for full wrapper development to check the final requirements.
 
 ### Software requirements
 
-This wrapper was specifically written for Linux and requires the following software and dependencies to be installed and accessible via the system path. The version numbers provided are those used during testing; for Python and R, these specific versions ensure the successful installation of all required packages, while for OrthoFinder newer versions have deprecated the --matrix argument, which would break the wrapper's workflow.
+This wrapper was specifically written for Linux and requires the following software and dependencies to be installed and accessible via the system path. The version numbers provided are those used during testing; for Python and R, these specific versions ensure the successful installation of all required packages, while for OrthoFinder newer versions have deprecated the --matrix argument, which would break the wrapper's workflow. Also, be aware that newer versions of numpy are not compatible with the Orthofinder version use in this wrapper.
 
 - python v3.9 with the following packages: networkx v3.6.1, biopython v1.86, gffutils v0.13, pandas v2.3.3, numpy v2.3.5, scikit-learn v1.8.0.
 - java.
@@ -63,7 +63,6 @@ The commands related to functional annotation and Transposable element identific
 - interproscan related databases.
 - pfamA for hhblits.
 - foldseek: ProstT5, PDB and alphaphold.
-- Mycomobilome.
 
 ## Installation
 
@@ -75,7 +74,7 @@ git clone https://github.com/andres2901/StarCREW.git
 
 # Construct the environment and download require databases
 cd StarCREW/
-bash build_StarCREW.sh
+bash build_StarCREW.sh # This might take some time
 ```
 
 ## Input
@@ -446,7 +445,6 @@ After a successful run of the characterization command, the following files and 
         - Heatmap of Cargo orthogroups.
         - Cargo hierarchical tree paired with a nucleotide synteny visualization.
         - Tanglegram comparing the Captain phylogenetic tree and the cargo hierarchical clustering at the 'clade' level.
-        - Figure showing nucleotide synteny visualization of elements between which cargo is putatively believed to have moved.
         - Figure showing nucleotide synteny visualization of elements between which cargo is putatively believed to have moved.
 - **CargoHierarchicalTree.nwk**:
     - The hierarchical clustering tree of the cargo genes in Newick format.
