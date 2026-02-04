@@ -20,6 +20,8 @@ option_list <- list(
               help="value from the variable to be compare against the rest.", metavar="string"),
   make_option(c("-p", "--psignificant"), type="numeric", action = "store", default=0.05,
               help="value from the variable to be compare against the rest.", metavar="number")
+  make_option(c("-cm", "--countmode"), type="string", action = "store", default="",
+              help="value from the variable to be compare against the rest.", metavar="number")
 )
 
 # Parse the command-line arguments
@@ -47,6 +49,9 @@ if(arguments$mode != "Outliers" & arguments$mode != "Enrichment") {
     if(arguments$coefficient < 1.5 | arguments$coefficient > 3){
       stop("Error: Provided coefficient for 'Otliers' mode is out of accepted range", call.=FALSE)
     }
+    if(arguments$countmode != "Gene" & arguments$countmode != "Ships") {
+        stop("Error: Provided approximation is not accepted", call.=FALSE)
+      }
   } else if(arguments$mode == "Enrichment"){
     if (is.null(arguments$name) | is.null(arguments$value)) {
       stop("Error: a mandatory argument was not provided for 'Enrichment' mode.", call.=FALSE)
@@ -84,10 +89,11 @@ if (!requireNamespace("bc3net", quietly = TRUE)) {
 load_and_preprocess_data <- function(
     orthofinder_count = "Orthogroups.GeneCount-captainless.tsv",
     orthofinder_mcl = "Orthogroups-captainless.txt",
-    metadata_file = "metadata.csv"
+    metadata_file = "metadata.csv",
+    count_mode
 ) {
 
-  # Read orthogrup counts and stay with the total number
+  # Read orthogrup counts and Stay with the desire count
   OrthoFinder <- read.table(
     orthofinder_count,
     header = TRUE,
@@ -95,8 +101,14 @@ load_and_preprocess_data <- function(
     row.names = 1
   )
 
-  OrthoFinder2 <- as.vector(OrthoFinder$Total)
-  names(OrthoFinder2) <- row.names(OrthoFinder)
+  if( count_mode == "Gene" ) {
+    OrthoFinder2 <- as.vector(OrthoFinder$Total)
+    names(OrthoFinder2) <- row.names(OrthoFinder)
+  } else if ( count_mode == "Ship" ) {
+    OrthoFinder <- OrthoFinder[, !names(OrthoFinder) %in% c("Total")]
+    OrthoFinder[OrthoFinder > 1] <- 1
+    OrthoFinder2 <- rowSums(OrthoFinder)
+  }
 
   # Extract gene locations and format for gggenomes visualization
   annotation <- gff2GRangesList("Gff/")

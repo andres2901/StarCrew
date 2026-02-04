@@ -74,6 +74,8 @@ Rscript -e '
   suppressPackageStartupMessages(library(NbClust))
   suppressPackageStartupMessages(library(syntenet))
   suppressPackageStartupMessages(library(ggnewscale))
+  suppressPackageStartupMessages(library(bc3net))
+  suppressPackageStartupMessages(library(mrfDepth))
 
   if (!requireNamespace("optparse", quietly = TRUE)) {
     stop("Package \"optparse\" not installed. Please install it to run this script.", call. = FALSE)
@@ -113,6 +115,12 @@ Rscript -e '
   }
   if (!requireNamespace("ggnewscale", quietly = TRUE)) {
    stop("Package \"ggnewscale\" not installed. Please install it to run this script.", call. = FALSE)
+  }
+  if (!requireNamespace("bc3net", quietly = TRUE)) {
+   stop("Package \"bc3net\" not installed. Please install it to run this script.", call. = FALSE)
+  }
+  if (!requireNamespace("mrfDepth", quietly = TRUE)) {
+   stop("Package \"mrfDepth\" not installed. Please install it to run this script.", call. = FALSE)
   }
 
   cat(paste("[",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]"," Successful instalation of R packages"," \n", sep=""))

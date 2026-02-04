@@ -22,36 +22,37 @@ fi
 # Function to print help message
 function print_help() {
     echo -e "Script to identify orthogroups that are overrepresented in a specific dataset.
-    This script perform three major steps:
+    This script perform three main steps:
     1. Run Orthofinder with DIAMOND ultra-sensitive mode.
-    2. Remove orthogroups assocaited with captains.
+    2. Remove orthogroups associated with captains.
     3. Perform the analysis depending on the selected mode:
-      3.1. Outliers: Identified orthgroups that have an abnormal number of representative in the dataset using interquartile (IQR) upper fence [IQR = Q3 - Q1], depending on two approches for this kind of outlier identification:
+      3.1. Outliers: Identify orthogroups that have an abnormal number of representative in the dataset using interquartile (IQR) upper fence [IQR = Q3 - Q1], depending on two approches for this kind of outlier identification:
         3.1.1. Standard: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0m * IQR.
-        3.1.2. Skew: Identified orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0me^4MC * IQR.
-      3.2. Enrichment: Identified orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test."
+        3.1.2. Skew: Identify orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0me^4MC * IQR.
+      3.2. Enrichment: Identify orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test."
     echo ""
-    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> | -n <string> -v <string> -p <float> } -t <integer> { --overwrite | --skip-orthofinder } ]"
+    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> -cm <string> | -n <string> -v <string> -p <float> } -t <integer> { --overwrite | --skip-orthofinder } ]"
     echo ""
     echo "Required args:"
     echo "-w, --workingDirectory: Specify the working directory where all data are stored."
     echo ""
     echo "Required args with Default:"
-    echo "-m, --mode: Define the mode that will be used to flag orthogroups (Default = Outliers) [Available mode: Outliers, Enrichment]."
+    echo "-m, --mode: Define the mode that will be used to flag orthogroups (Default: Outliers) [Available mode: Outliers, Enrichment]."
     echo ""
     echo "Required args in 'Outliers' mode with Default:"
-    echo "-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Skew) [Available mode: Standard, Skew]."
-    echo "-c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3]."
+    echo "-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default: Skew) [Available mode: Standard, Skew]."
+    echo "-c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default: 1.5) [range: 1 - 3]."
+    echo "-cm, --countMode: Counts to be used for outliers (Default: Gene) [Available mode: Gene, Ship]."
     echo ""
     echo "Required args in 'Enrichment' mode:"
     echo "-n, --name: column name of the variable in the metadata file to be used."
     echo "-v, --value: value from the variable to be compare against the rest."
     echo ""
     echo "Required args in 'Enrichment' mode with Default:"
-    echo "-p, --pValue: p-value to determined if an orthogroup is significantly enriched (Default = 0.05) [range: 0.001 - 0.1]."
+    echo "-p, --pValue: p-value to determined if an orthogroup is significantly enriched (Default: 0.05) [range: 0.001 - 0.1]."
     echo ""
     echo "Optional args:"
-    echo "-t, --threads: Number of threads (Default = 8)"
+    echo "-t, --threads: Number of threads (Default: 8)"
     echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ). Not compatible wit '--skip-orthofinder' flag (Default: off)"
     echo "--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode, rule or percentile of the analysis. 
                               Not compatible with '--overwrite' flag (Default: off) "
@@ -239,6 +240,7 @@ Working_directory=""
 mode="Outliers"
 rule="Skew"
 coefficient="1.5"
+countmode="Gene"
 column=""
 value=""
 pvalue="0.05"
@@ -264,6 +266,10 @@ while [[ $# -gt 0 ]]; do
         -c|--coefficient)
             shift
             coefficient="$1"
+            ;;
+        -cm|--countMode)
+            shift
+            countmode="$1"
             ;;
         -n|--name)
             shift
@@ -314,6 +320,7 @@ echo "  Working directory: " "$Working_directory"
 echo "  Mode: " "$mode"
 echo "  approximation for 'Outliers' mode: " "$rule"
 echo "  Coeeficient for fence definition: " "$coefficient"
+echo "  Count to use for 'Outliers' mode: " "$countmode"
 echo "  Column in metadata for 'Enrichment' mode: " "$column"
 echo "  Value in metadata for 'Enrichment' mode: " "$value"
 echo "  p-Value in 'Enrichment' mode:" "$pvalue"
@@ -408,6 +415,12 @@ if [[ "$mode" == "Outliers" ]]; then
         exit 1
     fi
 
+    if [[ "$countmode" != "Gene" && "$countmode" != "Ship" ]]; then
+        echo -e "Error: '$countmode' count mode is not a valid value.\n"
+        print_help
+        exit 1
+    fi
+
     if [[ "$coefficient" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
         if (( $(echo "$coefficient < 1.5" | bc -l) )) || (( $(echo "$coefficient > 3.0" | bc -l) )); then
             echo "Error: '$coefficient' is not an accepted value for the fence coefficient."
@@ -460,7 +473,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Removing orthogroups associated with Captai
 remove_captain_orthogroups "${Working_directory}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Performing analysis..."
-Rscript ${auxiliary_path}/OverrepresentationAnalysis.R -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )" -m "${mode}" -a "${rule}" -c "${coefficient}" -n "${column}" -v "${value}" -p "${pvalue}"
+Rscript ${auxiliary_path}/OverrepresentationAnalysis.R -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )" -m "${mode}" -a "${rule}" -c "${coefficient}" -n "${column}" -v "${value}" -p "${pvalue}" -cm "${countmode}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
 organize_information "${Working_directory}"

@@ -28,27 +28,29 @@ function print_help() {
    1. Identify orthogroups through OrthoFinder.
    2. Perform all-vs-all Blastn for synteny visualization.
    3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
-   4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny image for the cluster.
+   4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny figure for the cluster.
    5. Identify possible individual nesting events inside the cluster.
    6. Identify core genes in the cluster in two ways:
      6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
      6.2. Specific core: Orthogroups that are present in at least 80% of the elements for subclusters generated at a 0.8 height of the hierarchical tree of cargo content.
        6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
        6.2.2. If subslusters are present, identify core genes in each one that have at least 5 elements using the same logic of general core.
-   7. If subclusters are present it try to identify putative cargo movement events and try to avoid 'General core' genes.
-   8. Determine if there are discordances at 'Clade' level between Cargo hierarchical clustering and Captain phylogenetic tree.
+   7. If subclusters are present it try to identify putative cargo movement events.
+   8. Determine if there are discordances at 'Clade' level between cargo hierarchical clustering and captain phylogenetic tree.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -t <integer> --overwrite ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -i <float> -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-t, --threads: Number of threads for orthofinder and blast (Default: 8)"
+   echo "-l, --length: Minimunm length of blast results to be included for the nucleotide synteny visualization (Default: 1000) [range: 200 - 5000]."
+   echo "-i, --identity: Minimum percentage identity of blast results to be included for the nucleotide synteny visualization (Default: 70.0) [range: 50.0 - 95.0]."
    echo ""
    echo "Optional args:"
-   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
+   echo "-t, --threads: Number of threads for orthofinder and blast (Default: 8)."
+   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)."
    echo "-help: Display this help message."
 }
 
@@ -94,7 +96,7 @@ organize_working_directory() {
     local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
     local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
 
     local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
@@ -103,11 +105,11 @@ organize_working_directory() {
 
     local captainPhylogeny="${base_dir}/CaptainIdentification/CaptainPhylogeny.nw"
 
-    #if [[ -d "$working_dir" ]]; then
-    #    echo "Error: There's a previous run in the Workspace."
-    #    echo "If you want to overwrite this previous run, add the '--overwrite' flag to the command line."
-    #    exit 1
-    #fi
+    if [[ -d "$working_dir" ]]; then
+        echo "Error: There's a previous run in the Workspace."
+        echo "If you want to overwrite this previous run, add the '--overwrite' flag to the command line."
+        exit 1
+    fi
 
     # Create required subdirectories
     mkdir -p ${working_dir}
@@ -117,7 +119,7 @@ organize_working_directory() {
     cp -r ${gff_dir} ${working_dir}
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
-    cp -r ${exon_dir} ${working_dir}
+    cp -r ${CDS_dir} ${working_dir}
     cp ${captainPhylogeny} ${working_dir}/
 
     echo "##gff-version 3" > ${full_gff}
@@ -181,7 +183,7 @@ run_blast() {
 
     blastn -query ${temp_dir}/sequence.fasta -db ${temp_dir}/Cluster -evalue 1e-60 -num_threads "${threads}" -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" -task blastn -gapopen 8 -gapextend 6 -reward 5 -penalty -4 -out ${temp_dir}/blastresults.txt
 
-    awk 'begin{fs=ofs="\t"}{if($8>=1000) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
+    awk -v min="$length" 'begin{fs=ofs="\t"}{if($8>=min) {print}}' ${temp_dir}/blastresults.txt > ${working_dir}/Blast_CleanResults.txt
 }
 
 check_core() {
@@ -286,6 +288,8 @@ organize_information() {
 # Initialize variables
 Working_directory=""
 threads="8"
+length="1000"
+identity="70"
 overwrite=false
 help_flag=false
 
@@ -298,6 +302,14 @@ while [[ $# -gt 0 ]]; do
         -t|--threads)
             shift
             threads="$1"
+            ;;
+        -l|--length)
+            shift
+            length="$1"
+            ;;
+        -i|--identity)
+            shift
+            identity="$1"
             ;;
         --overwrite)
             overwrite=true
@@ -326,6 +338,8 @@ fi
 
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
+echo "  Minimum length for nucleotide synteny visualization: " "${length}"
+echo "  Percentage identity for nucleotide synteny visualization: " "${identity}"
 echo "  Number of threads: " "$threads"
 echo "  Overwrite previous run: " "$overwrite"
 echo ""
@@ -351,8 +365,32 @@ else
 fi
 check_directory_structure "${Working_directory}"
 
-# Check thread parameter
+# Check other parameters
 check_threads "$threads"
+
+if [[ "$length" =~ ^[0-9]+$ ]]; then
+    if (( $length < 200 || $length > 5000 )); then
+        echo "Error: '$length' is not an accepted value for merge size."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$length' is not a positive integer."
+    print_help
+    exit 1
+fi
+
+if [[ "$identity" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
+    if (( $(echo "$identity < 50.0" | bc -l) )) && (( $(echo "$identity > 95.0" | bc -l) )); then
+        echo "Error: '$identity' is not an accepted value of identity percentage."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$identity' is not a float."
+    print_help
+    exit 1
+fi
 
 # Check for software presence
 check_required_software "$(basename -s .sh "$0" )"
@@ -363,7 +401,19 @@ check_required_software "$(basename -s .sh "$0" )"
 
 check_clusters "${Working_directory}"
 
-# Modify this part when I have finish the SyntenyClustering fix
+# remove control files when in overwrite mode
+if $overwrite; then
+    if [[ -f "${Working_directory}/Clusters/ClusterOrthogroups.txt" ]]; then
+        rm ${Working_directory}/Clusters/ClusterOrthogroups.txt
+    fi
+    if [[ -f "${Working_directory}/Clusters/ClusterCore.txt" ]]; then
+        rm ${Working_directory}/Clusters/ClusterCore.txt
+    fi
+    if [[ -f "${Working_directory}/Clusters/ClusterMovement.txt" ]]; then
+        rm ${Working_directory}/Clusters/ClusterMovement.txt
+    fi
+fi
+
 awk '{print $1}' ${Working_directory}/Clusters/ClustersAnalyzed.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
 do
     internal_dir="${Working_directory}/Clusters/${ClusterId}/"
@@ -385,7 +435,6 @@ do
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Checking results.."
     if ! $orthofinder_flag; then
         echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder in this cluster.\n"
-        #rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )/"
         continue
     else
         grep -w ${ClusterId} ${Working_directory}/Clusters/ClustersAnalyzed.txt >> ${Working_directory}/Clusters/ClusterOrthogroups.txt
@@ -397,7 +446,7 @@ do
     echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Running characterization of the cluster..."
-    Rscript ${auxiliary_path}/ClusterAnalysis.R -d "${internal_dir}/Workspace/$(basename -s .sh "$0" )/" -s "${subcluster_number}" -c $captainremoval_number
+    Rscript ${auxiliary_path}/ClusterAnalysis.R -d "${internal_dir}/Workspace/$(basename -s .sh "$0" )/" -s "${subcluster_number}" -c "${captainremoval_number}" -p "${identity}"
 
     mkdir -p "${internal_dir}/Workspace/$(basename -s .sh "$0" )/Figures"
     mv ${internal_dir}/Workspace/$(basename -s .sh "$0" )/*.svg "${internal_dir}/Workspace/$(basename -s .sh "$0" )/Figures/"

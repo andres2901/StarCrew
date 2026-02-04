@@ -49,11 +49,11 @@ if [[ ! -d "$database_path" ]]; then
 else
     database_path=$(realpath $database_path)
     # Check the presence of the specific scripts
-    if [[ ! -f "${database_path}/Captains_exon.fa" ]]; then
-        echo "Error: file '${database_path}/Captains_exon.fa' does not exist."
+    if [[ ! -f "${database_path}/Captains_CDS.fa" ]]; then
+        echo "Error: file '${database_path}/Captains_CDS.fa' does not exist."
         exit 1
     else
-        check_fasta_dna "${database_path}/Captains_exon.fa"
+        check_fasta_dna "${database_path}/Captains_CDS.fa"
     fi
 fi
 
@@ -66,12 +66,12 @@ function print_help() {
    echo -e "Script to identify captain genes within each element and construct a phylogenetic tree based on these captains.
    It executes five main steps:
    1. Run hmmscan using hmm profiles of specific domains in captains against the proteome of each element.
-   2. Processes the data to identify Captains and regions suitable for phylogenetic analysis. Three confidence levels can be used for Captain identification:
+   2. Processes the data to identify Captains and regions suitable for phylogenetic analysis. Three confidence levels can be used for captain identification:
       2.1 Only a match with the Captain HMM profile from Starfish \033[01;31mWARNING\033[m: This may lead to false positive identifications and result in an unreliable phylogenetic analysis.
       2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
-      2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with HMM profiles associated with the YR Recombinase Active Site.
-   3. For elements lacking a confident Captain gene, the script searches for a putative Captain pseudogene at the beginning and end of the element.
-   4. Aligns exonic sequences using MACSE (with amino acid output) and processes the alignment with Clipkit depending on the mode
+      2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with HMM profile associated with the YR Recombinase Active Site.
+   3. For elements lacking a confident captain gene, the script searches for a putative captain pseudogene at the beginning and end of the element.
+   4. Aligns CDS and pseudogene sequences using MACSE (with amino acid output) and processes the alignment with Clipkit.
    5. Runs maximum-likelihood phylogenetic tree inference, when there at least two unique captain sequences:
       5.1 Run IQ-TREE with 1000 UFBotstrap and 1000 sh-aLRT if there at least 4 unique sequence, in other case run it without support.
       5.2 Collapsed near-zero and low-support (when available) branches.
@@ -79,27 +79,27 @@ function print_help() {
 
    There are three available mode:
    -Cluster: Analyzes and performs all five steps per cluster, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
-   -FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
+   -FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset. \033[01;31mWARNING\033[m: For big datasets, MACSE could fail without any specific error reported.
    -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -c <integer> -m <string> -t <integer> -ms <integer> --overwrite ]"
+   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -l <integer> -c <integer> -r <integer> -ms <integer> -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: specified the mode (Default = AllID) [Available mode: Cluster, FullAll, FullAll-MAFFT, AllID]."
+   echo "-m, --mode: specified the mode (Default: AllID) [Available mode: Cluster, FullAll, AllID]."
    echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 250) [range: 200 - 800]."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
-   echo "-r, --rangeKb:The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]"
+   echo "-r, --rangeKb:The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]."
    echo ""
    echo "Required args with Default in 'Cluster' mode:"
-   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analysis when running the 'Cluster' mode (Default = 4) [range: 4 - 10]"
+   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analysis when running the 'Cluster' mode (Default: 4) [range: 4 - 10]."
    echo ""
    echo "Optional args:"
-   echo "-t, --threads: Number of threads to use for phylogenetic tree inference and MAFFT in 'FullAll-MAFFT' mode (Default: 1)."
-   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)"
+   echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
+   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)."
    echo "-help: Display this help message."
 }
 
@@ -108,14 +108,14 @@ Check_previous_information() {
 
     local captain_dir="${base_dir}/$(basename -s .sh "$0" )/"
 
-    if [[ ! -f "${captain_dir}/Captains_exon.fa" ]]; then
+    if [[ ! -f "${captain_dir}/Captains_CDS.fa" ]]; then
         return 0
     else
-        check_fasta_dna "${captain_dir}/Captains_exon.fa"
+        check_fasta_dna "${captain_dir}/Captains_CDS.fa"
     fi
 
     if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
-        check_fasta_dna "${captain_dir}/Captains_exon.fa"
+        check_fasta_dna "${captain_dir}/Captains_pseudo.fa"
     fi
 
     Previous_captain_run=true
@@ -129,7 +129,7 @@ organize_working_directory() {
     local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
     local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
 
     local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
     local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
@@ -149,13 +149,13 @@ organize_working_directory() {
     cp -r ${gff_dir} ${working_dir}
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
-    cp -r ${exon_dir} ${working_dir}
+    cp -r ${CDS_dir} ${working_dir}
 
     if ${Previous_captain_run}; then
         local captain_dir="${base_dir}/$(basename -s .sh "$0" )/"
 
-        if [[ -f "${captain_dir}/Captains_exon.fa" ]]; then
-            cp "${captain_dir}/Captains_exon.fa" ${working_dir}
+        if [[ -f "${captain_dir}/Captains_CDS.fa" ]]; then
+            cp "${captain_dir}/Captains_CDS.fa" ${working_dir}
         fi
 
         if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
@@ -228,9 +228,6 @@ Captain_identification() {
 
     python ${auxiliary_path}/hmmscan_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}" --range_kb "${range}" >/dev/null
 
-    if [[ ${mode} == "FullAll-MAFFT" ]]; then
-        mv ${empty_elements} ${working_dir}/Captainless_elements.txt
-    fi
 }
 
 Captain_pseudogene() {
@@ -240,7 +237,7 @@ Captain_pseudogene() {
 
     # Locate required subdirectories and define output path
     local nucleotide_path=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local exon_path=$(find "$working_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local CDS_path=$(find "$working_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
     local captain_file="$working_dir/CaptainsID.txt"
     
     local empty_elements="${working_dir}/EmptyElements.txt"
@@ -250,12 +247,12 @@ Captain_pseudogene() {
 
     if [ ! -s "${captain_file}" ]; then
         echo -e "\033[01;31mWARNING\033[m: there is no captain gene identify in this set of data. Looking for pseudogenes only."
-        cp ${database_path}/Captains_exon.fa ${temp_dir}/Captains_exon.fa
+        cp ${database_path}/Captains_CDS.fa ${temp_dir}/Captains_CDS.fa
     else
         # Select captains that were correctly identify 
-        cat ${exon_path}/*.fa > ${temp_dir}/exon.fa
-        seqkit grep --quiet -f ${captain_file} ${temp_dir}/exon.fa -o ${working_dir}/Captains_exon.fa
-        cat ${database_path}/Captains_exon.fa ${working_dir}/Captains_exon.fa > ${temp_dir}/Captains_exon.fa
+        cat ${CDS_path}/*.fa > ${temp_dir}/CDS.fa
+        seqkit grep --quiet -f ${captain_file} ${temp_dir}/CDS.fa -o ${working_dir}/Captains_CDS.fa
+        cat ${database_path}/Captains_CDS.fa ${working_dir}/Captains_CDS.fa > ${temp_dir}/Captains_CDS.fa
     fi
 
     if [ -s "${empty_elements}" ]; then
@@ -276,7 +273,7 @@ Captain_pseudogene() {
 
             makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null
 
-            blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
+            blastn -query ${temp_dir}/Captains_CDS.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
             BEGIN {
             last_start = -1;
             last_end = -1;
@@ -314,7 +311,7 @@ Captain_pseudogene() {
                 seqkit subseq --quiet -r -${Full_range}:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
                 makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
 
-                blastn -query ${temp_dir}/Captains_exon.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
+                blastn -query ${temp_dir}/Captains_CDS.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
                 BEGIN {
                 last_start = -1;
                 last_end = -1;
@@ -371,34 +368,34 @@ Alignment() {
 
     # Locate required subdirectories and define output path
     local pseudoExons="${working_dir}/Captains_pseudo.fa"
-    local captain_file="${working_dir}/Captains_exon.fa"
+    local captain_file="${working_dir}/Captains_CDS.fa"
     local temp_dir="${working_dir}/temp/"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
 
     if [[ ! -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
-        macse -prog alignSequences -seq ${working_dir}/Captains_exon.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        macse -prog alignSequences -seq ${working_dir}/Captains_CDS.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
     elif [[ -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
-        macse -prog alignSequences -seq ${working_dir}/Captains_exon.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
+        macse -prog alignSequences -seq ${working_dir}/Captains_CDS.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
     elif [[ -s "${pseudoExons}"  && ! -s "${captain_file}" ]]; then
-        #Select a subset of captain exons from the big database that looks similar to our pseudogenes
-        makeblastdb -in ${database_path}/Captains_exon.fa -dbtype nucl -out ${temp_dir}/blast/Captains_exon_database >/dev/null
-        blastn -query ${pseudoExons} -db ${temp_dir}/blast/Captains_exon_database -task blastn -perc_identity 60 -qcov_hsp_perc 60 -evalue 1e-5 -max_hsps 1 -outfmt "6 sseqid" | sort -u > ${temp_dir}/Selected_captain_exons.txt
-        seqkit grep --quiet -f ${temp_dir}/Selected_captain_exons.txt ${database_path}/Captains_exon.fa -o ${temp_dir}/Selected_captain_exons.fa
+        #Select a subset of captain CDSs from the big database that looks similar to our pseudogenes
+        makeblastdb -in ${database_path}/Captains_CDS.fa -dbtype nucl -out ${temp_dir}/blast/Captains_CDS_database >/dev/null
+        blastn -query ${pseudoExons} -db ${temp_dir}/blast/Captains_CDS_database -task blastn -perc_identity 60 -qcov_hsp_perc 60 -evalue 1e-5 -max_hsps 1 -outfmt "6 sseqid" | sort -u > ${temp_dir}/Selected_captain_CDSs.txt
+        seqkit grep --quiet -f ${temp_dir}/Selected_captain_CDSs.txt ${database_path}/Captains_CDS.fa -o ${temp_dir}/Selected_captain_CDSs.fa
 
         #Perform alignment with this selected sequences
-        macse -prog alignSequences -seq ${temp_dir}/Selected_captain_exons.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
+        macse -prog alignSequences -seq ${temp_dir}/Selected_captain_CDSs.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
 
         #Remove sequences from the database
-        seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_exons.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
+        seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_CDSs.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
     elif [[ ! -s "${pseudoExons}" && ! -s "${captain_file}" ]]; then
         echo -e "\033[01;31mERROR\033[m: there is no captain gene or pseudogene identify in this set of data"
         captainless_flag=true
         return 1
     fi
 
-    if [[ -f "${working_dir}/Captain_proteins_aligned.fa" ]]; then
-        echo "Error: \033[01;31mERROR\033[m: There has been an error with MACSE run and there is no output of it."
+    if [[ ! -f "${working_dir}/Captain_proteins_aligned.fa" ]]; then
+        echo -e "Error: \033[01;31mERROR\033[m: There has been an error with MACSE run and there is no output of it."
         alingmentless_flag=true
         return 1
     fi
@@ -468,7 +465,7 @@ Removed_empty_elements() {
     local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
 
     local Remove_elements="${working_dir}/Captainless_elements.txt"
     local output="${data_dir}/Captainless_elements/"
@@ -482,7 +479,7 @@ Removed_empty_elements() {
         mv ${gff_dir}/${line}.gff ${output}
         mv ${protein_dir}/${line}.fa ${output}${line}_protein.fa
         mv ${nucleotide_dir}/${line}.fa ${output}${line}_nucleotide.fa
-        mv ${exon_dir}/${line}.fa ${output}${line}_exon.fa
+        mv ${CDS_dir}/${line}.fa ${output}${line}_CDS.fa
     done
 }
 
@@ -527,8 +524,8 @@ organize_information() {
         cp ${working_dir}/CaptainsID.txt ${Captain_dir}
     fi
 
-    if [[ -f "${working_dir}/Captains_exon.fa" ]]; then
-        cp ${working_dir}/Captains_exon.fa ${Captain_dir}
+    if [[ -f "${working_dir}/Captains_CDS.fa" ]]; then
+        cp ${working_dir}/Captains_CDS.fa ${Captain_dir}
     fi
 
     if [[ -f "${working_dir}/Captains_pseudo.fa" ]]; then
@@ -741,7 +738,7 @@ then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
     Alignment "${Working_directory}"
 
-    if [[ $captainless_flag || $alingmentless_flag ]]; then
+    if $captainless_flag || $alingmentless_flag; then
         exit 1
     fi
 
@@ -815,10 +812,10 @@ then
 
         if $overwrite; then
             echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-            overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+            overwrite "${internal_dir}" "$(basename -s .sh "$0" )"
         else
             echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking if there is data of a previous run..."
-            Check_previous_information "${Working_directory}"
+            Check_previous_information "${internal_dir}"
         fi
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
@@ -846,7 +843,7 @@ then
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
         Alignment "${internal_dir}"
-        if [[ $captainless_flag || $alingmentless_flag ]]; then
+        if $captainless_flag || $alingmentless_flag; then
             continue
         fi
         echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."

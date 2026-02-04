@@ -31,14 +31,14 @@ fi
 function print_help() {
    echo "Script to organize the working directory to run the subsequent commands in the workflow."
    echo ""
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> -b <file_path> -s <character> -c <file_path> -M <file_path> --overwrite ]"
+   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string>  { -b <file_path> -s <character> -c <file_path> } -M <file_path> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-f, --fasta:  multifasta file wih the elements to study."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: Mode of the input to initialize (Defaul = Simple) [Available mode: Simple, Starfish]"
-   echo "-gc, --gc: integer value of gc content to filter out elements with too low gc content (Default = 0) [range: 20 - 45]"
+   echo "-m, --mode: Mode of the input to initialize (Defaul = Simple) [Available mode: Simple, Starfish]."
+   echo "-gc, --gc: integer value of gc content to filter out elements with too low gc content (Default = 0) [range: 20 - 45]."
    echo "-r, --rip: integer value of the minimum coverage of the element to be possibly affected by RIP to be filter out (Default = 0) [range: 30 - 80]"
    echo "-mg, --minGene: Minimum number of genes in an element to be include in the dataset (Default: 8) [range: 5 - 100]"
    echo "-o, --outDirectory: Specify working directory  name (Default = WorkingDirectory)."
@@ -53,7 +53,7 @@ function print_help() {
    echo "-g, --gff: Path to the GFF file containing gene predictions with element-relative coordinates for all elements in the fasta file."
    echo ""
    echo "Optional args:"
-   echo "-M, --Metadata: csv file delimited by semicolon with the metadata information: ElementID;<data1>;<data2>;...."
+   echo "-M, --Metadata: csv file delimited by semicolon with the metadata information (Check wrapper documentation for more information)."
    echo "--overwrite: Flag to overwrite in case there is already a previous run (Default: off)"
    echo "-help: Display this help message."
 }
@@ -73,7 +73,7 @@ check_duplicates() {
     fi
 }
 
-# Filter script
+# Function to filter input elements
 Filter_input() {
     local fasta_path="$1"
     local working_dir="$2"
@@ -270,7 +270,7 @@ organize_info() {
     echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Organizing info..."
 
     Total_states=$(ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | wc -l)
-    echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Processing '$Total_states' elements that have at least 8 genes."
+    echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] Processing '$Total_states' elements that have at least '${minimum_gene_content}' genes."
     State=0
 
     ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line 
@@ -280,17 +280,17 @@ organize_info() {
         echo $line > ${working_dir}/temp/temp_element.txt
         seqkit grep -n -f ${working_dir}/temp/temp_element.txt ${working_dir}/Sequences.fa -o ${working_dir}/Data/Nucleotide/${line}.fa &> /dev/null
 
-        # Creating Exome
+        # Creating CDS files
         if $CDS_flag; then
-            agat_sp_extract_sequences.pl --config ${agat_config} --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
+            agat_sp_extract_sequences.pl --config ${agat_config} --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds -o ${working_dir}/temp/CDS/${line}.fa &> /dev/null
         else
-            agat_sp_extract_sequences.pl --config ${agat_config} --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t cds --merge -o ${working_dir}/temp/exon/${line}.fa &> /dev/null
+            agat_sp_extract_sequences.pl --config ${agat_config} --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t exon --merge -o ${working_dir}/temp/CDS/${line}.fa &> /dev/null
         fi
 
-        awk '{if($2){$1=">"$2} print $1}' ${working_dir}/temp/exon/${line}.fa| sed 's/gene=//g' > ${working_dir}/Data/Exon/${line}.fa
+        awk '{if($2){$1=">"$2} print $1}' ${working_dir}/temp/CDS/${line}.fa| sed 's/gene=//g' > ${working_dir}/Data/CDS/${line}.fa
 
         # Creating proteome
-        seqkit translate ${working_dir}/Data/Exon/${line}.fa --trim > ${working_dir}/Data/Protein/${line}.fa
+        seqkit translate -f 1 ${working_dir}/Data/CDS/${line}.fa > ${working_dir}/Data/Protein/${line}.fa
 
         rm ${working_dir}/Data/Nucleotide/${line}.fa.index* &> /dev/null
         ProgressBar $State $Total_states
@@ -304,11 +304,11 @@ Process_simple() {
     local gff_file="$2"
     local CDS_flag=false
 
-    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/ ${working_dir}/temp/gff/
+    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/CDS/ ${working_dir}/temp/CDS/ ${working_dir}/temp/gff/
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Preparing gff file..."
 
-    if [[ $(grep -i -c "cds" ${gff_file}) -ge 10 ]]; then
+    if [[ $(grep -w -i -c "cds" ${gff_file}) -ge 10 ]]; then
         CDS_flag=true
     fi
 
@@ -341,8 +341,6 @@ Process_simple() {
     done
     echo ""
 
-    echo "CDS flag: " "$CDS_flag"
-
     organize_info "$working_dir" "$CDS_flag"
 }
 
@@ -353,7 +351,7 @@ Process_starfish() {
     local gff_path="$3"
     local CDS_flag=false
 
-    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/Exon/ ${working_dir}/temp/exon/ ${working_dir}/temp/gff/ ${working_dir}/temp/gff2/
+    mkdir -p ${working_dir}/Data/Protein/ ${working_dir}/Data/Gff/ ${working_dir}/Data/Nucleotide/ ${working_dir}/Data/CDS/ ${working_dir}/temp/CDS/ ${working_dir}/temp/gff/ ${working_dir}/temp/gff2/
 
     Total_states=$(wc -l ${working_dir}/temp/temp_association.tsv | awk '{print $1}')
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] processing '$Total_states' elements."
@@ -384,7 +382,7 @@ Process_starfish() {
         ProgressBar $State $Total_states
     done
 
-    if [[ $(grep -i -c "cds" ${working_dir}/temp/gff/$(ls ${working_dir}/temp/gff/ | head -n1)) -ge 1 ]]; then
+    if [[ $(grep -w -i -c "cds" ${working_dir}/temp/gff/$(ls ${working_dir}/temp/gff/ | head -n1)) -ge 1 ]]; then
         CDS_flag=true
     fi
 

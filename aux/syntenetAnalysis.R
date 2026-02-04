@@ -14,6 +14,8 @@ option_list <- list(
               help="Number of maximum allowed gaps between anchor points for syntenet to call a collinear region [default %default]", metavar="number"),
   make_option(c("-t", "--threads"), type="integer", action = "store", default=1,
               help="Number of threads for the analysis [default %default]", metavar="number")
+  make_option(c("-e", "--evalue"), type="numeric", action = "store", default=0.00001,
+              help="e-value for syntenet to call a collinear region [default %default]", metavar="number")
 )
 
 # Parse the command-line arguments
@@ -57,4 +59,4 @@ blast_list <- read_diamond(blast_dir)
   
 #perform synteny block analysis
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"]"," Processing data with syntenet..."," \n", sep=""))
-intersyn <- interspecies_synteny(blast_list, pdata$annotation, inter_dir = paste(arguments$directory,"/","Collinearity", sep = ""), anchors = arguments$anchors, max_gaps = arguments$gaps)
+intersyn <- interspecies_synteny(blast_list, pdata$annotation, inter_dir = paste(arguments$directory,"/","Collinearity", sep = ""), anchors = arguments$anchors, max_gaps = arguments$gaps, e_value = arguments$evalue)

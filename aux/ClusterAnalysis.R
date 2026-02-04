@@ -12,6 +12,8 @@ option_list <- list(
               help=" Number of subclusters get in the synteny analysis. Minimum value is equal to 1 when no subcluster were identified [default %default]", metavar="number"),
   make_option(c("-c", "--captainRemoval"), type="integer", action = "store", default=0,
               help=" Number of elements removes from the original cluster [default %default]", metavar="number")
+  make_option(c("-p", "--pident"), type="numeric", action = "store", default=70,
+              help=" Minimum percentage identity of blast results to be included as links for nucleotide synteny visualization [default %default]", metavar="number")
 )
 
 # Parse the command-line arguments
@@ -80,7 +82,7 @@ if (!requireNamespace("ggnewscale", quietly = TRUE)) {
 load_and_preprocess_data <- function(
     blast_file = "Blast_CleanResults.txt",
     gff_file = "Final_model.gff",
-    min_pident = 70
+    min_pident
 ) {
   
   #Define column names and specifications based on standard BLAST outfmt 6 + qlen and slen
@@ -738,6 +740,14 @@ plot_subcluster_synteny <- function(
             mutate(attribute = ifelse(ID %in% specific_vector, "specific", attribute))
         }
 
+        # Extract Gene IDs belonging to the movement orthogroups
+        movement_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% Movement$orthogroups,]
+        movement_vector <- unlist(strsplit(movement_table[,2],split = " "))
+        movement_vector <- movement_vector[ movement_vector != ""]
+
+        genes_filtered <- genes_filtered %>%
+          mutate(attribute = ifelse(ID %in% movement_vector, "Movement associated", attribute))
+
         if( length(core_genes$general_core) > 0 ) {
           # Extract Gene IDs belonging to the general core orthogroups
           general_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% core_genes$general_core,]
@@ -747,14 +757,6 @@ plot_subcluster_synteny <- function(
           genes_filtered <- genes_filtered %>%
             mutate(attribute = ifelse(ID %in% general_vector, "general", attribute))
         }
-
-        # Extract Gene IDs belonging to the movement orthogroups
-        movement_table <- orthogroup_table[ orthogroup_table$Orthogroup %in% Movement$orthogroups,]
-        movement_vector <- unlist(strsplit(movement_table[,2],split = " "))
-        movement_vector <- movement_vector[ movement_vector != ""]
-
-        genes_filtered <- genes_filtered %>%
-          mutate(attribute = ifelse(ID %in% movement_vector, "Movement associated", attribute))
 
         links_filtered <- blast_links %>%
           filter(qseqid %in% selected_seqs2 | sseqid %in% selected_seqs2) %>%
@@ -896,7 +898,7 @@ plot_subcluster_synteny <- function(
 
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Reading data...","\n", sep=""))
 
-data_list <- load_and_preprocess_data()
+data_list <- load_and_preprocess_data(min_pident = arguments$pident)
 
 # Preprocess data
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Identifying if there are separate clusters","\n", sep=""))
@@ -905,10 +907,10 @@ clustering_data <- perform_initial_clustering()
 
 cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Checking for nesting events ","\n", sep = ""))
 
-# check_nesting(ortho_counts = clustering_data$orthofinder_counts,
-#    seq_data = data_list$seqs,
-#    gene_data = data_list$genes,
-#    blast_links = data_list$blast_results)
+check_nesting(ortho_counts = clustering_data$orthofinder_counts,
+    seq_data = data_list$seqs,
+    gene_data = data_list$genes,
+    blast_links = data_list$blast_results)
 
 # Process Clusters
 cat(paste("  [",format(Sys.time(), "%Y-%m-%d %H:%M:%S"),"] ","Analyzing ",clustering_data$Individual_clusters," individual cluster(s) identified","\n", sep=""))

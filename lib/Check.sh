@@ -78,11 +78,11 @@ check_main_directory(){
         else
             check_fasta_protein "${Main_directory}/databases/Captains.fa"
         fi
-        if [[ ! -f "${Main_directory}/databases/Captains_exon.fa" ]]; then
-            echo "Error: fasta file with captains exon information was not found was not found in '${Main_directory}/databases'."
+        if [[ ! -f "${Main_directory}/databases/Captains_CDS.fa" ]]; then
+            echo "Error: fasta file with captains CDS information was not found was not found in '${Main_directory}/databases'."
             exit 1
         else
-            check_fasta_protein "${Main_directory}/databases/Captains_exon.fa"
+            check_fasta_protein "${Main_directory}/databases/Captains_CDS.fa"
         fi
     fi
 
@@ -181,13 +181,7 @@ check_gff_file() {
     			local gff_check3=$(grep -v "^#" $gff_path | egrep -v -c "ID=")
 
     			if [[ $gff_check3 -eq 0 ]]; then
-                    gff_check4=$(grep -v "^#" $gff_path | egrep -v -c "Parent=")
-                    if [[ $gff_check4 == $(grep -v "^#" $gff_path | egrep -c "gene") ]]; then
-                        return 0
-                    else
-                        echo "Error: There are lines without Parent_ID that are not gene in the gff file '${gff_path}'"
-                        exit 1
-                    fi
+                    return 0
                 else
                 	echo "Error: There are lines without ID in the gff file '${gff_path}'"
             	    exit 1
@@ -231,24 +225,24 @@ check_gff_paths() {
 }
 
 check_boundaries_file() {
-    local gff_path="$1"
+    local boundaries_path="$1"
 
-    if [[ ! -f "$gff_path" ]]; then
-        echo "Error: file '$gff_path' does not exist."
+    if [[ ! -f "$boundaries_path" ]]; then
+        echo "Error: file '$boundaries_path' does not exist."
         exit 1
     else
         # Check if fasta file is valid
-        local gff_check=$(grep -v "^#" $gff_path | awk -F '\t' '{print NF}' | sort -u)
+        local boundaries_check=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print NF}' | sort -u)
 
-        if [[ $gff_check -eq 21 ]]; then
-            local gff_check2=$(grep -v "^#" $gff_path | awk -F '\t' '{print $7}' | egrep -v -c "\+|-")
-            local gff_check3=$(grep -v "^#" $gff_path | awk -F '\t' '{print $4}' | egrep -w -v -c "[0-9]]")
-            local gff_check4=$(grep -v "^#" $gff_path | awk -F '\t' '{print $5}' | egrep -w -v -c "[0-9]]")
+        if [[ $boundaries_check -eq 21 ]]; then
+            local boundaries_check2=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print $7}' | egrep -v -c "\+|-")
+            local boundaries_check3=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print $4}' | egrep -w -v -c "[0-9]]")
+            local boundaries_check4=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print $5}' | egrep -w -v -c "[0-9]]")
 
-            if [[ $gff_check2 -eq 0 || $gff_check3 -eq 0 || $gff_check4 -eq 0  ]]; then
+            if [[ $boundaries_check2 -eq 0 || $boundaries_check3 -eq 0 || $boundaries_check4 -eq 0  ]]; then
                 return 0
             else
-                echo "Error: Check gff file due to inconsistencies in its columns"
+                echo "Error: Check boundary file due to inconsistencies in its columns"
                 exit 1
             fi
         else
@@ -551,7 +545,7 @@ check_directory_structure() {
     local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
     local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+    local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
 
     if [[ -z "$gff_dir" ]]; then
         echo "Error: GFF subdirectory not found in '$data_dir'." >&2
@@ -568,8 +562,8 @@ check_directory_structure() {
         exit 1
     fi
 
-    if [[ -z "$exon_dir" ]]; then
-        echo "Error: exon subdirectory not found in '$data_dir'." >&2
+    if [[ -z "$CDS_dir" ]]; then
+        echo "Error: CDS subdirectory not found in '$data_dir'." >&2
         exit 1
     fi
     
@@ -577,7 +571,7 @@ check_directory_structure() {
     local gff_files="$base_dir/temp/gff_files.txt"
     local protein_files="$base_dir/temp/protein_files.txt"
     local nucleotide_files="$base_dir/temp/nucleotide_files.txt"
-    local exon_files="$base_dir/temp/exon_files.txt"
+    local CDS_files="$base_dir/temp/b_files.txt"
     
     # Get sorted list of base filenames from the GFF directory
     find "$gff_dir" -maxdepth 1 -type f -name "*.gff" | xargs -n 1 basename -s .gff | sort > "$gff_files"
@@ -589,30 +583,30 @@ check_directory_structure() {
     find "$nucleotide_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$nucleotide_files"
     
     # Get sorted list of base filenames from the protein directory
-    find "$exon_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$exon_files"
+    find "$CDS_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$CDS_files"
 
     # Compare the lists. If diff finds a difference, it returns a non-zero exit code.
     if ! diff -q "$gff_files" "$protein_files" >/dev/null || \
         ! diff -q "$gff_files" "$nucleotide_files" >/dev/null || \
-        ! diff -q "$gff_files" "$exon_files" >/dev/null || \
+        ! diff -q "$gff_files" "$CDS_files" >/dev/null || \
         ! diff -q "$protein_files" "$nucleotide_files" >/dev/null || \
-        ! diff -q "$protein_files" "$exon_files" >/dev/null || \
-        ! diff -q "$nucleotide_files" "$exon_files" >/dev/null; then
+        ! diff -q "$protein_files" "$CDS_files" >/dev/null || \
+        ! diff -q "$nucleotide_files" "$CDS_files" >/dev/null; then
         echo "Error: File lists in subdirectories do not match." >&2
         echo "Details:" >&2
         echo "GFF vs. Protein:" >&2
         diff "$gff_files" "$protein_files" >&2
         echo "GFF vs. nucleotide:" >&2
         diff "$gff_files" "$nucleotide_files" >&2
-        echo "GFF vs. exon:" >&2
-        diff "$gff_files" "$exon_files" >&2
+        echo "GFF vs. CDS:" >&2
+        diff "$gff_files" "$CDS_files" >&2
         echo "protein vs. nucleotide:" >&2
         diff "$protein_files" "$nucleotide_files" >&2
-        echo "protein vs. exon:" >&2
-        diff "$protein_files" "$exon_files" >&2
-        echo "nucleotide vs. exon:" >&2
-        diff "$nucleotide_files" "$exon_files" >&2
-        rm "$gff_files" "$nucleotide_files" "$protein_files" "$exon_files"
+        echo "protein vs. CDS:" >&2
+        diff "$protein_files" "$CDS_files" >&2
+        echo "nucleotide vs. CDS:" >&2
+        diff "$nucleotide_files" "$CDS_files" >&2
+        rm "$gff_files" "$nucleotide_files" "$protein_files" "$CDS_files"
         exit 1
     fi
 
