@@ -25,7 +25,6 @@ In addition to the main commands, StarCrew is distributed with a diverse set of 
 - [Project directory organization](#Project-directory-organization)
 - [Pipeline modes](#Pipeline-modes)
 - [Citing StarCrew and software called by StarCrew](#Citing-StarCrew-and-software-called-by-StarCrew)
-- [License](#License)
 
 ## Requirements
 
