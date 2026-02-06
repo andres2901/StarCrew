@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Software check block
+# SOFTWARE CHECK AND ENVIRONMENT SETUP
 # ==============================================================================
 
+# Define library and auxiliary paths
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
@@ -13,13 +14,16 @@ if [[ ! -d "$auxiliary_path" ]]; then
     exit 1
 else
     auxiliary_path=$(realpath $auxiliary_path)
+    check_auxiliary_scripts "${auxiliary_path}" "$(basename -s .sh "$0" )"
 fi
 
+# Validate required software for the current script
+check_required_software "$(basename -s .sh "$0" )"
+
 # ==============================================================================
-# Function block
+# FUNCTION DEFINITIONS
 # ==============================================================================
 
-# Function to print help message
 function print_help() {
     echo -e "Script to identify orthogroups that are overrepresented in a specific dataset.
     This script perform three main steps:
@@ -31,7 +35,7 @@ function print_help() {
         3.1.2. Skew: Identify orthogroups as outliers using as fence the following value: Q3 + \e[3mn\e[0me^4MC * IQR.
       3.2. Enrichment: Identify orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test."
     echo ""
-    echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> -cm <string> | -n <string> -v <string> -p <float> } -t <integer> { --overwrite | --skip-orthofinder } ]"
+    echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> -cm <string> | -n <string> -v <string> -p <float> } -t <integer> { --overwrite | --skip-orthofinder } ]"
     echo ""
     echo "Required args:"
     echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -39,7 +43,7 @@ function print_help() {
     echo "Required args with Default:"
     echo "-m, --mode: Define the mode that will be used to flag orthogroups (Default: Outliers) [Available mode: Outliers, Enrichment]."
     echo ""
-    echo "Required args in 'Outliers' mode with Default:"
+    echo "Required args with Default in 'Outliers' mode:"
     echo "-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default: Skew) [Available mode: Standard, Skew]."
     echo "-c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default: 1.5) [range: 1 - 3]."
     echo "-cm, --countMode: Counts to be used for outliers (Default: Gene) [Available mode: Gene, Ship]."
@@ -48,13 +52,13 @@ function print_help() {
     echo "-n, --name: column name of the variable in the metadata file to be used."
     echo "-v, --value: value from the variable to be compare against the rest."
     echo ""
-    echo "Required args in 'Enrichment' mode with Default:"
+    echo "Required args with Default in 'Enrichment' mode:"
     echo "-p, --pValue: p-value to determined if an orthogroup is significantly enriched (Default: 0.05) [range: 0.001 - 0.1]."
     echo ""
     echo "Optional args:"
     echo "-t, --threads: Number of threads (Default: 8)"
     echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ). Not compatible wit '--skip-orthofinder' flag (Default: off)"
-    echo "--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode, rule or percentile of the analysis. 
+    echo "--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode or other value of the analysis. 
                               Not compatible with '--overwrite' flag (Default: off) "
     echo "-help: Display this help message."
 }
@@ -72,7 +76,6 @@ organize_working_directory() {
         exit 1
     fi
 
-    # Create required subdirectories
     mkdir -p ${working_dir}
     mkdir -p ${temp_dir}
 
@@ -104,7 +107,6 @@ organize_working_directory() {
     else
         captain_phylogeny=false
     fi
-    
 
     if [[ "${mode}" = "Enrichment" ]]; then
         if [[ -f "${metadata_dir}/metadata.csv" ]]; then
@@ -228,11 +230,10 @@ organize_information() {
             cp ${orthogroups_dir}/${Orthogroup}.fa ${Overrepresented_dir}/Orthogroups/
         done
     fi
-
 }
 
 # ==============================================================================
-# Variables block
+# VARIABLES AND ARGUMENT PARSING
 # ==============================================================================
 
 # Initialize variables
@@ -305,15 +306,10 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Print help if requested
 if $help_flag; then
     print_help
     exit 0
 fi
-
-# ==============================================================================
-# Script start block
-# ==============================================================================
 
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
@@ -330,34 +326,29 @@ echo "  Number of threads: " "$threads"
 echo ""
 
 # ==============================================================================
-# Check variables block
+# ARGUMENTS AND INPUT CHECK
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 
-# Check for mandatory arguments
+check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
+
 if [[ -z "$Working_directory" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
-fi
-
-# check if working directory exist
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: folder '$Working_directory' does not exist."
-    exit 1
 else
-    # Check if the path is absolute
-    if [[ ! "${Working_directory:0:1}" == "/" ]]; then
-        Working_directory=$(realpath $Working_directory)
+    if [[ ! -d "$Working_directory" ]]; then
+        echo "Error: folder '$Working_directory' does not exist."
+        exit 1
+    else
+        if [[ ! "${Working_directory:0:1}" == "/" ]]; then
+            Working_directory=$(realpath $Working_directory)
+            check_directory_structure "${Working_directory}"
+        fi
     fi
 fi
-check_directory_structure "${Working_directory}"
 
-# Check mode parameter
-check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
-
-# Check parameters in 'Enrichment' mode
 if [[ "$mode" == "Enrichment" ]]; then
     if [[ -z "$column" || -z "$value" ]]; then
         echo "Error: Missing required arguments for 'Enrichment' mode."
@@ -376,7 +367,6 @@ if [[ "$mode" == "Enrichment" ]]; then
         print_help
         exit 1
     fi
-
 
     if [[ ! -f "${Working_directory}/metadata_files/metadata.csv" ]]; then
         echo "Error: metadata file wasn't found in the working folder"
@@ -407,7 +397,6 @@ if [[ "$mode" == "Enrichment" ]]; then
     fi
 fi
 
-# Check parameters in 'Outliers' mode
 if [[ "$mode" == "Outliers" ]]; then
     if [[ "$rule" != "Standard" && "$rule" != "Skew" ]]; then
         echo "Error: '$rule' approximation is not a valid value"
@@ -434,20 +423,15 @@ if [[ "$mode" == "Outliers" ]]; then
     fi
 fi
 
-# Check incompatible flags
 if $overwrite && $skip_orthofinder; then
     echo "Error: '--overwrite' and '--skip-orthofinder' flags are both 'on' and those are incompatible."
     exit 1
 fi
 
-# Check threads
 check_threads "$threads"
 
-# Check for software presence
-check_required_software "$(basename -s .sh "$0" )"
-
 # ==============================================================================
-# Main Block
+# MAIN SCRIPT
 # ==============================================================================
 
 if $overwrite; then

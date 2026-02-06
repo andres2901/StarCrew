@@ -1,16 +1,15 @@
-# StarCREW: Starships CaRgo Exploration Wrapper
+# StarCrew: Starships CaRgo Exploration Wrapper
 
 ## Overview
 
-**StarCREW** is a bash wrapper specifically designed to systematically analyze the cargo genes of Starship elements. The wrapper is composed of six distinct commands and creates a well-organized project directory to facilitate downstream analysis. StarCREW provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this wrapper is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
+**StarCrew** is a bash wrapper specifically designed to systematically analyze the cargo genes of Starship elements. The wrapper is composed of six distinct commands and creates a well-organized project directory to facilitate downstream analysis. StarCrew provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this wrapper is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
 
-In addition to the main commands, StarCREW is distributed with a diverse set of auxiliary scripts. Although these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1) a modified RIP-like signal calculator, 2) filtering genes or isoforms from a GFF file based on intron density, 3) extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) and other specific tasks.
+In addition to the main commands, StarCrew is distributed with a diverse set of auxiliary scripts. Although most of these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1) a modified RIP-like signal calculator, 2) filtering genes or isoforms from a GFF file based on intron density, 3) extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) and other specific tasks.
 
 ## Table of contents
 
 - [Requirements](#Requirements)
     - [System requirements](#System-requirements)
-    - [Software requirements](#Software-requirements)
     - [Database requirements](#Database-requirements)
 - [Installation](#Installation)
 - [Input](#Input)
@@ -25,40 +24,35 @@ In addition to the main commands, StarCREW is distributed with a diverse set of 
     - [OrthogroupsAnnotation](#OrthogroupsAnnotation)
 - [Project directory organization](#Project-directory-organization)
 - [Pipeline modes](#Pipeline-modes)
-- [Citing StarCREW and software called by StarCREW](#Citing-StarCREW-and-software-called-by-StarCREW)
+- [Citing StarCrew and software called by StarCrew](#Citing-StarCrew-and-software-called-by-StarCrew)
 - [License](#License)
 
 ## Requirements
 
 ### System requirements
 
-Waiting for full wrapper development to check the final requirements.
-
-### Software requirements
-
 This wrapper was specifically written for Linux and requires the following software and dependencies to be installed and accessible via the system path. The version numbers provided are those used during testing; for Python and R, these specific versions ensure the successful installation of all required packages, while for OrthoFinder newer versions have deprecated the --matrix argument, which would break the wrapper's workflow. Also, be aware that newer versions of numpy are not compatible with the Orthofinder version use in this wrapper.
 
-- python v3.9 with the following packages: networkx v3.6.1, biopython v1.86, gffutils v0.13, pandas v2.3.3, numpy v2.3.5, scikit-learn v1.8.0.
-- java.
-- hmmer v3.4.
-- seqkit 2.12.0.
+- agat v1.5.1.
 - blast+ v2.17.0.
 - clipkit v2.7.0.
-- iqtree3 3.0.1.
-- gotree v0.5.1.
-- orthofinder v3.1.0.
-- R v4.4.3 with the following packages: ape v5.8.1, reshape2 v1.4.5, viridis v0.6.5, dplyr v1.1.4, gggenomes v1.1.2, scales v1.4.0, dendextend v1.19.1, NbClust v3.0.1, svglite v2.2.2, ggplot2 v3.5.2, ggtree v3.14.0, ggnewscale v0.5.2, syntenet v1.8.0, mrfdepth v1.0.17, optparse v1.7.5, bc3net v1.0.5.
-- metaeuk v7.bba0d80.
-- agat v1.5.1.
-- diamond v2.1.16.
-- macse v2.07.
-- interproscan .
-- hhsuite v3.3.0.
+- diamond v2.1.17.
 - foldseek v10.941cd33.
+- gotree v0.5.1.
+- hhsuite v3.3.0.
+- hmmer v3.4.
+- interproscan.
+- iqtree3 3.0.1.
+- macse v2.07.
+- metaeuk v7.bba0d80.
+- orthofinder v3.1.0.
+- python v3.11.14 with the following packages: biopython v1.86, gffutils v0.13, networkx v3.6.1, numpy v2.3.5, pandas v2.3.3, scikit-learn v1.8.0.
+- R v4.4.3 with the following packages: ape v5.8.1, bc3net v1.0.5, dendextend v1.19.1, dplyr v1.1.4, future v1.68.0, gggenomes v1.1.2, ggnewscale v0.5.2, ggplot2 v3.5.2, ggtree v3.14.0, mrfdepth v1.0.17, NbClust v3.0.1, optparse v1.7.5, reshape2 v1.4.5, scales v1.4.0, svglite v2.2.2, syntenet v1.8.0, viridis v0.6.5.
+- seqkit 2.12.0.
 
 ### Database requirements
 
-The commands related to functional annotation and Transposable element identification require databases that are not distributed under this repositorie and need to be properly dowwnload:
+The command related to functional annotation requires databases that are not distributed under this repository. These must be properly downloaded and configured:
 
 - interproscan related databases.
 - pfamA for hhblits.
@@ -66,20 +60,23 @@ The commands related to functional annotation and Transposable element identific
 
 ## Installation
 
-Before installation, ensure you have `Anaconda3` and `git` installed and accessible in your system path, as they are required for the full wrapper installation. After cloning, execute the `build_StarCREW.sh` script to properly configure a conda environment, and install all necessary software dependencies and databases required by the wrapper's commands, as shown below:
+Before installation, ensure you have `Anaconda3` and `git` installed and accessible in your system path, as they are required for the full wrapper installation and set-up. After cloning, execute the `build_StarCrew.sh` script to properly configure a conda environment, install all necessary software dependencies and download the databases required by the wrapper's commands, as shown below:
 
 ```
 # clone the repository
-git clone https://github.com/andres2901/StarCREW.git
+git clone https://github.com/andres2901/StarCrew.git
 
 # Construct the environment and download require databases
-cd StarCREW/
-bash build_StarCREW.sh # This might take some time
+cd StarCrew/
+bash build_StarCrew.sh # This might take some time
+
+# Check full installation 
+StarCrew -help
 ```
 
 ## Input
 
-StarCREW currently supports two distinct types of input data. Generally, both modes require a minimum of two kind of information: the element nucleotide sequences in fasta format and a gene prediction in GFF3 format.
+StarCrew currently supports two distinct types of input data. Generally, both modes require a minimum of two kind of information: the element nucleotide sequences in fasta format and a gene prediction in GFF3 format.
 
 An optional metadata file can also be supplied, containing as much information as the user requires. However, the user must adhere to the following specifications:
 
@@ -103,9 +100,9 @@ In this scenario, you only require two basic input files:
 
 This input mode is used when you have processed your dataset using the [Starfish toolkit](https://github.com/egluckthaler/starfish) and wish to analyze the obtained elements.
 
-**It is strongly recommended** that you first perform an initial inspection and removal of false positives, as described in the Starfish [step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial).
+It is strongly recommended that you first perform an initial inspection and removal of false positives, as described in the Starfish [step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial).
 
-To use StarCREW, you must have the results from both the `geneFinder` and `elementFinder` modules of Starfish. StarCREW utilizes three resulting Starfish files and one user-constructed file:
+To use StarCrew, you must have the results from both the `geneFinder` and `elementFinder` modules of Starfish. StarCrew utilizes three resulting Starfish files and one user-constructed file:
 
 1.  **Elements File (Multifasta):**
     - This is the `*.elements.fna` file resulting from the `starfish summarize` command.
@@ -120,15 +117,14 @@ To use StarCREW, you must have the results from both the `geneFinder` and `eleme
 3.  **Captain File (Multifasta):**
     - This is the `*_tyr.filt_intersect.fas` file resulting from the `starfish annotate` command.
     - This file contains the putative YR recombinase genes identified by Starfish.
-    - **Note:** While filtering is not strictly required, users working with large datasets can reduce the file to include only Captains of true positive elements to decrease run time.
+    - **Note:** While filtering is not strictly required, users working with large datasets can reduce the file to include only Captains of true positive elements to decrease run time and memory usage.
 
 4.  **Gene Prediction Path File (TSV):**
     - This is a user-constructed TSV file with a two-column structure (similar to the optional Starfish input file): `genome code` and `path to GFF`.
     - **Crucial Points:**
         - The `genome code` must be identical to the code used in the Starfish analysis.
-        - The GFF path must point to the original GFF file, and not the files returned by the `starfish format` or `starfish format-ncbi` commands.
-        - This wrapper requires the gene, mRNA, intron, and CDS information, and needs the original contig `seqID` to be maintained. The files returned by the `starfish format` or `starfish format-ncbi` commands only retain mRNA information and alter the IDs to suit the Starfish workflow.
-    - **Acquisition:** The user can obtain the necessary GFF file using the same command line as detailed in the Starfish step-by-step tutorial:
+        - The GFF path must point to the original GFF file, and not the files returned by the `starfish format` or `starfish format-ncbi` commands. This wrapper requires the gene and CDS information, and needs the original contig `seqID` to be maintained. The files returned by the `starfish format` or `starfish format-ncbi` commands only retain mRNA information and alter the IDs to suit the Starfish workflow.
+    - **Acquisition:** The user can obtain the necessary GFF file using a similar one-line code as detailed in the Starfish [step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial):
 
 ```
 realpath gff3/* | perl -pe 's/^(.+?([^\/]+?).gff3)$/\2\t\1/' > ome2gff.txt
@@ -136,14 +132,14 @@ realpath gff3/* | perl -pe 's/^(.+?([^\/]+?).gff3)$/\2\t\1/' > ome2gff.txt
 
 ## Main commands
 
-The wrapper is composed of seven main commands. Most of these commands are sequential (meaning they must be run in a specific order) while others can be executed independently for specific purposes. The only command that is required for the rest of the workflow and must always be run first is the `StarCREW Initialize` command, which generates the dedicated project directory.
+The wrapper is composed of seven main commands. Most of these commands are sequential (meaning they must be run in a specific order) while others can be executed independently for specific purposes. The only command that is required for the rest of the workflow and must always be run first is the `StarCrew Initialize` command, which generates the dedicated project directory.
 
 ### Initialize
 
 ```
 Script to organize the working directory to run the subsequent commands in the workflow.
 
-Syntax: StarCREW Initialize [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> { -b <file_path> -s <character> -c <file_path> } -M <file_path> --overwrite ]"
+Syntax: StarCrew Initialize [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> { -b <file_path> -s <character> -c <file_path> } -M <file_path> -t <integer> --overwrite ]"
 
 Required args:
 -f, --fasta:  multifasta file wih the elements to study.
@@ -158,14 +154,17 @@ Required args with Default:
 Required args in 'Starfish' mode:
 -g, --gff: 2 column tsv: genome code, path to GFF. The path should be to the original gff files and not the ones formatted to run starfish.
 -b, --boundaries: *.elements.feat file output of 'starfish summary' command.
--s, --separator: character separating genomeID from featureID that was used for Starfish run.
 -c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command.
+
+Required args with Default in 'Starfish' mode:
+-s, --separator: character separating genomeID from featureID that was used for Starfish run (Default = '_').
 
 Required args in 'Simple' mode:
 -g, --gff: Path to the GFF file containing gene predictions with element-relative coordinates for all elements in the fasta file.
 
 Optional args:
 -M, --Metadata: csv file delimited by semicolon with the metadata information (Check wrapper documentation for more information).
+-t, --threads: threads for MetaEuk in 'Starfish' mode (Default: 24)
 --overwrite: Flag to overwrite in case there is already a previous run (Default: off)
 -help: Display this help message.
 ```
@@ -216,7 +215,7 @@ There are three available mode:
 -FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset. WARNING: For big datasets, MACSE could fail without any specific error reported.
 -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
 
-Syntax: StarCREW CaptainIdentification [ -help ] -w <directory_path> [ -m <string> -l <integer> -c <integer> -r <integer> -ms <integer> -t <integer> --overwrite ]
+Syntax: StarCrew CaptainIdentification [ -help ] -w <directory_path> [ -m <string> -l <integer> -c <integer> -r <integer> -ms <integer> -t <integer> --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -247,18 +246,18 @@ The identification of the Captain gene is based on its basic description: a Tyro
     - TYR_RECOMBINASE (PROSITE accession: PS51898 version 3)
     - TYR_RECOMBINASE_FLP (PROSITE accession: PS51899 version 3)
 
-To be considered a "true" Captain, the predicted gene must pass a series of strict filters. This approach differs from the original Starfish methodology, which relies on a single filter (matching the Captain HMM profile). Our increased strictness aims to remove "false positive" or highly "degraded" elements lacking a strong Captain signal. The implemented filters are:
+To be considered a "true" Captain, the predicted gene must pass a series of filters. This approach differs from the original Starfish methodology, which relies on a single filter (matching the Captain HMM profile). Our increased strictness aims to remove "false positive" or "degraded" elements lacking a strong Captain signal. The implemented filters are:
 
 1.  **HMM Profile Count:** Must match a minimum number (defined by the user) of the HMM profiles listed above. In case the threshold is below '3', the command will always have a preference for those genes with higher number of matches.
 2.  **Minimum Length:** The protein must meet a minimum length of amino acids, which is modifiable by the user.
 3.  **Exon Count:** The exon count must be between 2 and 11. This constraint is based on the observation that Captains in the current dataset contain mostly intron-containing gene models. Also, preliminary analysis indicated that gene models with an excessive number of introns often correspond to pseudogenes, where gene predictors introduce many introns to avoid intra-frame stop codons.
-4.  **Genomic Position:** The gene must be located at the beginning of the element in the positive strand (or at the end if the element sequence is in its reverse complement). The acceptable range for this position is defined by the user.
+4.  **Genomic Position:** The gene must be located at the beginning of the element in the positive strand (or at the end if the element sequence is in its reverse complement). The acceptable range for this position ca be modified by the user.
 
 In the scenario where no gene passes the filters to be called a 'Captain' in an element, a pseudogene will be identified if any sequence homology exists based on the CDS sequence of known Captain genes.
 
 **Note 1:** Be aware that this command will always put aside elements that do not have an identifiable Captain gene or pseudogene into a dedicated directory called `Captainless_elements/`, as these elements are not useful for the downstream analysis.
 
-**Note 2:** These filters are still a work in progress as the community continues to gather and document information about the gene model and protein structure of Captains. Currently, available literature lacks comprehensive documentation on this specific gene model.
+**Note 2:** These filters are still a work in progress as the community continues to gather and document information about the gene model and protein structure of Captains. Currently, available literature lacks comprehensive documentation on these specific gene models.
 
 After a successful run, the following files should be found in the main output directory:
 
@@ -283,7 +282,7 @@ It executes six main steps:
 5. Defines initial clusters of elements and performs a spectral clustering process to identify subclusters.
 6. Organizes the final data output for each identified cluster.
 
-Syntax: StarCREW SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -e <float> -n <integer> -s <integer> -th <float> { -fs <integer> -ms <integer> -i <float> -c <float> } -t <integer> --preCluster --captainInfo --overwrite ]
+Syntax: StarCrew SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -e <float> -n <integer> -s <integer> -th <float> { -fs <integer> -ms <integer> -i <float> -c <float> } -t <integer> --preCluster --captainInfo --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -310,10 +309,11 @@ Optional args:
 -help: Display this help message.
 ```
 
-The clustering of elements is based on collinearity regions identified using the [syntenet](https://pubmed.ncbi.nlm.nih.gov/36539202/) pipeline. The user can define two critical parameters for collinearity analysis:
+The clustering of elements is based on collinearity regions identified using the [syntenet](https://pubmed.ncbi.nlm.nih.gov/36539202/) pipeline. The user can define three critical parameters for collinearity analysis:
 
 - **Anchor Points:** Genes that are shared between two elements in the same relative position.
 - **Gaps:** Genes that are not shared in the region but are located between shared anchor genes.
+- **e-value:** e-value threshold to call a collinear region.
 
 For the purpose of clustering, we use two specific collinearity metrics:
 1.  **General Collinearity Percentage (GCP):**
@@ -347,17 +347,17 @@ A preliminary filter is performed by removing any pair with a GCP below 8%, as i
     - Metric System Details:
         - Identify anchor pairs from the collinearity file and defined the expected points as $Anchor\ pairs \times 2$.
         - Select these anchor pairs from each DIAMOND search direction ($x \rightarrow y$ and $y \rightarrow x$). **Note:** Because the MCScanX algorithm does not require hits to be reciprocal to define an anchor point, we search individually for each direction.
-        - Filter hits with a length $< 100 \text{aa}$ and identity percentage $< 60$%.
-        - Each remaining hit contributes **1 point**. Reciprocal hits for a single anchor pair thus return **2 points**.
-        - Bonus Points: Hits with identity percentage $\ge 95$% receive $0.1$ extra point per $200 \text{aa}$ of alignment length. Example: A hit with 98% identity and $350 \text{aa}$ alignment length gives $0.175$ extra points.
-        - **Acceptance Criteria:** A pair is accepted if the obtained points are equal to or higher than the number of anchor points defined by the user. If the user-defined anchor point parameter is less than 6, the threshold will be **6** to prevent 'false positive' results from using a low metric threshold.
+        - Filter out hits with a length $< 100 \text{aa}$ and identity percentage $< 60$%.
+        - Each remaining hit contributes 1 point. Reciprocal hits for a single anchor pair thus return 2 points.
+        - Bonus Points: Hits with identity percentage $\ge 95$% receive $0.1$ extra point per $200 \text{aa}$ of alignment length. **Example:** A hit with 98% identity and $350 \text{aa}$ alignment length gives $0.175$ extra points.
+        - **Acceptance Criteria:** A pair is accepted if the obtained points are equal to or higher than the number of anchor points defined by the user. If the user-defined anchor point parameter is less than 6, the threshold will be 6 to prevent 'false positive' results from using a low metric threshold.
         - **GCP/ECP Update:** A ratio is defined as $\frac{Obtain\_points}{Expected\_points}$. The GCP and ECP of the pair are then updated by multiplying them by this ratio. **Note:** If a pair's ratio is higher than 1 (due to bonus points), the ratio is capped at 1 to prevent GCP or ECP from exceeding 100%.
 
 Once the final set of filtered pairs is obtained, a graph-based clustering process is performed:
 
 1.  **Graph Creation:** A weighted undirected graph is created using the GCP as the edge weight. Elements without any connection are excluded from the graph.
 2.  **Cluster Definition:** A cluster is defined as a set of connected elements. **Note:** Due to the nature of connected components, not all elements inside a cluster may have a direct connection between them, and therefore might not share any sequence or cargo similarity.
-3.  **Subclustering:** For further resolution, an initial step of modularity  spectral clustering is performed iteratively on clusters that meet a minimum size defined by the user. This process follows:
+3.  **Subclustering:** For further resolution, an initial step of  spectral clustering is performed iteratively on clusters that meet a minimum size defined by the user. This process follows:
     - **3.1. Behavior check:** The Louvain method is performed to identify the inherent cluster behavior. If cluster behavior is detected, the algorithm proceeds with an initial $k$ value (the desired number of clusters) calculated as: $k = \max(2, \text{Clusters}_{\text{louvain}} - 2)$
     - **3.2. Clustering:** Perform spectral clustering using the current $k$ value.
     - **3.3. Filtering:** Subclusters are filtered based on two criteria:
@@ -374,7 +374,7 @@ After a successful run of the clustering command, the following files and direct
 - **main_cluster.txt**: MCL-formatted group file detailing the main clusters and the elements belonging to each one.
 - **sub_clusters.txt**: MCL-formatted group file detailing the subclusters and the elements belonging to each one.
 - **network_edges.txt**: A table containing the edge information necessary for visualization in Cytoscape. The weight column corresponds to the GCP (General Collinearity Percentage) value of the pair.
-- **node_attributes.txt**: A table containing the node (element) attributes required for visualization in Cytoscape. If metadata was provided during `StarCREW Initialize`, that information will be appended to this file.
+- **node_attributes.txt**: A table containing the node (element) attributes required for visualization in Cytoscape. If metadata was provided during `StarCrew Initialize`, that information will be appended to this file.
 
 ### ClusterCharacterization
 
@@ -394,7 +394,7 @@ This script perform eight steps per cluster:
 7. If subclusters are present it try to identify putative cargo movement events.
 8. Determine if there are discordances at 'Clade' level between cargo hierarchical clustering and captain phylogenetic tree.
 
-Syntax: StarCREW ClusterCharacterization [ -help ] -w <directory_path> [ -l <integer> -i <float> -t <integer> --overwrite ]
+Syntax: StarCrew ClusterCharacterization [ -help ] -w <directory_path> [ -l <integer> -i <float> -t <integer> --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -416,9 +416,9 @@ The main goal of this command is to identify two relevant groups of genes within
 - **Core Genes:**
     - We use a loose definition of "core gene" in this context. While core genes are generally defined as genes present in all genomes of a dataset, or in a less strict definition (often called soft core) as genes present in at least 95%-98% of genomes, this strict threshold is inappropriate here. This is due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this wrapper.
     - Therefore, "core genes" here are defined as those present in at least 80% of the elements in a cluster or subcluster.
-    - Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster/subcluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in the element over evolutionary time.
+    - Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster/subcluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in the element over time.
 - **Movement Genes:**
-    - This set of genes is identified based on specific presence/absence patterns that suggest their introduction into a different element was caused by horizontal gene movement from one element to another.
+    - This set of genes is identified based on presence/absence patterns that suggest their introduction into a different element was caused by horizontal gene movement from one element to another.
     - This analysis is performed only between subclusters (as defined by the [SyntenyClustering](#SyntenyClustering) command), meaning comparisons are not conducted on a pairwise, element-by-element basis.
 
 Finally, the command attempts to determine discordances between the Captain phylogenetic tree and the cargo hierarchical clustering. The comparison is deliberately made at the 'clade' level (instead of comparing individual elements) due to the inherent uncertainty of bifurcations and polytomies in both the Captain phylogenetic tree and the cargo hierarchical tree. This process occurs as follows:
@@ -465,7 +465,7 @@ This script perform three main steps:
     3.1.2. Skew: Identify orthogroups as outliers using as fence the following value: Q3 + n*e^3MC * IQR.
   3.2. Enrichment: Identify orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test.
 
-Syntax: StarClust OrthogroupsOverrepresentation [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> -cm <string> | -n <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]
+Syntax: StarCrew OrthogroupsOverrepresentation [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> -cm <string> | -n <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
@@ -473,26 +473,26 @@ Required args:
 Required args with Default:
 -m, --mode: Define the mode that will be used to flag orthogroups (Default: Outliers) [Available mode: Outliers, Enrichment].
 
-Required args in 'Outliers' mode with Default:
--a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default = Standard) [Available mode: Standard, Skew].
--c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default = 1.5) [range: 1 - 3].
+Required args with Default in 'Outliers' mode:
+-a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default: Standard) [Available mode: Standard, Skew].
+-c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default: 1.5) [range: 1 - 3].
 -cm, --countMode: Counts to be used for outliers (Default: Gene) [Available mode: Gene, Ship].
 
 Required args in 'Enrichment' mode:
 -n, --name: column name of the variable in the metadata file to be used.
 -v, --value: value from the variable to be compare against the rest.
 
-Required args in 'Enrichment' mode with Default:
+Required args with Default in 'Enrichment' mode:
 -p, --pValue: p-value to determined if an orthogroup is significantly enriched (Default: 0.05) [range: 0.001 - 0.1].
 
 Optional args:
 -t, --threads: Number of threads (Default: 8)
 --overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsOverrepresentation. Not compatible wit '--skip-orthofinder' flag (Default: off)
---skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode, rule or percentile of the analysis. Not compatible with '--overwrite' flag (Default: off)
+--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode or other value of the analysis. Not compatible with '--overwrite' flag (Default: off)
 -help: Display this help message.
 ```
 
-This command is designed to identify orthogroups that migth be enrich in a given dataset. Before running this command, the command `StarCREW CaptainIdentification` needs to be run. All othogroups (including singletons) will be used to perform the statistical analysis base on the mode selected by the user:
+This command is designed to identify orthogroups that migth be enrich in a given dataset. All othogroups will be used to perform the statistical analysis base on the mode selected by the user:
 
 - **Outliers:** In this case a general comparison of orthogroup count will be taken. In general, the idea is to identified outliers using two different approximations of the Interquartile range (IQR) fence. The IQR is calculated as follows: $\text{IQR} = \text{Q3} - \text{Q1}$, where $Q1$ and Q3 represent the first and third quartile of the data, respectively. The two available approximations are:
     - **Standard:** In this case the standard upper IQR fence is used to define outliers. This fence is calculated as: $\text{Fence} = \text{Q3} + n * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation.
@@ -525,17 +525,17 @@ This script perform three steps:
  3.1 Internal summary: For each Orthogroups summarize the results per protein in a csv
  3.2 General summary: Return a summary for the Orthogroup under the assumption that all proteins in each Orthogroups have the same function. It return only those 'chracteristics' that are shared for at least 50% of the proteins in the Orthogroup.
 
-Syntax: StarCREW OrthogroupsAnnotation [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]
+Syntax: StarCrew OrthogroupsAnnotation [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]
 
 Required args:
 -w, --workingDirectory: Specify the working directory where all data are stored.
 
 Required args with Default:
--m, --mode: Define the orthogroups to be analyzed (Default = Core) [Available mode: MoveAssociated, Core, All, Overrepresented].
--f, --foldseekdb: Name of the Foldseek database to use (Default = afdb_swissprot) [Available: pdb, afdb_swissprot].
--t, --threads: Number of threads for all analysis (Default: 8).
+-m, --mode: Define the orthogroups to be analyzed (Default: Core) [Available mode: MoveAssociated, Core, All, Overrepresented].
+-f, --foldseekdb: Name of the Foldseek database to use (Default: afdb_swissprot) [Available databases: pdb, afdb_swissprot].
 
 Optional args:
+-t, --threads: Number of threads for all analysis (Default: 8).
 --overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsAnnotation (Default: off).
 -help: Display this help message.
 ```
@@ -564,7 +564,7 @@ After a successful run of the annotation command, the following files and direct
 
 ## Project directory organization
 
-The project directory is created to allow all commands to run independently without creating file conflicts and to maintain the results organized. When you run the `StarCREW Initialize` command, the directory structure will look like this:
+The project directory is created to allow all commands to run independently without creating file conflicts and to maintain the results organized. When you run the `StarCrew Initialize` command, the directory structure will look like this:
 
 ```
 WorkingDirectory/
@@ -592,19 +592,19 @@ The three main directories are organized as follows:
     - **Nucleotide/**: Fasta file containing the nucleotide sequence of the element.
     - **Protein/**: Multifasta files containing the protein sequence of each gene per element.
 - **metadata\_files/**: This directory stores metadata information. Two files are found here:
-    - `metadata.csv`: This file is only present if the user provided a metadata file to `StarCREW Initialize`. It contains the metadata information for the elements that passed the filters, including the element's new header/ID.
+    - `metadata.csv`: This file is only present if the user provided a metadata file to `StarCrew Initialize`. It contains the metadata information for the elements that passed the filters, including the element's new header/ID.
     - `sequence_head.csv`: An association file that maps the original element header/ID to the updated Project ID for all retained elements.
 - **Workspace/**: This directory is initially empty. Each command executed will create an individual directory inside `Workspace/` to store the intermediate files necessary to obtain the final results.
 
 In addition to the three main directories, five files can be found in the root project directory:
 
-- `Coordinate_file.txt`: Contains the coordinates of elements extracted from the `*.elements.feat` file. **Note:** Only available when running `StarCREW Initialize` in 'Starfish' mode.
+- `Coordinate_file.txt`: Contains the coordinates of elements extracted from the `*.elements.feat` file. **Note:** Only available when running `StarCrew Initialize` in 'Starfish' mode.
 - `Elements_filterGC.txt`: A list of elements that were filtered out based on the GC content threshold. **Note:** Only available when using the `-gc` argument and filtering occurred.
 - `Elements_filterRIPlike.txt`: A list of elements that were filtered out based on the RIP-like signal threshold. **Note:** Only available when using the `-r` argument and filtering occurred.
 - `Gene_stats.txt`: A file containing statistics of the gene prediction within the elements. It stores three main statistics: gene number, average gene length (nucleotide), and average intergenic length.
 - `Sequences.fa`: A multifasta file of the elements with the updated headers.
 
-After running each command, a new directory containing the main output information will appear in the project root directory, named after the specific command, as detailed in the documentation for that command. The only exception to this naming is the `StarCREW SyntenyClustering` command, which creates a dedicated `Cluster/` directory.
+After running each command, a new directory containing the main output information will appear in the project root directory, named after the specific command, as detailed in the documentation for that command. The only exception to this naming is the `StarCrew SyntenyClustering` command, which creates a dedicated `Cluster/` directory.
 
 ## Pipeline modes
 
@@ -614,13 +614,13 @@ As previously mentioned, this wrapper is composed of a series of sequential comm
 
 In the workflow diagram, the blue stars indicate the specific commands where data filtering is performed: `Initialize` and `CaptainIdentification`. Also, the `CaptainIdentification` is the only command that must be used twice during the cargo gene dynamic analysis, where the first time is using the 'AllID' mode and the second time the 'Cluster' mode. Finally, both analysis can be performed in parallel within a single project directory without any interference between them.
 
-## Citing StarCREW and software called by StarCREW
+## Citing StarCrew and software called by StarCrew
 
-Please cite our work if you use **StarCREW** in your research:
+Please cite our work if you use **StarCrew** in your research:
 
 < Here will go the citation to the paper when available >
 
-StarCREW is a wrapper that calls different bioinformatic software, for that reason any publication of results obtained by StarCREW required the citation of the tools that were called.
+StarCrew is a wrapper that calls different bioinformatic software, for that reason any publication of results obtained by StarCrew required the citation of the tools that were called.
 
 | Command | mode | Dependency | Citation |
 |:---:|:---:|:---| :---|
@@ -631,10 +631,6 @@ StarCREW is a wrapper that calls different bioinformatic software, for that reas
 |`CaptainIdentification`| `AllID` | `hmmscan`, `seqkit`, `blast+`  | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`CaptainIdentification`| `Cluster`, `FullAll`| `hmmscan`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`ClusterCharacterization`| - | `orthofinder`, `DIAMOND`, `blast+`, `ape`, `ggtree`, `gggenomes` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Paradis et al. 2004](https://pubmed.ncbi.nlm.nih.gov/14734327/), [Yu et al. 2016](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12628), [Hackl et al. 2024](https://arxiv.org/abs/2411.13556) |
-|`OrthogroupsOverrepresented`| `Outliers` | `orthofinder`| [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Heinzinger et al 2024](https://pubmed.ncbi.nlm.nih.gov/39633723/), [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |
+|`OrthogroupsOverrepresented`| `Outliers` | `orthofinder`| [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1) |
 |`OrthogroupsOverrepresented`| `enrichment` | `orthofinder`, `bc3net` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [de Matos SImoes & Emmert-Streib 2012](https://pubmed.ncbi.nlm.nih.gov/22479422/) |
 |`OrthogroupsAnnotation`| - | `foldseek`, `ProstT5`, `mafft`, `hhblits`, `interproscan`| [van Kempen et al 2024](https://pubmed.ncbi.nlm.nih.gov/37156916/), [Heinzinger et al 2024](https://pubmed.ncbi.nlm.nih.gov/39633723/), [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |
-
-## License
-
-Waiting for License decision.

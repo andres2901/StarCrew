@@ -51,14 +51,14 @@ overwrite() {
             local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
             local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
             local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-            local exon_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Exon" 2>/dev/null)
+            local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
 
-            ls ${working_dir}/Data/Captainless_elements/*.gff | xargs -n 1 basename -s .fa | while read line
+            ls ${working_dir}/Data/Captainless_elements/*.gff | xargs -n 1 basename -s .gff | while read line
             do
                 mv ${data_dir}/Captainless_elements/${line}.gff ${gff_dir}/
                 mv ${data_dir}/Captainless_elements/${line}_protein.fa ${protein_dir}/${line}.fa
                 mv ${data_dir}/Captainless_elements/${line}_nucleotide.fa ${nucleotide_dir}/${line}.fa
-                mv ${data_dir}/Captainless_elements/${line}_exon.fa ${exon_dir}/${line}.fa
+                mv ${data_dir}/Captainless_elements/${line}_CDS.fa ${CDS_dir}/${line}.fa
             done
             rm -r ${working_dir}/Data/Captainless_elements/
         fi

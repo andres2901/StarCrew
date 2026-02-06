@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Software check block
+# SOFTWARE CHECK AND ENVIRONMENT SETUP
 # ==============================================================================
 
+# Define library and auxiliary paths
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
@@ -13,10 +14,14 @@ if [[ ! -d "$auxiliary_path" ]]; then
     exit 1
 else
     auxiliary_path=$(realpath $auxiliary_path)
+    check_auxiliary_scripts "${auxiliary_path}" "$(basename -s .sh "$0" )"
 fi
 
+# Validate required software for the current script
+check_required_software "$(basename -s .sh "$0" )"
+
 # ==============================================================================
-# Function block
+# FUNCTION DEFINITIONS
 # ==============================================================================
 
 # Function to print help message
@@ -35,7 +40,7 @@ function print_help() {
    6. Organizes the final data output for each identified cluster.
    "
    echo ""
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -e <float> -n <integer> -s <integer> -th <float> { -fs <integer> -ms <integer> -i <float> -c <float> } -t <integer> --preCluster --captainInfo --overwrite ]"
+   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -e <float> -n <integer> -s <integer> -th <float> { -fs <integer> -ms <integer> -i <float> -c <float> } -t <integer> --preCluster --captainInfo --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -158,10 +163,10 @@ process_diamond() {
         local outfile="${results_temp_dir}/${species_name}.tsv"
         
         # Perform the blastp search using the full query path
-        diamond blastp -q "$query" -d "$db" -o "$outfile" --fast -k0 --max-hsps 1 --evalue 1e-5 --matrix PAM30 --query-cover 90 -p "$threads" --quiet
+        diamond blastp -q "$query" -d "$db" -o "$outfile" --fast -k0 --max-hsps 1 --evalue 1e-5 --matrix PAM30 --query-cover 80 -p "$threads" --quiet
         
         # The rest of the loop is adjusted to use the new species_name variable
-        awk '{print $2}' "$outfile" | awk -F '_' '{print $1}' | sed 's/[^[:print:]]//g' | sort | uniq > "${temp_dir}hit"
+        awk '{print $2}' "$outfile" | awk -F '_' '{print $2}' | awk -F '.' '{print $1}' | sed 's/[^[:print:]]//g' | sort | uniq > "${temp_dir}hit"
         
         # Grep the hits against the list of all species to process each pair
         grep -w -f "${temp_dir}hit" "${temp_dir}all" | while read -r line
@@ -169,11 +174,11 @@ process_diamond() {
             local TARGET="$line"
             if [[ "$species_name" != "$TARGET" ]]
             then
-                grep "${TARGET}_" "$outfile" > "${diamond_results_dir}/${species_name}_${TARGET}.tsv"
+                grep "_${TARGET}\." "$outfile" > "${diamond_results_dir}/${species_name}_${TARGET}.tsv"
                 echo -e "${species_name}""\t""${TARGET}" >> "${temp_dir}/Diamond_files.txt"
             else
                 # Special case for self-comparison
-                grep ".*_${line}\.[0-9]*.*_${line}\.[0-9]*" "$outfile" > "${diamond_results_dir}/${species_name}_${TARGET}.tsv"
+                grep "^.*_${TARGET}\..*_${TARGET}\." "$outfile" > "${diamond_results_dir}/${species_name}_${TARGET}.tsv"
             fi
         done
 
@@ -306,7 +311,6 @@ blastn_all_vs_all() {
     done
 
     echo ""
-    echo "   [$(date "+%Y-%m-%d %H:%M:%S")] BLASTN analysis finished. Results are in '$output_file'."
     
     # The trap command will automatically remove temporary files upon function exit.
     rm -f '$temp_fasta' '${temp_db}.*' '$temp_exclude_1' '$temp_exclude_2'
@@ -388,7 +392,6 @@ process_collinearity() {
 
     # Obtain the percentage returned by the software
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Extracting software-reported general percentages..."
-    # Here is an error
     find "${collinearity_path}" -name '*.collinearity' -exec grep -w -E -o "Percentage: [0-9]*\.[0-9]*" {} + > "${temp_prefix}_raw_percentage_general.txt"
         awk -F '/' '{print $NF}' "${temp_prefix}_raw_percentage_general.txt" | sed -e 's/ //g; s/.collinearity//g; s/:/\t/g; s/_/\t/g' > "${temp_prefix}_percentage_general.txt"
 
@@ -550,7 +553,6 @@ process_cluster_file() {
 
     local cluster_path="${cluster_dir}/main_clusters.txt"
 
-    # --- Error Handling ---
     if [[ ! -f "$cluster_path" ]]; then
         echo "Error: File '$cluster_path' not found." >&2
         return 1
@@ -599,15 +601,15 @@ process_cluster_file() {
 
             if $captainInfo; then
                 if [[ ! -z "${CDS_file}" ]]; then
-                    local CDS_value=$(grep "${value}\." "${CDS_file}" | awk -F '>' '{print $2}')
+                    local CDS_value=$(grep "${value}\." "${CDS_file}" < /dev/null | awk -F '>' '{print $2}')
                     if [[ $CDS_value != "" ]]; then
-                        seqkit grep --quiet -p $CDS_value ${cluster_dir}/${cluster_id}/Data/CDS/${value}.fa >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_CDS.fa
-                        grep "^${value}\." ${ID_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/CaptainsID.txt
+                        seqkit grep --quiet -p $CDS_value ${cluster_dir}/${cluster_id}/Data/CDS/${value}.fa >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_CDS.fa < /dev/null
+                        grep "^${value}\." ${ID_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/CaptainsID.txt < /dev/null
                     else
-                        seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_pseudo.fa
+                        seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_pseudo.fa < /dev/null
                     fi
                 else
-                    seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_pseudo.fa
+                    seqkit grep --quiet -p $value ${Pseudo_file} >> ${cluster_dir}/${cluster_id}/CaptainIdentification/Captains_pseudo.fa < /dev/null
                 fi
             fi  
         done
@@ -622,9 +624,8 @@ process_cluster_file() {
 }
 
 # ==============================================================================
-# Variables block
+# VARIABLES AND ARGUMENT PARSING
 # ==============================================================================
-
 
 # Initialize variables
 Working_directory=""
@@ -727,10 +728,6 @@ if $help_flag; then
     exit 0
 fi
 
-# ==============================================================================
-# Script start block
-# ==============================================================================
-
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
 echo "  Mode: " "$mode"
@@ -747,7 +744,7 @@ echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
-# Check variables block
+# ARGUMENTS AND INPUT CHECK
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
@@ -768,18 +765,8 @@ else
 fi
 check_directory_structure "${Working_directory}"
 
-if $overwrite; then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-    overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
-fi
-
-# Check if mode parameter is correct
 check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
 
-# Check for auxiliary scripts
-check_auxiliary_scripts "$auxiliary_path" "$(basename -s .sh "$0" )"
-
-# Check collinear regions arguments
 if [[ "$anchorPoints" =~ ^[0-9]+$ ]]; then
     if (( anchorPoints < 3 || anchorPoints > 25 )); then
         echo "Error: '$anchorPoints' anchor points is not an accepted value."
@@ -816,7 +803,6 @@ else
     exit 1
 fi
 
-# Check parameters for subclustering
 if [[ ! "$minNodes" =~ ^[0-9]+$ ]]; then
     echo "Error: '$minNodes' is not a positive integer."
     print_help
@@ -841,7 +827,6 @@ else
     exit 1
 fi
 
-# Check parameters for Blastn filtering
 if [[ $mode == "FilterBlast" ]]; then
     if [[ "$fragment_size" =~ ^[0-9]+$ ]]; then
         if (( $fragment_size < 1000 || $fragment_size > 5000 )); then
@@ -894,22 +879,19 @@ if [[ $mode == "FilterBlast" ]]; then
     fi
 fi
 
-# Check thread parameter
 check_threads "$threads"
 
-# Check captain parameter
 if $captainInfo; then
-    # Check that there's the right information
     if [[ ! -d "${Working_directory}/CaptainIdentification/" ]]; then
         echo "There's no Captain information folder in '${Working_directory}'."
-        echo "Proceeding to run the full script."
+        echo "Proceeding to run the script without the Captain Information."
         captainInfo=false
     else
         Captain_dir=$(realpath "${Working_directory}/CaptainIdentification/")
         Captain_dir_file_number=$(ls ${Captain_dir}/Captain* | wc -l)
         if [[  $Captain_dir_file_number -eq "0" ]]; then
             echo "Error: '${Captain_dir}' folder is empty."
-            echo "Proceeding to run the full script."
+            echo "Proceeding to run the script without the Captain Information.."
             captainInfo=false
         else
             ls ${Captain_dir}/Captain*.fa | xargs -n 1 basename -s .fa | while read line
@@ -920,12 +902,14 @@ if $captainInfo; then
     fi
 fi
 
-# Check for required software
-check_required_software "$(basename -s .sh "$0" )"
+# ==============================================================================
+# MAIN SCRIPT
+# ==============================================================================
 
-# ==============================================================================
-# Main Block
-# ==============================================================================
+if $overwrite; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
+    overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
+fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
 organize_working_directory "${Working_directory}"

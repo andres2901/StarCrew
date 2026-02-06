@@ -1,9 +1,28 @@
+#!/usr/bin/env python3
+"""
+GFF Intron Density Filter.
+
+This module filters genes in GFF files by analyzing the relationship 
+between gene length and intron counts. It extracts gene IDs that fall
+below specified thresholds for intron density (introns/kb) and total 
+intron count.
+"""
+
 import argparse
 import sys
 from collections import defaultdict
 
+
 def parse_attributes(attributes_str):
-    """Parses the key-value pairs from the GFF attributes string."""
+    """
+    Parse the key-value pairs from the GFF attributes column (column 9).
+
+    Args:
+        attributes_str (str): The semicolon-separated attributes string.
+
+    Returns:
+        dict: A dictionary of attribute keys and values.
+    """
     attributes = {}
     if attributes_str:
         for part in attributes_str.split(';'):
@@ -12,113 +31,110 @@ def parse_attributes(attributes_str):
                 attributes[key.strip()] = value.strip()
     return attributes
 
-def filter_and_extract_gene_ids(input_file, output_file, max_intron_density, max_introns_per_gene):
-    """Filters a GFF file based on a gene's intron density and total intron count."""
+
+def filter_and_extract_gene_ids(input_file, output_file, max_density, max_count):
+    """
+    Filter a GFF file based on intron density and total count.
+
+    Args:
+        input_file (str): Path to input GFF.
+        output_file (str): Path for the resulting list of Gene IDs.
+        max_density (float): Max introns allowed per 1000 bp.
+        max_count (int): Max total introns allowed per gene.
+    """
     gene_lengths = {}
     mrna_to_gene_map = {}
     intron_counts = defaultdict(int)
 
-    print(f"Parsing GFF file: '{input_file}' in pass 1...")
     # PASS 1: Collect gene lengths and map mRNA to gene IDs
+    print(f"Parsing GFF: '{input_file}' (Pass 1/2)...")
     try:
         with open(input_file, 'r') as infile:
             for line in infile:
-                line = line.strip()
-                if not line or line.startswith('#'):
+                if not line.strip() or line.startswith('#'):
                     continue
-                
+
                 parts = line.split('\t')
-                if len(parts) < 8:
+                if len(parts) < 9:
                     continue
-                
+
                 feature_type = parts[2]
-                attributes = parse_attributes(parts[8])
-                
+                attrs = parse_attributes(parts[8])
+
                 if feature_type == 'gene':
-                    gene_id = attributes.get('ID')
-                    start = int(parts[3])
-                    end = int(parts[4])
+                    gene_id = attrs.get('ID')
                     if gene_id:
-                        gene_lengths[gene_id] = end - start + 1
+                        # end - start + 1
+                        gene_lengths[gene_id] = int(parts[4]) - int(parts[3]) + 1
                 elif feature_type in ['mRNA', 'transcript']:
-                    mrna_id = attributes.get('ID')
-                    parent_id = attributes.get('Parent')
+                    mrna_id = attrs.get('ID')
+                    parent_id = attrs.get('Parent')
                     if mrna_id and parent_id:
                         mrna_to_gene_map[mrna_id] = parent_id
     except FileNotFoundError:
-        print(f"Error: Input file '{input_file}' not found.", file=sys.stderr)
-        return
+        sys.exit(f"Error: Input file '{input_file}' not found.")
 
-    print("Pass 1 complete. Analyzing intron counts in pass 2...")
+    # PASS 2: Collect intron counts linked to genes
+    print("Analyzing introns (Pass 2/2)...")
+    with open(input_file, 'r') as infile:
+        for line in infile:
+            if not line.strip() or line.startswith('#'):
+                continue
 
-    # PASS 2: Collect intron counts and link to genes using the map
-    try:
-        with open(input_file, 'r') as infile:
-            for line in infile:
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                
-                parts = line.split('\t')
-                if len(parts) < 8:
-                    continue
-                
-                feature_type = parts[2]
-                attributes = parse_attributes(parts[8])
-                
-                if feature_type == 'intron':
-                    parent_id = attributes.get('Parent')
-                    if parent_id and parent_id in mrna_to_gene_map:
-                        gene_id = mrna_to_gene_map[parent_id]
-                        intron_counts[gene_id] += 1
-    except FileNotFoundError:
-        print(f"Error: Input file '{input_file}' not found.", file=sys.stderr)
-        return
+            parts = line.split('\t')
+            if len(parts) < 9:
+                continue
 
-    print("Pass 2 complete. Applying filter based on intron density and count...")
-    
-    passing_gene_ids = set()
-    total_genes = 0
-    passed_filter_count = 0
-    
+            if parts[2] == 'intron':
+                attrs = parse_attributes(parts[8])
+                parent_id = attrs.get('Parent')
+                if parent_id in mrna_to_gene_map:
+                    gene_id = mrna_to_gene_map[parent_id]
+                    intron_counts[gene_id] += 1
+
+    # Apply Filters
+    print("Applying filters...")
+    passing_gene_ids = []
     for gene_id, length in gene_lengths.items():
-        total_genes += 1
-        
         if length == 0:
-            print(f"Warning: Gene '{gene_id}' has a length of 0. Skipping density calculation.")
             continue
         
-        # Calculate intron density
-        intron_density = (intron_counts[gene_id] / length) * 1000
+        # Calculation: (Count / Length) * 1000
+        density = (intron_counts[gene_id] / length) * 1000
         
-        # Check against both filters
-        passes_density_filter = intron_density <= max_intron_density
-        passes_count_filter = intron_counts[gene_id] <= max_introns_per_gene
-        
-        if passes_density_filter and passes_count_filter:
-            passing_gene_ids.add(gene_id)
-            passed_filter_count += 1
-    
-    print(f"Filtering complete. Total genes analyzed: {total_genes}")
-    print(f"Genes passed filter: {passed_filter_count}")
-    print(f"Writing unique gene IDs to output file: '{output_file}'...")
+        if density <= max_density and intron_counts[gene_id] <= max_count:
+            passing_gene_ids.append(gene_id)
+
+    # Output Results
+    print(f"Total genes analyzed: {len(gene_lengths)}")
+    print(f"Genes passed filter: {len(passing_gene_ids)}")
     
     try:
         with open(output_file, 'w') as outfile:
-            for gene_id in sorted(list(passing_gene_ids)):
-                outfile.write(gene_id + '\n')
-        print("Done.")
+            for gene_id in sorted(passing_gene_ids):
+                outfile.write(f"{gene_id}\n")
+        print(f"Unique IDs written to '{output_file}'. Done.")
     except Exception as e:
-        print(f"Error: Could not write to output file '{output_file}'. Reason: {e}", file=sys.stderr)
+        sys.exit(f"Error writing to output: {e}")
+
+
+def main():
+    """CLI entry point for the GFF filter script."""
+    parser = argparse.ArgumentParser(
+        description="Filter GFF files by gene intron density and count."
+    )
+    parser.add_argument('-i', '--input', required=True, 
+                        help="Path to the input GFF file.")
+    parser.add_argument('-o', '--output', required=True, 
+                        help="Path to the output text file.")
+    parser.add_argument('-d', '--density', type=float, default=6.0, 
+                        help="Max introns per 1000 bp (default: 6.0).")
+    parser.add_argument('-m', '--max-introns', type=int, default=30, 
+                        help="Max total introns per gene (default: 30).")
+
+    args = parser.parse_args()
+    filter_and_extract_gene_ids(args.input, args.output, args.density, args.max_introns)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Filter GFF files based on a gene's intron density and total intron count.")
-    parser.add_argument('-i', '--input', type=str, required=True, help="Path to the input GFF file.")
-    parser.add_argument('-o', '--output', type=str, required=True, help="Path to the output text file.")
-    parser.add_argument('-d', '--density', type=float, default=6.0, help="The maximum number of introns per 1000 bp allowed. (default: 6.0).")
-    parser.add_argument('-m', '--max-introns', type=int, default=30, help="The maximum total number of introns per gene. (default: 30).")
- 
-    args = parser.parse_args()
-    
-    filter_and_extract_gene_ids(args.input, args.output, args.density, args.max_introns)
+    main()

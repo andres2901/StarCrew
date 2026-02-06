@@ -2,7 +2,7 @@
 
 # Function to display the main help message
 show_main_help() {
-  echo "Usage: $0 <COMMAND> [options]"
+  echo "Usage: $(basename "$0" ) <COMMAND> [options]"
   echo
   echo "Available commands:"
   echo "  Initialize                    - Gathers the input data and organize the working directory to run this tool."
@@ -12,13 +12,13 @@ show_main_help() {
   echo "  OrthogroupsOverrepresentation - Identify orthogroups that are overrepresented in the dataset."
   echo "  OrthogroupsAnnotation         - Performs functional annotation of orthogroups."
   echo
-  echo "Use '$0 <command> -help' for help on a specific command."
+  echo "Use $(basename "$0" ) <command> -help' for help on a specific command."
 }
 
 COMMAND="$1"
 shift
 
-# Check if no arguments were provided or if --help was requested
+# Check if no arguments were provided or if help was requested
 if [ -z "$COMMAND" ] || [ "$COMMAND" == "-help" ]; then
   show_main_help
   exit 0
@@ -28,17 +28,16 @@ fi
 COMMANDS_DIR="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../main/"
 COMMAND_SCRIPT="$COMMANDS_DIR/$COMMAND.sh"
 
-# Check if the command script exists and is executable
+# Check if the command script exists
 if [ ! -x "$COMMAND_SCRIPT" ]; then
   echo "Error: Unknown command '$COMMAND'."
   show_main_help
   exit 1
 fi
 
-# Define the directory where the function libraries are located
+# Check that the libraries are there
 LIB_DIR="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/"
 
-# Check that the libraries are there
 if [[ ! -d "$LIB_DIR" ]]; then
     echo "Error: folder '$LIB_DIR' does not exist."
     exit 1

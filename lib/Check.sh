@@ -18,11 +18,9 @@ check_main_directory(){
         echo "Error: folder '${Main_directory}/bin' does not exist."
         exit 1
     else
-        if [[ ! -f "${Main_directory}/bin/StarClust" ]]; then
-            echo "Error: StarClust script was not found in '${Main_directory}/bin'."
+        if [[ ! -f "${Main_directory}/bin/StarCrew" ]]; then
+            echo "Error: StarCrew script was not found in '${Main_directory}/bin'."
             exit 1
-        else
-            bash ${Main_directory}/bin/StarClust -help
         fi
     fi
 
@@ -30,10 +28,13 @@ check_main_directory(){
         echo "Error: folder '${Main_directory}/main' does not exist."
         exit 1
     else
-        if [[ ! -f "${Main_directory}/main/CaptainIdentification.sh" || ! -f "${Main_directory}/main/ClusterCharacterization.sh" || ! -f "${Main_directory}/main/Initialize.sh" || ! -f "${Main_directory}/main/OrthogroupsAnnotation.sh" || ! -f "${Main_directory}/main/SyntenyClustering.sh" || ! -f "${Main_directory}/main/TEPrediction.sh" ]]; then
-            echo "Error: There's a missing Main script in '${Main_directory}/main' folder."
-            exit 1
-        fi
+        scripts_file=("CaptainIdentification" "ClusterCharacterization" "Initialize" "OrthogroupsAnnotation" "OrthogroupsOverrepresentation" "SyntenyClustering")
+        for file in "${scripts_file[@]}"; do
+            if [[ ! -f "${Main_directory}/main/${file}.sh" ]]; then
+                echo "Error: Missing HMM data for '${file}'."
+                exit 1
+            fi
+        done
     fi
 
     if [[ ! -d "${Main_directory}/aux" ]]; then
@@ -48,24 +49,18 @@ check_main_directory(){
         exit 1
     else
         hmmprofile_path="${Main_directory}/hmm"
-        if [[ ! -f "${hmmprofile_path}/CAT_domain.hmm" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3f" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3i" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3m" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3p" ]]; then
-            echo "Error: binary compressed datafiles for hmmscan of 'CAT_domain' does not exist."
-            exit 1
-        else
-            CAT_hmm="${hmmprofile_path}/CAT_domain.hmm"
-        fi
-        if [[ ! -f "${hmmprofile_path}/DUF3435.hmm" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3f" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3i" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3m" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3p" ]]; then
-            echo "Error: binary compressed datafiles for hmmscan of 'DUF3435' does not exist."
-            exit 1
-        else
-            DUF_hmm="${hmmprofile_path}/DUF3435.hmm"
-        fi
-        if [[ ! -f "${hmmprofile_path}/Captain.hmm" || ! -f "${hmmprofile_path}/Captain.hmm.h3f" || ! -f "${hmmprofile_path}/Captain.hmm.h3i" || ! -f "${hmmprofile_path}/Captain.hmm.h3m" || ! -f "${hmmprofile_path}/Captain.hmm.h3p" ]]; then
-            echo "Error: binary compressed datafiles for hmmscan of 'Captain' does not exist."
-            exit 1
-        else
-            CAPTAIN_hmm="${hmmprofile_path}/Captain.hmm"
-        fi
+        # Validate binary compressed datafiles for hmmscan
+        domains=("CAT_domain" "DUF3435" "Captain")
+        extensions=("" ".h3f" ".h3i" ".h3m" ".h3p")
+
+        for dom in "${domains[@]}"; do
+            for ext in "${extensions[@]}"; do
+                if [[ ! -f "${hmmprofile_path}/${dom}.hmm${ext}" ]]; then
+                    echo "Error: Missing HMM data for '${dom}' (${ext})."
+                    exit 1
+                fi
+            done
+        done
     fi
 
     if [[ ! -d "${Main_directory}/databases" ]]; then
@@ -82,7 +77,7 @@ check_main_directory(){
             echo "Error: fasta file with captains CDS information was not found was not found in '${Main_directory}/databases'."
             exit 1
         else
-            check_fasta_protein "${Main_directory}/databases/Captains_CDS.fa"
+            check_fasta_dna "${Main_directory}/databases/Captains_CDS.fa"
         fi
     fi
 
@@ -96,26 +91,6 @@ check_main_directory(){
         echo "Error: 'json_updater.py' script is not found in the '${Main_directory}' folder."
         exit 1
     fi
-
-    if [[ ! -f "${Main_directory}/StarClust_environment.yml" ]]; then
-        echo "Error: 'StarClust_environment.yml' file is not found in the '${Main_directory}' folder."
-        exit 1
-    fi
-}
-
-check_working_directory() {
-	local working_directoy="$1"
-
-	if [[ ! -d "$working_directoy" ]]; then
-        echo "Error: folder '$working_directoy' does not exist."
-        exit 1
-    else
-    if [[ ! "${working_directoy:0:1}" == "/" ]]; then
-        working_directoy=$(realpath $working_directoy)
-    fi
-    fi
-
-    echo $working_directoy
 }
 
 check_threads() {
@@ -218,7 +193,7 @@ check_gff_paths() {
             done
             return 0
         else
-            echo "Error: Check gff file due to inconsistencies in the number of columns"
+            echo "Error: Check ome2gff file due to inconsistencies in the number of columns"
             exit 1
         fi
     fi
@@ -299,43 +274,21 @@ check_auxiliary_scripts() {
 	local command="$2"
 
     if [[ $command == "Initialize" ]]; then
-        if [[ ! -f "${auxiliary_path}/rip_calculator.py" ]]; then
-            echo "Error: file '${auxiliary_path}/rip_calculator.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/gff_slicer.py" ]]; then
-            echo "Error: file '${auxiliary_path}/gff_slicer.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/merge.py" ]]; then
-            echo "Error: file '${auxiliary_path}/merge.py' does not exist."
-            exit 1
-        fi
+        scripts_file=("rip_calculator.py" "gff_slicer.py" "merge.py")
+        for file in "${scripts_file[@]}"; do
+            if [[ ! -f "${auxiliary_path}/${file}" ]]; then
+                echo "Error: Missing auxiliary script '${file}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "SyntenyClustering" ]]; then
-        if [[ ! -f "${auxiliary_path}/PreCluster.py" ]]; then
-            echo "Error: File '${auxiliary_path}/PreCluster.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/Blast_CleanUp.py" ]]; then
-            echo "Error: File '${auxiliary_path}/Blast_CleanUp.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/Clustering.py" ]]; then
-            echo "Error: File '${auxiliary_path}/Clustering.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/merge_metadata.py" ]]; then
-            echo "Error: File '${auxiliary_path}/merge_metadata.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/syntenetAnalysis.R" ]]; then
-            echo "Error: File '${auxiliary_path}/syntenetAnalysis.R' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/syntenetPreprocess.R" ]]; then
-            echo "Error: File '${auxiliary_path}/syntenetPreprocess.R' does not exist."
-            exit 1
-        fi
+        scripts_file=("PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "syntenetPreprocess.R")
+        for file in "${scripts_file[@]}"; do
+            if [[ ! -f "${auxiliary_path}/${file}" ]]; then
+                echo "Error: Missing auxiliary script '${file}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "CaptainIdentification" ]]; then
         if [[ ! -f "${auxiliary_path}/hmmscan_process.py" ]]; then
             echo "Error: file '${auxiliary_path}/hmmscan_process.py' does not exist."
@@ -346,69 +299,21 @@ check_auxiliary_scripts() {
             echo "Error: file '${auxiliary_path}/ClusterAnalysis.R' does not exist."
             exit 1
         fi
+    elif [[ $command == "OrthogroupsOverrepresentation" ]]; then
+        if [[ ! -f "${auxiliary_path}/OverrepresentationAnalysis.R" ]]; then
+            echo "Error: file '${auxiliary_path}/OverrepresentationAnalysis.R' does not exist."
+            exit 1
+        fi
     elif [[ $command == "All" ]]; then
-        if [[ ! -f "${auxiliary_path}/rip_calculator.py" ]]; then
-            echo "Error: file '${auxiliary_path}/rip_calculator.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/gff_slicer.py" ]]; then
-            echo "Error: file '${auxiliary_path}/gff_slicer.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/merge.py" ]]; then
-            echo "Error: file '${auxiliary_path}/merge.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/PreCluster.py" ]]; then
-            echo "Error: File '${auxiliary_path}/PreCluster.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/Blast_CleanUp.py" ]]; then
-            echo "Error: File '${auxiliary_path}/Blast_CleanUp.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/Clustering.py" ]]; then
-            echo "Error: File '${auxiliary_path}/Clustering.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/merge_metadata.py" ]]; then
-            echo "Error: File '${auxiliary_path}/merge_metadata.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/syntenetAnalysis.R" ]]; then
-            echo "Error: File '${auxiliary_path}/syntenetAnalysis.R' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/syntenetPreprocess.R" ]]; then
-            echo "Error: File '${auxiliary_path}/syntenetPreprocess.R' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/hmmscan_process.py" ]]; then
-            echo "Error: file '${auxiliary_path}/hmmscan_process.py' does not exist."
-            exit 1
-        fi
-        if [[ ! -f "${auxiliary_path}/ClusterAnalysis.R" ]]; then
-            echo "Error: file '${auxiliary_path}/ClusterAnalysis.R' does not exist."
-            exit 1
-        fi
+        scripts_file=("rip_calculator.py" "gff_slicer.py" "merge.py" "PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "syntenetPreprocess.R" "hmmscan_process.py" "ClusterAnalysis.R" "OverrepresentationAnalysis.R")
+        for file in "${scripts_file[@]}"; do
+            if [[ ! -f "${auxiliary_path}/${file}" ]]; then
+                echo "Error: Missing auxiliary script '${file}'."
+                exit 1
+            fi
+        done
     else
         echo "Error: command '$command' is incorrect."
-        exit 1
-    fi
-}
-
-check_minimum_gene_content() {
-	local minimum_gene_content="$1"
-
-	if [[ "$minimum_gene_content" =~ ^[0-9]+$ ]]; then
-        if (( $minimum_gene_content < 5 || $minimum_gene_content > 100 )); then
-            echo "Error: '$minimum_gene_content' minimum gene content is not an accepted value."
-            print_help
-            exit 1
-        fi
-    else
-        echo "Error: '$minimum_gene_content' is not a positive integer."
-        print_help
         exit 1
     fi
 }
@@ -462,60 +367,61 @@ check_required_software() {
     fi
 
 	if [[ $command == "Initialize" ]]; then
-		if [[ -z "$(which python)" || -z "$(which metaeuk)" || -z "$(which agat_sp_extract_sequences.pl)" ]]; then
-            echo "Error: Missing require function(s) for Initialize"
-            exit 1
-        fi
+        function_list=("python" "metaeuk" "agat_sp_extract_sequences.pl")
+        for fun in "${function_list[@]}"; do
+            if [[ -z "$(which $fun)" ]]; then
+                echo "Error: Missing require function '${fun}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "SyntenyClustering" ]]; then
-    	if [[ -z "$(which python)" || -z "$(which Rscript)" || -z "$(which diamond)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which blastdb_aliastool)" || -z "$(which blastdbcmd)" ]]; then
-            echo "Error: Missing require function(s) for SyntenyClustering"
-            exit 1
-        fi
+        function_list=("python" "Rscript" "diamond" "blastn" "makeblastdb" "blastdb_aliastool" "blastdbcmd")
+        for fun in "${function_list[@]}"; do
+            if [[ -z "$(which $fun)" ]]; then
+                echo "Error: Missing require function '${fun}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "CaptainIdentification" ]]; then
-        if [[ -z "$(which python)" || -z "$(which macse)" || -z "$(which hmmscan)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which clipkit)" || -z "$(which iqtree3)" || -z "$(which gotree)" || -z "$(which mafft)" ]]; then
-            echo "Error: Missing require function(s) for CaptainIdentification"
-            exit 1
-        fi
+        function_list=("python" "macse" "hmmscan" "blastn" "makeblastdb" "clipkit" "iqtree3" "gotree" "mafft")
+        for fun in "${function_list[@]}"; do
+            if [[ -z "$(which $fun)" ]]; then
+                echo "Error: Missing require function '${fun}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "ClusterCharacterization" ]]; then
-        if [[ -z "$(which Rscript)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which orthofinder)" ]]; then
-            echo "Error: Missing require function(s) for ClusterCharacterization"
-            exit 1
-        fi
+        function_list=("Rscript" "blastn" "makeblastdb" "orthofinder")
+        for fun in "${function_list[@]}"; do
+            if [[ -z "$(which $fun)" ]]; then
+                echo "Error: Missing require function '${fun}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "OrthogroupsOverrepresentation" ]]; then
-        if [[ -z "$(which orthofinder)" || -z "$(which gotree)" || -z "$(which Rscript)" ]]; then
-            echo "Error: Missing require function(s) for OrthogroupsOverrepresentation"
-            exit 1
-        fi
+        function_list=("orthofinder" "gotree" "Rscript")
+        for fun in "${function_list[@]}"; do
+            if [[ -z "$(which $fun)" ]]; then
+                echo "Error: Missing require function '${fun}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "OrthogroupsAnnotation" ]]; then
-        if [[ -z "$(which mafft)" || -z "$(which foldseek)" || -z "$(which hhblits)" ]]; then
-            echo "Error: Missing require function(s) for OrthogroupsAnnotation"
-            exit 1
-        fi
+        function_list=("mafft" "foldseek" "hhblits")
+        for fun in "${function_list[@]}"; do
+            if [[ -z "$(which $fun)" ]]; then
+                echo "Error: Missing require function '${fun}'."
+                exit 1
+            fi
+        done
     elif [[ $command == "All" ]]; then
-        if [[ -z "$(which python)" || -z "$(which metaeuk)" || -z "$(which agat_sp_extract_sequences.pl)" ]]; then
-            echo "Error: Missing require function(s) for Initialize"
-            exit 1
-        fi
-        if [[ -z "$(which python)" || -z "$(which Rscript)" || -z "$(which diamond)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which blastdb_aliastool)" || -z "$(which blastdbcmd)" ]]; then
-            echo "Error: Missing require function(s) for SyntenyClustering"
-            exit 1
-        fi
-        if [[ -z "$(which orthofinder)" || -z "$(which gotree)" || -z "$(which Rscript)" ]]; then
-            echo "Error: Missing require function(s) for OrthogroupsOverrepresentation"
-            exit 1
-        fi
-        if [[ -z "$(which python)" || -z "$(which macse)" || -z "$(which hmmscan)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which clipkit)" || -z "$(which iqtree3)" || -z "$(which gotree)" ]]; then
-            echo "Error: Missing require function(s) for CaptainIdentification"
-            exit 1
-        fi
-        if [[ -z "$(which Rscript)" || -z "$(which blastn)" || -z "$(which makeblastdb)" || -z "$(which orthofinder)" ]]; then
-            echo "Error: Missing require function(s) for ClusterCharacterization"
-            exit 1
-        fi
-        if [[ -z "$(which mafft)" || -z "$(which foldseek)" || -z "$(which hhblits)" ]]; then
-            echo "Error: Missing require function(s) for OrthogroupsAnnotation"
-            exit 1
-        fi
+        function_list=("python" "metaeuk" "agat_sp_extract_sequences.pl" "Rscript" "diamond" "blastn" "makeblastdb" "blastdb_aliastool" "blastdbcmd" "orthofinder" "gotree" "macse" "hmmscan" "clipkit" "iqtree3" "mafft" "foldseek" "hhblits")
+        for fun in "${function_list[@]}"; do
+            if [[ -z "$(which $fun)" ]]; then
+                echo "Error: Missing require function '${fun}'."
+                exit 1
+            fi
+        done
     else
         echo "Error: Unknown command."
         exit 1
@@ -686,6 +592,25 @@ check_databases() {
                 fi
             fi
             
+        fi
+    elif [[ $command = "CaptainIdentification" ]]; then
+        if [[ ! -d "$database_path" ]]; then
+            echo "Error: directory '$database_path' does not exist."
+            exit 1
+        else
+            if [[ ! -f "${database_path}/Captains_CDS.fa" ]]; then
+                echo "Error: file '${database_path}/Captains_CDS.fa' does not exist."
+                exit 1
+            else
+                check_fasta_dna "${database_path}/Captains_CDS.fa"
+            fi
+
+            if [[ ! -f "${database_path}/Captains.fa" ]]; then
+                echo "Error: file '${database_path}/Captains.fa' does not exist."
+                exit 1
+            else
+                check_fasta_protein "${database_path}/Captains.fa"
+            fi
         fi
     elif [[ $command == "All" ]]; then
         if [[ ! -d "$database_path" ]]; then

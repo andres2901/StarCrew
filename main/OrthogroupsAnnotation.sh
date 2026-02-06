@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Software check block
+# SOFTWARE CHECK AND ENVIRONMENT SETUP
 # ==============================================================================
 
+# Define library
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
+# Validate required software for the current script
+check_required_software "$(basename -s .sh "$0" )"
+
+# Database Verification
 database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
 check_databases "${database_path}" "$(basename -s .sh "$0" )"
 foldseek_path="${database_path}/Foldseek/"
@@ -17,7 +22,7 @@ check_interpro_software "${Interpro_path}"
 Interpro_path=$(realpath $Interpro_path)
 
 # ==============================================================================
-# Function block
+# FUNCTION DEFINITIONS
 # ==============================================================================
 
 # Function to print help message
@@ -39,17 +44,17 @@ function print_help() {
      It return only those 'chracteristics' that are shared for at least 50% of the proteins in the Orthogroup.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]"
+   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: Define the orthogroups to be analyzed (Default = All) [Available mode: MoveAssociated, Core, All, Overrepresented]."
-   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = afdb_swissprot) [Available: pdb, afdb_swissprot]."
-   echo "-t, --threads: Number of threads for all analysis (Default: 8)."
+   echo "-m, --mode: Define the orthogroups to be analyzed (Default: All) [Available mode: MoveAssociated, Core, All, Overrepresented]."
+   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default: afdb_swissprot) [Available databases: pdb, afdb_swissprot]."
    echo ""
    echo "Optional args:"
+   echo "-t, --threads: Number of threads for all analysis (Default: 8)."
    echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)."
    echo "-help: Display this help message."
 }
@@ -205,21 +210,30 @@ run_foldseek() {
 
     mkdir -p "${foldseek_results}"
 
+    Total_states=$(ls ${Orthogroups_dir} | wc -l)
+    State=0
+
     if [[ $foldseekdb == "pdb" ]]; then
         ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
         do
+            State=$(($State + 1))
             foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/${foldseekdb} ${temp_dir}/${OrthogroupID}.m8 ${temp_dir}/tmp --prostt5-model ${foldseek_path}/weights -e 0.001 -c 0.5 --cov-mode 0 -v 0 --threads ${threads} &>/dev/null
             awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[1];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
             join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/entries_update.idx | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
+            ProgressBar $State $Total_states
         done
     elif [[ $foldseekdb == "afdb_swissprot" ]]; then
         ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
         do
+            State=$(($State + 1))
             foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/${foldseekdb} ${temp_dir}/${OrthogroupID}.m8 ${temp_dir}/tmp --prostt5-model ${foldseek_path}/weights -e 0.001 -c 0.5 --cov-mode 0 -v 0 --threads ${threads} &>/dev/null
             awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[2];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
             join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/Accession_swissprot.txt | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
+            ProgressBar $State $Total_states
         done
     fi
+
+    echo ""
 
     find ${foldseek_results} -size 0 -delete
 }
@@ -234,14 +248,21 @@ run_hhblits() {
 
     mkdir -p "${hhblits_results}"
 
+    Total_states=$(ls ${Orthogroups_dir} | wc -l)
+    State=0
+
     ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
     do
+        State=$(($State + 1))
         mafft --maxiterate 1000 --genafpair --reorder --thread ${threads} ${Orthogroups_dir}/${OrthogroupID}.fa > ${temp_dir}/${OrthogroupID}_aligned.fa 2>/dev/null
         hhblits -i ${temp_dir}/${OrthogroupID}_aligned.fa -o ${hhblits_results}/${OrthogroupID}.hhr -blasttab ${temp_dir}/${OrthogroupID}.txt -d ${hhsuite_path}/pfam -e 0.001 -n 6 -M 50 -z 2 -Z 10 -realign_old_hits -cov 50 -cpu ${threads} &>/dev/null
         if [[ -f ${temp_dir}/${OrthogroupID}.txt ]]; then
             awk '{FS=OFS="\t"}{if($11<=0.001){print}}' ${temp_dir}/${OrthogroupID}.txt > ${hhblits_results}/${OrthogroupID}.txt
         fi
+        ProgressBar $State $Total_states
     done
+
+    echo ""
 
     find ${hhblits_results} -size 0 -delete
 }
@@ -256,10 +277,17 @@ run_interproScan() {
 
     mkdir -p "${interpro_results}"
 
+    Total_states=$(ls ${Orthogroups_dir} | wc -l)
+    State=0
+
     ls ${Orthogroups_dir} | xargs -n 1 basename -s .fa | while read OrthogroupID 
     do
+        State=$(($State + 1))
         ${Interpro_path}/interproscan.sh -i ${Orthogroups_dir}/${OrthogroupID}.fa -f tsv -appl CDD,Gene3D,HAMAP,PANTHER,Pfam,PIRSF,PRINTS,PROSITEPATTERNS,PROSITEPROFILES,SFLD,SMART,SUPERFAMILY,TIGRFAM --goterms -o ${interpro_results}/${OrthogroupID}.tsv &>/dev/null
+        ProgressBar $State $Total_states
     done
+
+    echo ""
 
     find ${interpro_results} -size 0 -delete
 }
@@ -354,7 +382,7 @@ organize_information() {
 }
 
 # ==============================================================================
-# Variables block
+# VARIABLES AND ARGUMENT PARSING
 # ==============================================================================
 
 # Initialize variables
@@ -398,59 +426,44 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Print help if requested
 if $help_flag; then
     print_help
     exit 0
 fi
-
-# ==============================================================================
-# Script start block
-# ==============================================================================
 
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
 echo "  Cluster file: " "$clusters_file"
 echo "  Mode: " "$mode"
 echo "  Foldseek database: " "$foldseekdb"
-echo "  Number of threads: " "$threads"
+echo "  Threads: " "$threads"
 echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
-# Check variables block
+# ARGUMENTS AND INPUT CHECK
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 
-# Check for mandatory argument and define the path as absolute
+check_mode_parameter "${mode}" "$(basename -s .sh "$0" )"
+
 if [[ -z "$Working_directory" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
+else
+    if [[ ! -d "$Working_directory" ]]; then
+        echo "Error: Directory '$Working_directory' does not exist."
+        exit 1
+    else
+        Working_directory=$(realpath $Working_directory)
+        check_directory_structure "${Working_directory}"
+    fi
 fi
 
-# Check if working directory exists
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: Directory '$Working_directory' does not exist."
-    exit 1
-else
-    Working_directory=$(realpath $Working_directory)
-fi
-check_directory_structure "${Working_directory}"
 check_clusters "${Working_directory}"
 
-# Check if mode parameter is correct
-check_mode_parameter "${mode}" "$(basename -s .sh "$0" )"
-
-# Check thread parameter
-if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$threads' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-# Check if database directory exists
 if [[ "$foldseekdb" != "pdb" && "$foldseekdb" != "afdb_swissprot" ]]; then
     echo "Error: '$foldseekdb' is not accepted as a foldseek database."
     print_help
@@ -459,11 +472,10 @@ else
     check_foldseek_databases "${foldseek_path}" "${foldseekdb}"
 fi
 
-# Check for required software
-check_required_software "$(basename -s .sh "$0" )"
+check_threads "${threads}"
 
 # ==============================================================================
-# Main Block
+# MAIN SCRIPT
 # ==============================================================================
 
 if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; then

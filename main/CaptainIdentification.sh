@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Software check block
+# SOFTWARE CHECK AND ENVIRONMENT SETUP
 # ==============================================================================
 
-source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
-source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
+# Define library and auxiliary paths
+SCRIPT_DIR="$( dirname -- "$( readlink -f -- "$0"; )"; )"
+source "${SCRIPT_DIR}/../lib/Utils.sh"
+source "${SCRIPT_DIR}/../lib/Check.sh"
 
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 if [[ ! -d "$auxiliary_path" ]]; then
@@ -16,52 +18,44 @@ else
     check_auxiliary_scripts "${auxiliary_path}" "$(basename -s .sh "$0" )"
 fi
 
-hmmprofile_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../hmm/"
+# Validate required software for the current script
+check_required_software "$(basename -s .sh "$0" )"
+
+# HMM Profile Verification
+hmmprofile_path="${SCRIPT_DIR}/../hmm/"
 if [[ ! -d "$hmmprofile_path" ]]; then
-    echo "Error: directory '$hmmprofile_path' does not exist."
+    echo "Error: HMM profile directory '$hmmprofile_path' not found."
     exit 1
 else
-    hmmprofile_path=$(realpath $hmmprofile_path)
-    if [[ ! -f "${hmmprofile_path}/CAT_domain.hmm" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3f" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3i" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3m" || ! -f "${hmmprofile_path}/CAT_domain.hmm.h3p" ]]; then
-        echo "Error: binary compressed datafiles for hmmscan of 'CAT_domain' does not exist."
-        exit 1
-    else
-        CAT_hmm="${hmmprofile_path}/CAT_domain.hmm"
-    fi
-    if [[ ! -f "${hmmprofile_path}/DUF3435.hmm" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3f" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3i" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3m" || ! -f "${hmmprofile_path}/DUF3435.hmm.h3p" ]]; then
-        echo "Error: binary compressed datafiles for hmmscan of 'DUF3435' does not exist."
-        exit 1
-    else
-        DUF_hmm="${hmmprofile_path}/DUF3435.hmm"
-    fi
-    if [[ ! -f "${hmmprofile_path}/Captain.hmm" || ! -f "${hmmprofile_path}/Captain.hmm.h3f" || ! -f "${hmmprofile_path}/Captain.hmm.h3i" || ! -f "${hmmprofile_path}/Captain.hmm.h3m" || ! -f "${hmmprofile_path}/Captain.hmm.h3p" ]]; then
-        echo "Error: binary compressed datafiles for hmmscan of 'Captain' does not exist."
-        exit 1
-    else
-        CAPTAIN_hmm="${hmmprofile_path}/Captain.hmm"
-    fi
+    hmmprofile_path=$(realpath "$hmmprofile_path")
+  
+    # Validate binary compressed datafiles for hmmscan
+    domains=("CAT_domain" "DUF3435" "Captain")
+    extensions=("" ".h3f" ".h3i" ".h3m" ".h3p")
+
+    for dom in "${domains[@]}"; do
+      for ext in "${extensions[@]}"; do
+        if [[ ! -f "${hmmprofile_path}/${dom}.hmm${ext}" ]]; then
+          echo "Error: Missing HMM data for '${dom}' (${ext})."
+          exit 1
+        fi
+      done
+    done
+  
+    CAT_hmm="${hmmprofile_path}/CAT_domain.hmm"
+    DUF_hmm="${hmmprofile_path}/DUF3435.hmm"
+    CAPTAIN_hmm="${hmmprofile_path}/Captain.hmm"
 fi
 
+# Database Verification
 database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
-if [[ ! -d "$database_path" ]]; then
-    echo "Error: directory '$database_path' does not exist."
-    exit 1
-else
-    database_path=$(realpath $database_path)
-    # Check the presence of the specific scripts
-    if [[ ! -f "${database_path}/Captains_CDS.fa" ]]; then
-        echo "Error: file '${database_path}/Captains_CDS.fa' does not exist."
-        exit 1
-    else
-        check_fasta_dna "${database_path}/Captains_CDS.fa"
-    fi
-fi
+check_databases "${database_path}" "$(basename -s .sh "$0" )"
+database_path=$(realpath $database_path)
 
 # ==============================================================================
-# Function block
+# FUNCTION DEFINITIONS
 # ==============================================================================
 
-# Function to print help message
 function print_help() {
    echo -e "Script to identify captain genes within each element and construct a phylogenetic tree based on these captains.
    It executes five main steps:
@@ -83,7 +77,7 @@ function print_help() {
    -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -l <integer> -c <integer> -r <integer> -ms <integer> -t <integer> --overwrite ]"
+   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -l <integer> -c <integer> -r <integer> -ms <integer> -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -145,7 +139,6 @@ organize_working_directory() {
     mkdir -p ${working_dir}
     mkdir -p ${temp_dir}
 
-    # Copy require files
     cp -r ${gff_dir} ${working_dir}
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
@@ -164,28 +157,25 @@ organize_working_directory() {
     fi
 }
 
+# Function to run hmmscan for all three profiles in every element proteome
 process_hmmscan() {
     local base_dir="$1"
 
     local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
 
-    # Locate the protein directory
     local protein_path=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
     
-    # Define path for the output directory
     local hmmer_results_prefix="${working_dir}/Hmmsearch_"
     local hmmer_results_CAT="${hmmer_results_prefix}CAT"
     local hmmer_results_DUF="${hmmer_results_prefix}DUF"
     local hmmer_results_CAPTAIN="${hmmer_results_prefix}Captain"
 
-    # Create the necessary output directory
     mkdir -p "${hmmer_results_CAT}"
     mkdir -p "${hmmer_results_DUF}"
     mkdir -p "${hmmer_results_CAPTAIN}"
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing profile searches..."
     
-    # Get a list of all species filenames without the .fa extension
     local fa_files=( $(find "$protein_path" -maxdepth 1 -type f -name "*.fa") )
 
     Total_states=${#fa_files[@]}
@@ -227,15 +217,14 @@ Captain_identification() {
     local empty_elements="${working_dir}/EmptyElements.txt"
 
     python ${auxiliary_path}/hmmscan_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}" --range_kb "${range}" >/dev/null
-
 }
 
+# Function to identify pseudogenes in 'empty' elements
 Captain_pseudogene() {
     local base_dir="$1"
 
     local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
 
-    # Locate required subdirectories and define output path
     local nucleotide_path=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
     local CDS_path=$(find "$working_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
     local captain_file="$working_dir/CaptainsID.txt"
@@ -262,7 +251,6 @@ Captain_pseudogene() {
         local Full_range=$(( ${range} * 1000 ))
         State=0
 
-        #Search for possible pseudogenes in the empty elements
         mkdir -p ${temp_dir}/blast
         cat ${empty_elements} | while read line 
         do
@@ -428,16 +416,14 @@ Tree_inference() {
         mkdir -p ${outdir}
         iqtree3 -T ${threads} -m MFP --prefix ${outdir}/Captain_tree -B 1000 --alrt 1000 -s ${protein_file} -quiet --polytomy
 
-        # Collapse near-zero branches and split with low support
         gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_dir}/captainlength.nw
-        gotree collapse support -s 80 -i ${temp_dir}/captainlength.nw -o ${temp_dir}/captainsupport.nw
 
+        gotree collapse support -s 80 -i ${temp_dir}/captainlength.nw -o ${temp_dir}/captainsupport.nw
         sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_dir}/captainsupport.nw
         gotree collapse support -s 95 -i ${temp_dir}/captainsupport.nw -o ${temp_dir}/captainsupport2.nw
         sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_dir}/captainsupport2.nw
         mv ${temp_dir}/captainsupport2.nw ${temp_dir}/captainsupport.nw
 
-        # Root tree
         gotree reroot midpoint -i ${temp_dir}/captainsupport.nw -o ${working_dir}/CaptainPhylogeny.nw
     elif [[ "$unique_sequences" -ge 2 ]]; then
         echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] \033[01;31mWARNING\033[m: There's only '${unique_sequences}' unique sequences in the current dataset. Tree inference will be perform without support values."
@@ -445,10 +431,7 @@ Tree_inference() {
         mkdir -p ${outdir}
         iqtree3 -T ${threads} -m MFP --prefix ${outdir}/Captain_tree -s ${protein_file} -quiet --polytomy
 
-        # Collapse near-zero branches
         gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_dir}/captainlength.nw
-
-        # Root tree
         gotree reroot midpoint -i ${temp_dir}/captainlength.nw -o ${working_dir}/CaptainPhylogeny.nw
     else
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] There's only one unique sequence in the current dataset. Skipping tree inference."
@@ -538,7 +521,7 @@ organize_information() {
 }
 
 # ==============================================================================
-# Variables block
+# VARIABLES AND ARGUMENT PARSING
 # ==============================================================================
 
 # Initialize variables
@@ -606,10 +589,6 @@ if $help_flag; then
     exit 0
 fi
 
-# ==============================================================================
-# Script start block
-# ==============================================================================
-
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
 echo "  Mode: " "$mode"
@@ -622,30 +601,27 @@ echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
-# Check variables block
+# ARGUMENTS AND INPUT CHECK
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 
-# Check for mandatory argument and define the path as absolute
+check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
+
 if [[ -z "$Working_directory" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
-fi
-
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: Directory '$Working_directory' does not exist."
-    exit 1
 else
-    Working_directory=$(realpath $Working_directory)
+    if [[ ! -d "$Working_directory" ]]; then
+        echo "Error: Directory '$Working_directory' does not exist."
+        exit 1
+    else
+        Working_directory=$(realpath $Working_directory)
+        check_directory_structure "${Working_directory}"
+    fi
 fi
-check_directory_structure "${Working_directory}"
 
-# Check if mode parameter is correct
-check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
-
-# Check that arguments are within allowed range
 if [[ "$level" =~ ^[0-9]+$ ]]; then
     if (( $level < 1 || $level > 3 )); then
         echo "Error: '$level' confidence level is not an accepted value."
@@ -688,22 +664,13 @@ else
     exit 1
 fi
 
-if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
-    echo "Error: '$threads' is not a positive integer."
-    print_help
-    exit 1
-fi
-
-# Check for required software
-check_required_software "$(basename -s .sh "$0" )"
+check_threads "${threads}"
 
 # ==============================================================================
-# Main Block
+# MAIN SCRIPT
 # ==============================================================================
 
-if [[ "${mode}" == "FullAll" ]]
-then
-
+if [[ "${mode}" == "FullAll" ]]; then
     if $overwrite; then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
         overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
@@ -754,9 +721,7 @@ then
     rm -r "${Working_directory}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
-
-elif [[ "${mode}" == "AllID" ]]
-then
+elif [[ "${mode}" == "AllID" ]]; then
 
     if $overwrite; then
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
@@ -790,9 +755,7 @@ then
     rm -r "${Working_directory}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
-
-elif [[ "${mode}" == "Cluster" ]]
-then
+elif [[ "${mode}" == "Cluster" ]]; then
     check_clusters "${Working_directory}"
 
     if $overwrite; then

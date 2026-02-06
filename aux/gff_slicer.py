@@ -1,13 +1,25 @@
+#!/usr/bin/env python3
+"""
+GFF Slicer with Strict Containment.
+
+This script indexes a master GFF into memory and slices it based on a 
+coordinate file. It ensures features are fully contained within the slice 
+and correctly re-sorts features from 1 to N after coordinate transformation.
+"""
+
 import argparse
 import sys
 import os
 
+
 def load_gff_features(input_path):
     """
-    Reads the entire GFF file into memory once to optimize performance for batch processing.
-    Returns: A tuple (dict of {contig_id: [list_of_feature_parts]}, list of header lines).
+    Read GFF into memory once, indexed by contig (SeqID).
+
+    Returns:
+        tuple: (dict of {contig_id: [list_of_parts]}, list of header lines)
     """
-    print(f"STEP 1: Loading and indexing GFF features from '{input_path}'...")
+    print(f"STEP 1: Loading and indexing GFF: '{input_path}'...")
     
     indexed_features = {}
     header_lines = []
@@ -20,11 +32,9 @@ def load_gff_features(input_path):
                     continue
 
                 if line.startswith('#'):
-                    # Capture header lines to be written to all output files
                     header_lines.append(line + '\n')
                     continue
                 
-                # Parse the GFF line (TSV format)
                 parts = line.split('\t')
                 if len(parts) < 9:
                     continue
@@ -33,29 +43,26 @@ def load_gff_features(input_path):
                 if f_seqid not in indexed_features:
                     indexed_features[f_seqid] = []
                 
-                # Store the original parts list for later processing
                 indexed_features[f_seqid].append(parts)
 
     except Exception as e:
-        print(f"Error during GFF loading: {e}", file=sys.stderr)
-        return {}, []
+        sys.exit(f"Error during GFF loading: {e}")
 
     print(f"Finished loading. Found {len(indexed_features)} contigs.")
     return indexed_features, header_lines
 
 
-def process_section(all_features, header_lines, output_path, section_name, target_seqid, slice_start, slice_end, target_strand):
+def process_section(all_features, header_lines, output_path, section_name, 
+                    target_seqid, slice_start, slice_end, target_strand):
     """
-    Slices features using STRICT CONTAINMENT. 
-    Correctly flips strands and ensures output is sorted by start position (1 to N).
+    Slice features using strict containment and re-sorts results.
     """
-    
     if slice_start >= slice_end:
-        print(f"Error: Start ({slice_start}) must be < End ({slice_end}) for section '{section_name}'.", file=sys.stderr)
+        print(f"Error: Start >= End for '{section_name}'. Skipping.", file=sys.stderr)
         return
 
     if target_seqid not in all_features:
-        print(f"Warning: Contig '{target_seqid}' not found. Skipping '{section_name}'.", file=sys.stderr)
+        print(f"Warning: Contig '{target_seqid}' not found. Skipping.", file=sys.stderr)
         return
 
     try:
@@ -63,7 +70,7 @@ def process_section(all_features, header_lines, output_path, section_name, targe
         contig_features = all_features[target_seqid]
         
         for parts in contig_features:
-            # IMPORTANT: Copy the list so modification doesn't affect other slices in memory
+            # Copy to avoid modifying the indexed master list in memory
             current_parts = parts[:] 
             
             try:
@@ -73,20 +80,18 @@ def process_section(all_features, header_lines, output_path, section_name, targe
             except ValueError:
                 continue 
 
-            # --- 1. STRICT CONTAINMENT FILTER ---
-            # Feature must be 100% inside the slice boundaries [slice_start, slice_end]
+            # 1. STRICT CONTAINMENT FILTER
+            # Feature must be 100% inside [slice_start, slice_end]
             if f_start < slice_start or f_end > slice_end:
                 continue
 
-            # --- 2. COORDINATE TRANSFORMATION & STRAND FLIPPING ---
+            # 2. COORDINATE TRANSFORMATION
             if target_strand == '+':
-                # Forward orientation: simple relative offset
                 new_start = f_start - slice_start + 1
                 new_end = f_end - slice_start + 1
                 new_strand = f_strand
             else:
-                # Reverse orientation ('-'):
-                # A: Flip the feature strand correctly (e.g. + becomes -)
+                # Reverse orientation: Flip strand and invert coordinates
                 if f_strand == '+':
                     new_strand = '-'
                 elif f_strand == '-':
@@ -94,49 +99,44 @@ def process_section(all_features, header_lines, output_path, section_name, targe
                 else:
                     new_strand = f_strand
                 
-                # B: Recalculate coordinates relative to the slice_end
+                # Recalculate relative to slice_end
                 n_coord_start = slice_end - f_end + 1
                 n_coord_end = slice_end - f_start + 1
-                
                 new_start = min(n_coord_start, n_coord_end)
                 new_end = max(n_coord_start, n_coord_end)
 
-            # Update the parts list
+            # Update parts
             current_parts[0] = section_name
-            current_parts[3] = new_start  # Store as int for sorting
-            current_parts[4] = new_end    # Store as int for sorting
+            current_parts[3] = new_start  # Keep as int for sorting
+            current_parts[4] = new_end    # Keep as int for sorting
             current_parts[6] = new_strand
             
             processed_features.append(current_parts)
 
-        # --- 3. RE-SORT BY NEW START POSITION ---
-        # Ensures GFF is organized 1 -> N even for negative strand slices
+        # 3. RE-SORT BY START POSITION
+        # Critical for GFF validity after reverse-complement transformations
         processed_features.sort(key=lambda x: x[3])
 
         # --- 4. WRITE TO FILE ---
         with open(output_path, 'w') as outfile:
-            outfile.write(f"## GFF Slicer Output\n")
+            outfile.write("## GFF Slicer Output\n")
             outfile.write(f"## Section: {section_name}\n")
             outfile.write(f"## Original Region: {target_seqid}:{slice_start}-{slice_end} ({target_strand})\n")
             outfile.writelines(header_lines)
             
             for f in processed_features:
-                # Convert coordinates back to strings for joining
-                f[3] = str(f[3])
-                f[4] = str(f[4])
+                f[3], f[4] = str(f[3]), str(f[4])
                 outfile.write('\t'.join(f) + '\n')
 
-        print(f"-> Section '{section_name}': Wrote {len(processed_features)} features.")
+        print(f"-> '{section_name}': Wrote {len(processed_features)} features.")
 
     except Exception as e:
         print(f"Error processing '{section_name}': {e}", file=sys.stderr)
 
 
 def process_coordinate_file(coord_file_path, input_gff_path, output_dir):
-    """Reads coordinate file and initiates batch processing."""
+    """Orchestrate the batch processing."""
     all_features, header_lines = load_gff_features(input_gff_path)
-    if not all_features: 
-        return
     
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
@@ -153,7 +153,9 @@ def process_coordinate_file(coord_file_path, input_gff_path, output_dir):
                     continue
 
                 name, contig, start_s, end_s, strand = fields
-                process_section(all_features, header_lines, os.path.join(output_dir, f"{name}.gff"), 
+                out_file = os.path.join(output_dir, f"{name}.gff")
+                
+                process_section(all_features, header_lines, out_file, 
                                 name, contig, int(start_s), int(end_s), strand)
         
         print("\nBatch processing complete.")
@@ -163,13 +165,17 @@ def process_coordinate_file(coord_file_path, input_gff_path, output_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Batch GFF slicer with strict containment, strand flipping, and sorting.")
+    """Main CLI execution."""
+    parser = argparse.ArgumentParser(
+        description="High-performance GFF slicer with strict containment and sorting."
+    )
     parser.add_argument('-c', '--coord-file', required=True, help='TSV: Name, Contig, Start, End, Strand')
     parser.add_argument('-i', '--input-gff', required=True, help='Master GFF input file')
     parser.add_argument('-o', '--output-dir', required=True, help='Directory for output GFFs')
-    args = parser.parse_args()
     
+    args = parser.parse_args()
     process_coordinate_file(args.coord_file, args.input_gff, args.output_dir)
+
 
 if __name__ == '__main__':
     main()

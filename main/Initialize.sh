@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Software check block
+# SOFTWARE CHECK AND ENVIRONMENT SETUP
 # ==============================================================================
 
+# Define library and auxiliary paths
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 
@@ -13,8 +14,13 @@ if [[ ! -d "$auxiliary_path" ]]; then
     exit 1
 else
     auxiliary_path=$(realpath $auxiliary_path)
+    check_auxiliary_scripts "$auxiliary_path" "$(basename -s .sh "$0" )"
 fi
 
+# Validate required software for the current script
+check_required_software "$(basename -s .sh "$0" )"
+
+# Validate agat config file
 agat_config="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../agat_config.yaml"
 if [[ ! -f "$agat_config" ]]; then
     echo "Error: file '$agat_config' does not exist."
@@ -24,14 +30,14 @@ else
 fi
 
 # ==============================================================================
-# Function block
+# FUNCTION DEFINITIONS
 # ==============================================================================
 
 # Function to print help message
 function print_help() {
    echo "Script to organize the working directory to run the subsequent commands in the workflow."
    echo ""
-   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string>  { -b <file_path> -s <character> -c <file_path> } -M <file_path> --overwrite ]"
+   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string>  { -b <file_path> -s <character> -c <file_path> } -M <file_path> -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-f, --fasta:  multifasta file wih the elements to study."
@@ -46,19 +52,21 @@ function print_help() {
    echo "Required args in 'Starfish' mode:"
    echo "-g, --gff: 2 column tsv: genome code, path to GFF. The path should be to the original gff files and not the ones formatted to run starfish."
    echo "-b, --boundaries: *.elements.feat file output of 'starfish summary' command."
-   echo "-s, --separator: character separating genomeID from featureID that was used for Starfish run."
    echo "-c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command."
+   echo ""
+   echo "Required args with Default in 'Starfish' mode:"
+   echo "-s, --separator: character separating genomeID from featureID that was used for Starfish run (Default = '_')."
    echo ""
    echo "Required args in 'Simple' mode:"
    echo "-g, --gff: Path to the GFF file containing gene predictions with element-relative coordinates for all elements in the fasta file."
    echo ""
    echo "Optional args:"
    echo "-M, --Metadata: csv file delimited by semicolon with the metadata information (Check wrapper documentation for more information)."
+   echo "-t, --threads: threads for MetaEuk in 'Starfish' mode (Default: 24)"
    echo "--overwrite: Flag to overwrite in case there is already a previous run (Default: off)"
    echo "-help: Display this help message."
 }
 
-# Function to check duplicates headers
 check_duplicates() {
     local fasta_path="$1"
     local working_dir="$2"
@@ -73,7 +81,7 @@ check_duplicates() {
     fi
 }
 
-# Function to filter input elements
+# Function to filter input based on RIP-like signal and gc content
 Filter_input() {
     local fasta_path="$1"
     local working_dir="$2"
@@ -129,7 +137,7 @@ base62() {
     printf '%s\n' "$result"
 }
 
-# Function to process headers for syntenet analysis
+# Function to process headers to avoid issues during syntenet analysis
 Header_processing() {
     local fasta_path="$1"
     local working_dir="$2"
@@ -240,11 +248,10 @@ Header_processing() {
     fi
 }
 
-# Function for gene stats
+# Function to calculate statastics of gene content in elements
 gene_stats() {
     local working_dir="$1"
 
-    # Generate the number of genes and mean length statistic
     echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${working_dir}/Gene_stats.txt
     ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line
     do 
@@ -289,7 +296,6 @@ organize_info() {
 
         awk '{if($2){$1=">"$2} print $1}' ${working_dir}/temp/CDS/${line}.fa| sed 's/gene=//g' > ${working_dir}/Data/CDS/${line}.fa
 
-        # Creating proteome
         seqkit translate -f 1 ${working_dir}/Data/CDS/${line}.fa > ${working_dir}/Data/Protein/${line}.fa
 
         rm ${working_dir}/Data/Nucleotide/${line}.fa.index* &> /dev/null
@@ -298,7 +304,7 @@ organize_info() {
     echo ""
 }
 
-# Function to process 'Simple' input
+# Function to process input in 'Simple' mode
 Process_simple() {
     local working_dir="$1"
     local gff_file="$2"
@@ -344,7 +350,7 @@ Process_simple() {
     organize_info "$working_dir" "$CDS_flag"
 }
 
-# Function to process 'Starfish' input
+# Function to process input in 'Starfish' mode
 Process_starfish() {
     local working_dir="$1"
     local boundaries_path="$2"
@@ -414,10 +420,9 @@ Process_starfish() {
     metaeuk createdb ${working_dir}/Sequences.fa ${working_dir}/temp/ContigsDB --dbtype 2 -v 0 &> /dev/null
     metaeuk createdb $captains_path ${working_dir}/temp/ProteinDB --dbtype 1 -v 0 &> /dev/null
 
-    # Run metaeuk gene prediction
-    metaeuk predictexons ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB  ${working_dir}/temp/metaeukResults ${working_dir}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 0.95 --remove-tmp-files 1 --use-all-table-starts 1 --metaeuk-tcov 0.95 --disk-space-limit 100G &> /dev/null
-    metaeuk reduceredundancy ${working_dir}/temp/metaeukResults ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukgroups -v 0 &> /dev/null
-    metaeuk unitesetstofasta ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukFinal -v 0 &> /dev/null
+    metaeuk predictexons ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB  ${working_dir}/temp/metaeukResults ${working_dir}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 0.95 --remove-tmp-files 1 --use-all-table-starts 1 --metaeuk-tcov 0.95 --threads ${threads} --disk-space-limit 100G &> /dev/null
+    metaeuk reduceredundancy ${working_dir}/temp/metaeukResults ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukgroups --threads ${threads} -v 0 &> /dev/null
+    metaeuk unitesetstofasta ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukFinal --threads ${threads} -v 0 &> /dev/null
 
     sed -e 's/Target_ID=.*;TCS_//g' ${working_dir}/temp/metaeukFinal.gff > ${working_dir}/temp/metaeuk.gff
 
@@ -451,7 +456,7 @@ Process_starfish() {
 }
 
 # ==============================================================================
-# Variables block
+# VARIABLES AND ARGUMENT PARSING
 # ==============================================================================
 
 fasta_path=""
@@ -464,7 +469,8 @@ out_directory="WorkingDirectory"
 gff_path=""
 boundaries_path=""
 captains_path=""
-separator=""
+separator="_"
+threads="24"
 overwrite=false
 help_flag=false
 
@@ -514,6 +520,10 @@ while [[ $# -gt 0 ]]; do
             shift
             separator="$1"
             ;; 
+        -t|--threads)
+            shift
+            threads="$1"
+            ;;
         --overwrite)
             overwrite=true
             ;;
@@ -529,15 +539,10 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Print help if requested
 if $help_flag; then
     print_help
     exit 0
 fi
-
-# ==============================================================================
-# Script start block
-# ==============================================================================
 
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Fasta file: " "$fasta_path"
@@ -551,17 +556,18 @@ echo "  Starfish boundary file: " "$boundaries_path"
 echo "  Starfish captain file: " "$captains_path"
 echo "  Separator used during starfish run: " "$separator"
 echo "  Metadata file: " "$metadata_path" 
+echo "  Threads: " "$threads"
 echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
-# Check variables block
+# ARGUMENTS AND INPUT CHECK
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 
-# Check for mandatory arguments
 check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
+
 if [[ "$mode" == "Simple" ]]; then
     if [[ -z "$fasta_path" || -z "$gff_path" ]]; then
         echo "Error: Missing required argument(s)."
@@ -601,7 +607,6 @@ elif [[ "$mode" == "Starfish" ]]; then
     fi
 fi
 
-# Check metadata file
 if [[ -z "$metadata_path" ]]; then
     metadata=false
 else
@@ -610,7 +615,18 @@ else
     metadata_path=$(realpath $metadata_path)
 fi
 
-# Check filter parameters
+if [[ "$minimum_gene_content" =~ ^[0-9]+$ ]]; then
+    if (( $minimum_gene_content < 5 || $minimum_gene_content > 100 )); then
+        echo "Error: '$minimum_gene_content' minimum gene content is not an accepted value."
+        print_help
+        exit 1
+    fi
+else
+    echo "Error: '$minimum_gene_content' is not a positive integer."
+    print_help
+    exit 1
+fi
+
 if [[ "$filter" =~ ^[0-9]+$ ]]; then
     if (( $filter != 0 && ($filter < 20 || $filter > 45) )); then
         echo "Error: '$filter' gc content is not an accepted value."
@@ -635,13 +651,8 @@ else
     exit 1
 fi
 
-# Check for auxiliary scripts
-check_auxiliary_scripts "$auxiliary_path" "$(basename -s .sh "$0" )"
+check_threads "${threads}"
 
-# Check for required software
-check_required_software "$(basename -s .sh "$0" )"
-
-# check if output directory exist
 if [[ -d "$out_directory" ]]; then
     if $overwrite; then
         rm -r $out_directory
@@ -658,15 +669,13 @@ else
 fi
 
 # ==============================================================================
-# Main Block
+# MAIN SCRIPT
 # ==============================================================================
 
-# Check input stage
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Checking for duplicate headers."
 check_duplicates "$fasta_path" "$out_directory"
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> No duplicate headers found. Proceeding."
 
-# Filter stage
 if [[ "$rip" -lt 100 ]]
 then
     if [[ "$filter" == 0 ]]
@@ -695,7 +704,6 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Processing headers, creating sequen
 Header_processing "${out_directory}/temp/Sequences.fa" "$out_directory"
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Proceeding..."
 
-# Organize all the files
 if [[ "${mode}" == "Starfish" ]]; then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Processing Starfish input files."
     Process_starfish "$out_directory" "$boundaries_path" "$gff_path"
@@ -704,7 +712,5 @@ elif [[ "${mode}" == "Simple" ]]; then
     Process_simple "$out_directory" "$gff_path"
 fi
 
-# Cleanup temporary file
 rm -r ${out_directory}/temp/
-
 echo "  [$(date "+%Y-%m-%d %H:%M:%S")] -> Process Complete."

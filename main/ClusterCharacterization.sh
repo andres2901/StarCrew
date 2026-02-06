@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Software check block
+# SOFTWARE CHECK AND ENVIRONMENT SETUP
 # ==============================================================================
 
+# Define library and auxiliary paths
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Check.sh"
 source "$( dirname -- "$( readlink -f -- "$0"; )"; )""/../lib/Utils.sh"
-OMPI_MCA_opal_cuda_support=true
 
 auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
 if [[ ! -d "$auxiliary_path" ]]; then
@@ -17,11 +17,13 @@ else
     check_auxiliary_scripts "${auxiliary_path}" "$(basename -s .sh "$0" )"
 fi
 
+# Validate required software for the current script
+check_required_software "$(basename -s .sh "$0" )"
+
 # ==============================================================================
-# Function block
+# FUNCTION DEFINITIONS
 # ==============================================================================
 
-# Function to print help message
 function print_help() {
    echo -e "Script to run the characterization of each cluster.
    This script perform eight steps per cluster:
@@ -39,7 +41,7 @@ function print_help() {
    8. Determine if there are discordances at 'Clade' level between cargo hierarchical clustering and captain phylogenetic tree.
    "
    echo
-   echo "Syntax: StarClust $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -i <float> -t <integer> --overwrite ]"
+   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -l <integer> -i <float> -t <integer> --overwrite ]"
    echo ""
    echo "Required args:"
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
@@ -54,7 +56,6 @@ function print_help() {
    echo "-help: Display this help message."
 }
 
-# Modify this part when I have finish the SyntenyClustering fix
 check_clusters() {
     local base_dir="$1"
 
@@ -69,6 +70,7 @@ check_clusters() {
     fi
 }
 
+# Check that CaptainIdentification in 'Cluster' mode was previously run
 check_captain_information() {
     local base_dir="$1"   
 
@@ -111,11 +113,9 @@ organize_working_directory() {
         exit 1
     fi
 
-    # Create required subdirectories
     mkdir -p ${working_dir}
     mkdir -p ${temp_dir}
 
-    # Copy require files
     cp -r ${gff_dir} ${working_dir}
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
@@ -282,7 +282,7 @@ organize_information() {
 }
 
 # ==============================================================================
-# Variables block
+# VARIABLES AND ARGUMENT PARSING
 # ==============================================================================
 
 # Initialize variables
@@ -326,15 +326,10 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Print help if requested
 if $help_flag; then
     print_help
     exit 0
 fi
-
-# ==============================================================================
-# Script start block
-# ==============================================================================
 
 echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
 echo "  Working directory: " "$Working_directory"
@@ -345,28 +340,24 @@ echo "  Overwrite previous run: " "$overwrite"
 echo ""
 
 # ==============================================================================
-# Check variables block
+# ARGUMENTS AND INPUT CHECK
 # ==============================================================================
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
 
-# Check for mandatory argument and define the path as absolute
 if [[ -z "$Working_directory" ]]; then
     echo "Error: Missing required arguments."
     print_help
     exit 1
-fi
-
-if [[ ! -d "$Working_directory" ]]; then
-    echo "Error: Directory '$Working_directory' does not exist."
-    exit 1
 else
-    Working_directory=$(realpath $Working_directory)
+    if [[ ! -d "$Working_directory" ]]; then
+        echo "Error: Directory '$Working_directory' does not exist."
+        exit 1
+    else
+        Working_directory=$(realpath $Working_directory)
+        check_directory_structure "${Working_directory}"
+    fi
 fi
-check_directory_structure "${Working_directory}"
-
-# Check other parameters
-check_threads "$threads"
 
 if [[ "$length" =~ ^[0-9]+$ ]]; then
     if (( $length < 200 || $length > 5000 )); then
@@ -392,11 +383,10 @@ else
     exit 1
 fi
 
-# Check for software presence
-check_required_software "$(basename -s .sh "$0" )"
+check_threads "$threads"
 
 # ==============================================================================
-# Main Block
+# MAIN SCRIPT
 # ==============================================================================
 
 check_clusters "${Working_directory}"
