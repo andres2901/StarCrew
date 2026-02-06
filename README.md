@@ -611,7 +611,7 @@ As previously mentioned, this wrapper is composed of a series of sequential comm
 
 ![Workflow diagram](docs/Figures/Workflow.svg)
 
-In the workflow diagram, the blue stars indicate the specific commands where data filtering is performed: `Initialize` and `CaptainIdentification`. Also, the `CaptainIdentification` is the only command that must be used twice during the cargo gene dynamic analysis, where the first time is using the 'AllID' mode and the second time the 'Cluster' mode. Finally, both analysis can be performed in parallel within a single project directory without any interference between them.
+In the workflow diagram, the purple stars indicate the specific commands where data filtering is performed: `Initialize` and `CaptainIdentification`. Also, the `CaptainIdentification` is the only command that must be used twice during the cargo gene dynamic analysis, where the first time is using the 'AllID' mode and the second time the 'Cluster' mode. Finally, both analysis can be performed in parallel within a single project directory without any interference between them.
 
 ## Citing StarCrew and software called by StarCrew
 
