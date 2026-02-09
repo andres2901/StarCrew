@@ -769,9 +769,7 @@ elif [[ "${mode}" == "Cluster" ]]; then
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
         check_directory_structure "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${internal_dir}' is valid. Proceeding."
 
         if $overwrite; then
             echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."

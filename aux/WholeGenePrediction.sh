@@ -218,7 +218,7 @@ run_captain_metaeuk() {
 
     sed -i 's/_mRNA//g' metaeuk_protein.fa
 
-    hmmsearch --max --noali --domE 10e-6 --domtblout ${hmmer_results} ${hmm_path} metaeuk_protein.fa
+    hmmsearch --max --noali --domE 1e-3 --domtblout ${hmmer_results} ${hmm_path} metaeuk_protein.fa
 
     grep -v "#" ${hmmer_results} | awk '{print $1}' | sort -u > ${temp_dir}/selected_captains.txt
 

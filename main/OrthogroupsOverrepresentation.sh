@@ -439,9 +439,7 @@ if $overwrite; then
     overwrite "${Working_directory}" "$(basename -s .sh "$0" )" "${mode}"
 fi
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
 check_directory_structure "$Working_directory"
-echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
 
 if ! $skip_orthofinder; then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."

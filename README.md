@@ -382,7 +382,7 @@ Script to run the characterization of each cluster.
 This script perform eight steps per cluster:
 1. Identify orthogroups through OrthoFinder.
 2. Perform all-vs-all Blastn for synteny visualization.
-3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
+3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including not associated with any orthogroup.
 4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny figure for the cluster.
 5. Identify possible individual nesting events inside the cluster.
 6. Identify core genes in the cluster in two ways:
@@ -408,7 +408,7 @@ Optional args:
 -help: Display this help message.
 ```
 
-This command is designed to characterize the cargo gene dynamics within each element cluster. The command initially performs a hierarchical clustering tree of the elements within the cluster to visually identify their evolutionary history using as information the Orthogroup gene count (including singletons). It also attempts to identify any nesting events between elements inside the cluster. If your input results originate from a Starfish run, the identified nesting events should match those found in the `*.elements.feat` metadata file.
+This command is designed to characterize the cargo gene dynamics within each element cluster. The command initially performs a hierarchical clustering tree of the elements within the cluster to visually identify their evolutionary history using as information the Orthogroup gene count (including genes not associated with any orthogroup). It also attempts to identify any nesting events between elements inside the cluster. If your input results originate from a Starfish run, the identified nesting events should match those found in the `*.elements.feat` metadata file.
 
 The main goal of this command is to identify two relevant groups of genes within each cluster:
 

@@ -29,7 +29,7 @@ function print_help() {
    This script perform eight steps per cluster:
    1. Identify orthogroups through OrthoFinder.
    2. Perform all-vs-all Blastn for synteny visualization.
-   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
+   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including genes not associated with any orthogroup.
    4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny figure for the cluster.
    5. Identify possible individual nesting events inside the cluster.
    6. Identify core genes in the cluster in two ways:

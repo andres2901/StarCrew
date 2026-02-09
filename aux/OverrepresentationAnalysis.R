@@ -130,7 +130,7 @@ process_outliers <- function(orthocounts, approximation, coefficient) {
     fence <- Quartiles[4] + (coefficient * IQR_val)
   } else if (approximation == "Skew") {
     MC <- medcouple(orthocounts, do.reflect = FALSE)
-    fence <- Quartiles[4] + (coefficient * exp(3 * MC[1]) * IQR_val)
+    fence <- Quartiles[4] + ((coefficient * exp(3 * MC[1])) * IQR_val)
   }
   
   Outliers <- orthocounts[orthocounts > fence]

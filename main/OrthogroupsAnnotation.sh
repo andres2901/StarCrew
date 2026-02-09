@@ -483,11 +483,9 @@ if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; t
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
         check_internal_directory_structure "${internal_dir}"
 
         if $directory_flag; then
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
             if $overwrite; then
                 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
                 overwrite "${internal_dir}" "$(basename -s .sh "$0" )" "${mode}"
@@ -521,7 +519,6 @@ if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; t
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 
 elif [[ ${mode} == "Overrepresented" ]]; then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
     check_overrepresentation "${Working_directory}"
 
     if $overwrite; then
