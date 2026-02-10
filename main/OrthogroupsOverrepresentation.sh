@@ -133,6 +133,7 @@ run_orthofinder() {
 
     if [[ $(ulimit -Sn) -lt "$((element_number + 124))" ]]; then
         echo -e "Error: The system limits on the number of files a process can open is probably too low (Current: '$(ulimit -Sn)'). Please increase it at least to '$((element_number + 124))' or more."
+        exit 1
     fi  
 
     if $captain_phylogeny; then

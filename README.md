@@ -11,6 +11,7 @@ In addition to the main commands, StarCrew is distributed with a diverse set of 
 - [Requirements](#Requirements)
     - [System requirements](#System-requirements)
     - [Database requirements](#Database-requirements)
+    - [Disk space requirements](#Disk-space-requirements)
 - [Installation](#Installation)
 - [Input](#Input)
     - [Simple input files](#Simple-input-files)
@@ -57,6 +58,13 @@ The command related to functional annotation requires databases that are not dis
 - pfamA for hhblits.
 - foldseek: ProstT5, PDB and alphaphold.
 
+### Disk Space Requirements
+
+Due to the size of the functional annotation databases, I recommended checking your available storage before installing the wrapper. It is recommended to have between 100 - 200 GB of free disk space, depending on your intended dataset.
+
+> [!NOTE]
+> If free disk space is an issue, the wrapper can be configured without downloading the annotation databases. However, please note that this will leave the `OrthogroupsAnnotation` command unusable, as it depends entirely on these local resources.
+
 ## Installation
 
 Before installation, ensure you have `Anaconda3` and `git` installed and accessible in your system path, as they are required for the full wrapper installation and set-up. After cloning, execute the `build_StarCrew.sh` script to properly configure a conda environment, install all necessary software dependencies and download the databases required by the wrapper's commands, as shown below:
@@ -68,6 +76,7 @@ git clone https://github.com/andres2901/StarCrew.git
 # Construct the environment and download require databases
 cd StarCrew/
 bash build_StarCrew.sh # This might take some time
+#bash build_StarCrew.sh --skipDatabases # Only run this, if memory is an issue
 
 # Check full installation 
 StarCrew -help
@@ -254,9 +263,11 @@ To be considered a "true" Captain, the predicted gene must pass a series of filt
 
 In the scenario where no gene passes the filters to be called a 'Captain' in an element, a pseudogene will be identified if any sequence homology exists based on the CDS sequence of known Captain genes.
 
-**Note 1:** Be aware that this command will always put aside elements that do not have an identifiable Captain gene or pseudogene into a dedicated directory called `Captainless_elements/`, as these elements are not useful for the downstream analysis.
+> [!NOTE]
+> Be aware that this command will always put aside elements that do not have an identifiable Captain gene or pseudogene into a dedicated directory called `Captainless_elements/`, as these elements are not useful for the downstream analysis.
 
-**Note 2:** These filters are still a work in progress as the community continues to gather and document information about the gene model and protein structure of Captains. Currently, available literature lacks comprehensive documentation on these specific gene models.
+> [!IMPORTANT]
+> These filters are still a work in progress as the community continues to gather and document information about the gene model and protein structure of Captains. Currently, available literature lacks comprehensive documentation on these specific gene models.
 
 After a successful run, the following files should be found in the main output directory:
 
@@ -626,10 +637,10 @@ StarCrew is a wrapper that calls different bioinformatic software, for that reas
 |`Initialize`| `Starfish` | `seqkit`, `agat`, `metaeuk` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Dainat](https://nbisweden.github.io/AGAT/how_to_cite/), [Karin et al. 2020](https://pubmed.ncbi.nlm.nih.gov/32245390/) |
 | `Initialize` | `Simple` | `seqkit`, `agat` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Dainat](https://nbisweden.github.io/AGAT/how_to_cite/) |
 |`SyntenyClustering`| `Raw`, `SSP`, `FilterMetric` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/) |
-|`SyntenyClustering`| `FilterBlast` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `blast+` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
+|`SyntenyClustering`| `FilterBlast` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx`, `blast+` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`CaptainIdentification`| `AllID` | `hmmscan`, `seqkit`, `blast+`  | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`CaptainIdentification`| `Cluster`, `FullAll`| `hmmscan`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`ClusterCharacterization`| - | `orthofinder`, `DIAMOND`, `blast+`, `ape`, `ggtree`, `gggenomes` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Paradis et al. 2004](https://pubmed.ncbi.nlm.nih.gov/14734327/), [Yu et al. 2016](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12628), [Hackl et al. 2024](https://arxiv.org/abs/2411.13556) |
 |`OrthogroupsOverrepresented`| `Outliers` | `orthofinder`| [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1) |
-|`OrthogroupsOverrepresented`| `enrichment` | `orthofinder`, `bc3net` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [de Matos SImoes & Emmert-Streib 2012](https://pubmed.ncbi.nlm.nih.gov/22479422/) |
+|`OrthogroupsOverrepresented`| `enrichment` | `orthofinder`, `bc3net` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [de Matos Simoes & Emmert-Streib 2012](https://pubmed.ncbi.nlm.nih.gov/22479422/) |
 |`OrthogroupsAnnotation`| - | `foldseek`, `ProstT5`, `mafft`, `hhblits`, `interproscan`| [van Kempen et al 2024](https://pubmed.ncbi.nlm.nih.gov/37156916/), [Heinzinger et al 2024](https://pubmed.ncbi.nlm.nih.gov/39633723/), [Katoh & Standley 2013](https://pubmed.ncbi.nlm.nih.gov/23329690/), [Steinegger et al. 2019](https://pubmed.ncbi.nlm.nih.gov/31521110/), [Jones et al. 2014](https://pubmed.ncbi.nlm.nih.gov/24451626/) |

@@ -492,10 +492,10 @@ process_collinearity() {
             grep -E "[0-9]*-.*[0-9]*:" ${collinearity_path}/$(echo $line | awk '{print $1}').collinearity | awk 'BEGIN{FS=OFS="\t"}{print $2 OFS $3}' | sort -u > ${temp_prefix}_collinear1.txt
             local Max_points=$(($(wc -l "${temp_prefix}_collinear1.txt" | awk '{print $1}') * 2))
             awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' "${temp_prefix}_collinear1.txt" > "${temp_prefix}_collinear2.txt"
-            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits1.txt" 2> /dev/null
-            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits1.txt" 2> /dev/null
-            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits2.txt" 2> /dev/null
-            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits2.txt" 2> /dev/null
+            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits1.txt" 
+            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits1.txt" 
+            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits2.txt" 
+            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits2.txt" 
 
             local hits1=$(wc -l "${temp_prefix}_hits1.txt" | awk '{print $1}') 
             local hits2=$(wc -l "${temp_prefix}_hits2.txt" | awk '{print $1}')
