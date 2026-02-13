@@ -545,6 +545,7 @@ process_cluster_file() {
     if $captainInfo; then
         if [[ -f "${Captain_dir}/Captains_CDS.fa" ]]; then
             CDS_file="${Captain_dir}/Captains_CDS.fa"
+            ID_file="${Captain_dir}/CaptainsID.txt"
         fi
         if [[ -f "${Captain_dir}/Captains_pseudo.fa" ]]; then
             Pseudo_file="${Captain_dir}/Captains_pseudo.fa"

@@ -29,15 +29,15 @@ function print_help() {
    This script perform eight steps per cluster:
    1. Identify orthogroups through OrthoFinder.
    2. Perform all-vs-all Blastn for synteny visualization.
-   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including genes not associated with any orthogroup.
+   3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
    4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny figure for the cluster.
    5. Identify possible individual nesting events inside the cluster.
    6. Identify core genes in the cluster in two ways:
-     6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
-     6.2. Specific core: Orthogroups that are present in at least 80% of the elements for subclusters generated at a 0.8 height of the hierarchical tree of cargo content.
-       6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
+     6.1. General core: Orthogroups that are present in at least 80% of the elements in the cluster.
+     6.2. Specific core: Orthogroups that are present in at least 80% of the elements whitin specific subclusters.
+       6.2.1. Subcluster Definition: The script first uses definitions from the graph-based approach. If no subclusters were identified, it delimits subclusters at a height above 0.8 in the hierarchical clustering.
        6.2.2. If subslusters are present, identify core genes in each one that have at least 5 elements using the same logic of general core.
-   7. If subclusters are present it try to identify putative cargo movement events.
+   7. If subclusters were identified in the graph-based approach, it try to identify putative cargo movement events.
    8. Determine if there are discordances at 'Clade' level between cargo hierarchical clustering and captain phylogenetic tree.
    "
    echo
@@ -92,6 +92,8 @@ check_captain_information() {
 
 organize_working_directory() {
     local base_dir="$1"
+    local subcluster_file="$2"
+    local subcluster_number="$3"
 
     local data_dir="${base_dir}/Data/"
 
@@ -120,7 +122,9 @@ organize_working_directory() {
     cp -r ${nucleotide_dir} ${working_dir}
     cp -r ${protein_dir} ${working_dir}
     cp -r ${CDS_dir} ${working_dir}
-    cp ${captainPhylogeny} ${working_dir}/
+    cp ${captainPhylogeny} ${working_dir}
+
+    grep "${subcluster_number}" $subcluster_file > ${working_dir}/Subclusters_MCL.txt
 
     echo "##gff-version 3" > ${full_gff}
 
@@ -142,7 +146,7 @@ run_orthofinder() {
         echo -e "\033[01;31mWARNING\033[m:: The system limits on the number of files a process can open is probably too low and Orthofinder could fail. Please increase it at least to '$((element_number + 124))' using the 'ulimit -n' command."
     fi 
 
-    orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond -I 4 -T iqtree3 --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
+    orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
 
@@ -418,7 +422,7 @@ do
     fi
     
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
-    organize_working_directory "${internal_dir}"
+    organize_working_directory "${internal_dir}" "${Working_directory}/Clusters/sub_clusters.txt" "${ClusterId}"
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Running orthofinder..."
     run_orthofinder "${internal_dir}"

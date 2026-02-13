@@ -27,8 +27,8 @@ option_list <- list(
               help="value from the variable to be compared against the rest.", metavar="string"),
   make_option(c("-p", "--psignificant"), type="numeric", action = "store", default=0.05,
               help="P-value significance threshold.", metavar="number"),
-  make_option(c("-cm", "--countmode"), type="character", action = "store", default="",
-              help="Counting mode [accepted: Gene, Ships].", metavar="string")
+  make_option(c("-e", "--countmode"), type="character", action = "store", default="",
+              help="Counting mode [accepted: Gene, Ship].", metavar="string")
 )
 
 arguments <- parse_args(OptionParser(option_list = option_list))
@@ -53,7 +53,7 @@ if (arguments$mode != "Outliers" & arguments$mode != "Enrichment") {
     if (arguments$coefficient < 1.5 | arguments$coefficient > 3) {
       stop("Error: Coefficient out of accepted range (1.5 - 3)", call. = FALSE)
     }
-    if (arguments$countmode != "Gene" & arguments$countmode != "Ships") {
+    if (arguments$countmode != "Gene" & arguments$countmode != "Ship") {
       stop("Error: Provided countmode is not accepted for Outliers", call. = FALSE)
     }
   } else if (arguments$mode == "Enrichment") {
@@ -97,7 +97,7 @@ load_and_preprocess_data <- function(
   if (count_mode == "Gene") {
     OrthoFinder2 <- as.vector(OrthoFinder$Total)
     names(OrthoFinder2) <- row.names(OrthoFinder)
-  } else if (count_mode == "Ships") {
+  } else if (count_mode == "Ship") {
     OrthoFinder <- OrthoFinder[, !names(OrthoFinder) %in% c("Total")]
     OrthoFinder[OrthoFinder > 1] <- 1
     OrthoFinder2 <- rowSums(OrthoFinder)

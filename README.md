@@ -20,8 +20,8 @@ In addition to the main commands, StarCrew is distributed with a diverse set of 
     - [Initialize](#Initialize)
     - [CaptainIdentification](#CaptainIdentification)
     - [SyntenyClustering](#SyntenyClustering)
-    - [OrthogroupsOverrepresentation](#OrthogroupsOverrepresentation)
     - [ClusterCharacterization](#ClusterCharacterization)
+    - [OrthogroupsOverrepresentation](#OrthogroupsOverrepresentation)
     - [OrthogroupsAnnotation](#OrthogroupsAnnotation)
 - [Project directory organization](#Project-directory-organization)
 - [Pipeline modes](#Pipeline-modes)
@@ -397,11 +397,11 @@ This script perform eight steps per cluster:
 4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny figure for the cluster.
 5. Identify possible individual nesting events inside the cluster.
 6. Identify core genes in the cluster in two ways:
- 6.1. General core: orthogroups that are present in at least 80% of the elements in the cluster.
- 6.2. Specific core: Orthogroups that are present in at least 80% of the elements for subclusters generated at a 0.8 height of the hierarchical tree of cargo content.
-   6.2.1. Divide the Cluster in subclusters of a height above 0.8 in the hierarchical clustering.
+ 6.1. General core: Orthogroups that are present in at least 80% of the elements in the cluster.
+ 6.2. Specific core: Orthogroups that are present in at least 80% of the elements whitin specific subclusters.
+   6.2.1. Subcluster Definition: The script first uses definitions from the graph-based approach. If no subclusters were identified, it delimits subclusters at a height above 0.8 in the hierarchical clustering.
    6.2.2. If subslusters are present, identify core genes in each one that have at least 5 elements using the same logic of general core.
-7. If subclusters are present it try to identify putative cargo movement events.
+7. If subclusters were identified in the graph-based approach, it try to identify putative cargo movement events.
 8. Determine if there are discordances at 'Clade' level between cargo hierarchical clustering and captain phylogenetic tree.
 
 Syntax: StarCrew ClusterCharacterization [ -help ] -w <directory_path> [ -l <integer> -i <float> -t <integer> --overwrite ]
@@ -498,7 +498,7 @@ Required args with Default in 'Enrichment' mode:
 Optional args:
 -t, --threads: Number of threads (Default: 8)
 --overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsOverrepresentation. Not compatible wit '--skip-orthofinder' flag (Default: off)
---skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode or other value of the analysis. Not compatible with '--overwrite' flag (Default: off)
+--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode or other value of the analysis (This will remove any other result from previous runs). Not compatible with '--overwrite' flag (Default: off)
 -help: Display this help message.
 ```
 
@@ -634,12 +634,12 @@ StarCrew is a wrapper that calls different bioinformatic software, for that reas
 
 | Command | mode | Dependency | Citation |
 |:---:|:---:|:---| :---|
-|`Initialize`| `Starfish` | `seqkit`, `agat`, `metaeuk` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Dainat](https://nbisweden.github.io/AGAT/how_to_cite/), [Karin et al. 2020](https://pubmed.ncbi.nlm.nih.gov/32245390/) |
+|`Initialize`| `Starfish` | `seqkit`, `agat`, `metaeuk`, `Starfish`, `hmmer` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Dainat](https://nbisweden.github.io/AGAT/how_to_cite/), [Karin et al. 2020](https://pubmed.ncbi.nlm.nih.gov/32245390/), [Gluck-Thaler & Vogan 2024](https://pubmed.ncbi.nlm.nih.gov/38686785/), [hmmer](http://hmmer.org/) |
 | `Initialize` | `Simple` | `seqkit`, `agat` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Dainat](https://nbisweden.github.io/AGAT/how_to_cite/) |
+|`CaptainIdentification`| `AllID` | `Starfish`, `hmmer`, `seqkit`, `blast+`  | [Gluck-Thaler & Vogan 2024](https://pubmed.ncbi.nlm.nih.gov/38686785/), [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
+|`CaptainIdentification`| `Cluster`, `FullAll`| `Starfish`, `hmmer`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [Gluck-Thaler & Vogan 2024](https://pubmed.ncbi.nlm.nih.gov/38686785/), [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`SyntenyClustering`| `Raw`, `SSP`, `FilterMetric` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/) |
 |`SyntenyClustering`| `FilterBlast` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx`, `blast+` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
-|`CaptainIdentification`| `AllID` | `hmmscan`, `seqkit`, `blast+`  | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
-|`CaptainIdentification`| `Cluster`, `FullAll`| `hmmscan`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`ClusterCharacterization`| - | `orthofinder`, `DIAMOND`, `blast+`, `ape`, `ggtree`, `gggenomes` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Paradis et al. 2004](https://pubmed.ncbi.nlm.nih.gov/14734327/), [Yu et al. 2016](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12628), [Hackl et al. 2024](https://arxiv.org/abs/2411.13556) |
 |`OrthogroupsOverrepresented`| `Outliers` | `orthofinder`| [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1) |
 |`OrthogroupsOverrepresented`| `enrichment` | `orthofinder`, `bc3net` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [de Matos Simoes & Emmert-Streib 2012](https://pubmed.ncbi.nlm.nih.gov/22479422/) |

@@ -2,19 +2,13 @@
 
 check_installation() {
     local Main_directory="$1"
-    local skip="$2"
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Interpro installation..."
     check_interpro_software "${Main_directory}/interproscan/"
-
-    if $skip; then
-        check_databases "${Main_directory}/databases/" "CaptainIdentification"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Skipping annotation database check installation"
-    else
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking databases..."
-        check_databases "${Main_directory}/databases/" "All"
-        check_foldseek_databases "${Main_directory}/databases/Foldseek/" "All"
-    fi
+    
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking databases..."
+    check_databases "${Main_directory}/databases/" "All"
+    check_foldseek_databases "${Main_directory}/databases/Foldseek/" "All"
 }
 
 check_main_directory(){

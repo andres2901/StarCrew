@@ -456,7 +456,7 @@ echo "[$(date "+%Y-%m-%d %H:%M:%S")] Removing orthogroups associated with Captai
 remove_captain_orthogroups "${Working_directory}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Performing analysis..."
-Rscript ${auxiliary_path}/OverrepresentationAnalysis.R -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )" -m "${mode}" -a "${rule}" -c "${coefficient}" -n "${column}" -v "${value}" -p "${pvalue}" -cm "${countmode}"
+Rscript ${auxiliary_path}/OverrepresentationAnalysis.R -d "${Working_directory}/Workspace/$(basename -s .sh "$0" )" -m "${mode}" -a "${rule}" -c "${coefficient}" -n "${column}" -v "${value}" -p "${pvalue}" -e "${countmode}"
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
 organize_information "${Working_directory}"

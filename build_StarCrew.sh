@@ -45,9 +45,9 @@ function print_help() {
     echo "Syntax: bash $(basename "$0" ) [options...]"
     echo ""
     echo "Optional args:"
-    echo "--skipDatabases: Flag to skip the installation of the databases for the OrthogroupsAnnotation command. \033[01;31mWARNING\033[m: This setup left the OrthogroupsAnnotation command unusable,
+    echo -e "--skipDatabases: Flag to skip the installation of the databases for the OrthogroupsAnnotation command. \033[01;31mWARNING\033[m: This setup left the OrthogroupsAnnotation command unusable,
           recommended when there is not enough disk space available for the databases (Default: off)."
-    echo "--onlyDatabases: Flag to only install the databases and skip the conda environment setup. \033[01;31mWARNING\033[m: This flag expect a previous setup of the conda environment.
+    echo -e "--onlyDatabases: Flag to only install the databases and skip the conda environment setup. \033[01;31mWARNING\033[m: This flag expect a previous setup of the conda environment.
                               Not compatible with '--skipDatabases' flag (Default: off). "
     echo "-help: Display this help message."
 }
@@ -59,6 +59,7 @@ function print_help() {
 # Initialize variables
 only_databases=false
 skip_databases=false
+help_flag=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -79,6 +80,11 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if $help_flag; then
+    print_help
+    exit 0
+fi
 
 if $only_databases && $skip_databases; then
     echo "Error: '--onlyDatabases' and '--skip-skipDatabases' flags are both 'on' and those are incompatible."
@@ -213,8 +219,8 @@ else
     rm pfamA_35.0.tar.gz
 
     cd ${Main_dir}
+    echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] Checking full instalation..."
+    check_installation "${Main_dir}" "${skip_databases}"
 fi
 
-echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] Checking full instalation..."
-check_installation "${Main_dir}" "${skip_databases}"
 echo -e "\n[$(date "+%Y-%m-%d %H:%M:%S")] installation Successful."

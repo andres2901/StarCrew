@@ -2,7 +2,9 @@
 
 # Function to display the main help message
 show_main_help() {
-  echo "Usage: $(basename "$0" ) <COMMAND> [options]"
+  echo "StarCrew: a bash wrapper for Starships (Giant mobile elements) cargo analysis"
+  echo ""
+  echo "Usage: $(basename "$0" ) <command> [args]"
   echo
   echo "Available commands:"
   echo "  Initialize                    - Gathers the input data and organize the working directory to run this tool."

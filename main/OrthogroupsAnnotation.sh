@@ -50,11 +50,11 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: Define the orthogroups to be analyzed (Default: All) [Available mode: MoveAssociated, Core, All, Overrepresented]."
-   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default: afdb_swissprot) [Available databases: pdb, afdb_swissprot]."
+   echo "-m, --mode: Define the orthogroups to be analyzed (Default = All) [Available mode: MoveAssociated, Core, All, Overrepresented]."
+   echo "-f, --foldseekdb: Name of the Foldseek database to use (Default = afdb_swissprot) [Available: pdb, afdb_swissprot]."
+   echo "-t, --threads: Number of threads for all analysis (Default: 8)."
    echo ""
    echo "Optional args:"
-   echo "-t, --threads: Number of threads for all analysis (Default: 8)."
    echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)."
    echo "-help: Display this help message."
 }
@@ -85,6 +85,9 @@ check_clusters() {
             clusters_file="${Cluster_dir}/ClusterCore.txt"
         fi
     fi
+
+    Cluster_number=$(wc -l "$clusters_file" | awk '{print $1}')
+    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters.\n"
 }
 
 check_overrepresentation() {
@@ -219,7 +222,7 @@ run_foldseek() {
             State=$(($State + 1))
             foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/${foldseekdb} ${temp_dir}/${OrthogroupID}.m8 ${temp_dir}/tmp --prostt5-model ${foldseek_path}/weights -e 0.001 -c 0.5 --cov-mode 0 -v 0 --threads ${threads} &>/dev/null
             awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[1];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
-            join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/entries_update.idx | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
+            join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/entries_update.idx | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 | sed -e 's/;/,/g' > ${foldseek_results}/${OrthogroupID}.m8
             ProgressBar $State $Total_states
         done
     elif [[ $foldseekdb == "afdb_swissprot" ]]; then
@@ -228,7 +231,7 @@ run_foldseek() {
             State=$(($State + 1))
             foldseek easy-search ${Orthogroups_dir}/${OrthogroupID}.fa ${foldseek_path}/${foldseekdb} ${temp_dir}/${OrthogroupID}.m8 ${temp_dir}/tmp --prostt5-model ${foldseek_path}/weights -e 0.001 -c 0.5 --cov-mode 0 -v 0 --threads ${threads} &>/dev/null
             awk '{FS=OFS="\t"}{split($2,array,"-");$2=array[2];print}' ${temp_dir}/${OrthogroupID}.m8 > ${temp_dir}/${OrthogroupID}-2.m8
-            join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/Accession_swissprot.txt | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 > ${foldseek_results}/${OrthogroupID}.m8
+            join -t $'\t' -i -1 2 -2 1 <(sort -k2,2 ${temp_dir}/${OrthogroupID}-2.m8) ${foldseek_path}/Accession_swissprot.txt | awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' | sort -k1,1 | sed -e 's/;/,/g' > ${foldseek_results}/${OrthogroupID}.m8
             ProgressBar $State $Total_states
         done
     fi
@@ -329,7 +332,7 @@ create_summary_table(){
                 InterProGO_General=""
             fi
         else
-            sed -e 's/$/;/g' ${temp_dir}/${OrthogroupID}.csv > ${temp_dir}/${OrthogroupID}-3.csv
+            sed -e 's/$/;;/g' ${temp_dir}/${OrthogroupID}.csv > ${temp_dir}/${OrthogroupID}-3.csv
             InterPro_General=""
             InterProGO_General=""
         fi
@@ -483,9 +486,11 @@ if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; t
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
         check_internal_directory_structure "${internal_dir}"
 
         if $directory_flag; then
+            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure is valid. Proceeding."
             if $overwrite; then
                 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
                 overwrite "${internal_dir}" "$(basename -s .sh "$0" )" "${mode}"
@@ -519,6 +524,7 @@ if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; t
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 
 elif [[ ${mode} == "Overrepresented" ]]; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
     check_overrepresentation "${Working_directory}"
 
     if $overwrite; then
