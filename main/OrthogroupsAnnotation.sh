@@ -179,6 +179,8 @@ organize_working_directory() {
         local CoreGenes_dir=$(find "$ClusterAnnotation_dir" -maxdepth 1 -type d -name "Core_genes" 2>/dev/null)
         cp ${CoreGenes_dir}/* ${Orthogroups_dir}/
     fi
+
+    sed -i -e 's/\*//g' ${Orthogroups_dir}/*
 }
 
 organize_working_directory_overrepresentation() {
@@ -201,6 +203,7 @@ organize_working_directory_overrepresentation() {
 
     local data_dir=$(find "$overrepresented_dir" -maxdepth 3 -type d -name "Orthogroups" 2>/dev/null)
     cp ${data_dir}/* ${Orthogroups_dir}/
+    sed -i -e 's/\*//g' ${Orthogroups_dir}/*
 }
 
 run_foldseek() {
@@ -465,8 +468,6 @@ else
     fi
 fi
 
-check_clusters "${Working_directory}"
-
 if [[ "$foldseekdb" != "pdb" && "$foldseekdb" != "afdb_swissprot" ]]; then
     echo "Error: '$foldseekdb' is not accepted as a foldseek database."
     print_help
@@ -482,6 +483,8 @@ check_threads "${threads}"
 # ==============================================================================
 
 if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; then
+    check_clusters "${Working_directory}"
+
     awk '{print $1}' ${clusters_file} | sed $'s/[^[:print:]\t]//g' | while read ClusterId
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
@@ -524,7 +527,6 @@ if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; t
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
 
 elif [[ ${mode} == "Overrepresented" ]]; then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${Working_directory}' structure."
     check_overrepresentation "${Working_directory}"
 
     if $overwrite; then

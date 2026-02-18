@@ -54,7 +54,7 @@ function print_help() {
    echo "-b, --boundaries: *.elements.feat file output of 'starfish summary' command."
    echo "-c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command."
    echo ""
-   echo "Required args with Default in 'Starfish' mode:"
+   echo "Required args in 'Starfish' mode with Default:"
    echo "-s, --separator: character separating genomeID from featureID that was used for Starfish run (Default = '_')."
    echo ""
    echo "Required args in 'Simple' mode:"
@@ -255,7 +255,7 @@ gene_stats() {
     echo -e "Starship""\t""Number_genes""\t""Avg_gene_length""\t""Avg_intergenic_length" > ${working_dir}/Gene_stats.txt
     ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | while read line
     do 
-        echo -e ${line}"\t"$(grep -c "gene" ${working_dir}/Data/Gff/${line}.gff)"\t"$(grep "gene" ${working_dir}/Data/Gff/${line}.gff | awk '{ sum  += $5 - $4 } END { if(NR > 0) {print sum / NR} else {print $0}}')"\t"$(grep "gene" ${working_dir}/Data/Gff/${line}.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = $4 - prev_col2; prev_col2 = $5; if (diff > 0) total_sum += diff} END {if((NR - 1) > 0) {print total_sum / (NR - 1)} else {print 0}}') >> ${working_dir}/Gene_stats.txt 
+        echo -e ${line}"\t"$(grep -c -P "\tgene\t" ${working_dir}/Data/Gff/${line}.gff)"\t"$(grep -P "\tgene\t" ${working_dir}/Data/Gff/${line}.gff | awk '{ sum  += $5 - $4 } END { if(NR > 0) {print sum / NR} else {print $0}}')"\t"$(grep -P "\tgene\t" ${working_dir}/Data/Gff/${line}.gff | sort -k4 -n | awk 'NR==1 {prev_col2 = $5; next} {diff = $4 - prev_col2; prev_col2 = $5; if (diff > 0) total_sum += diff} END {if((NR - 1) > 0) {print total_sum / (NR - 1)} else {print 0}}') >> ${working_dir}/Gene_stats.txt 
     done
 }
 
@@ -400,9 +400,14 @@ Process_starfish() {
     do
         State=$(($State + 1))
         grep -w $line ${working_dir}/Coordinate_file.txt | cut -d$'\t' -f 1-5 > ${working_dir}/temp/temp_coordinate_file.txt
-        python ${auxiliary_path}/gff_slicer.py -c ${working_dir}/temp/temp_coordinate_file.txt -i ${working_dir}/temp/gff/${line}.gff -o ${working_dir}/Data/Gff/ &> /dev/null
+        python ${auxiliary_path}/gff_slicer.py -c ${working_dir}/temp/temp_coordinate_file.txt -i ${working_dir}/temp/gff/${line}.gff -o ${working_dir}/temp/gff2/ &> /dev/null
+        awk '{print $1}' ${working_dir}/temp/temp_coordinate_file.txt | while read line; do
+            agat_sp_keep_longest_isoform.pl --config ${agat_config} --gff ${working_dir}/temp/gff2/${line}.gff -o ${working_dir}/Data/Gff/${line}.gff &> /dev/null
+        done
         ProgressBar $State $Total_states
     done
+
+    rm ${working_dir}/temp/gff2/*.gff
 
     echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Updating elements gff file..."
     Total_states=$(ls ${working_dir}/Data/Gff/ | xargs -n 1 basename -s .gff | wc -l)
@@ -412,6 +417,7 @@ Process_starfish() {
     do
         State=$(($State + 1))
         sed -i -e "s/ID=/ID=${line}\./g" -e "s/Parent=/Parent=${line}\./g" ${working_dir}/Data/Gff/${line}.gff
+        
         ProgressBar $State $Total_states
     done
 
@@ -420,7 +426,7 @@ Process_starfish() {
     metaeuk createdb ${working_dir}/Sequences.fa ${working_dir}/temp/ContigsDB --dbtype 2 -v 0 &> /dev/null
     metaeuk createdb $captains_path ${working_dir}/temp/ProteinDB --dbtype 1 -v 0 &> /dev/null
 
-    metaeuk predictexons ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB  ${working_dir}/temp/metaeukResults ${working_dir}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 0.95 --remove-tmp-files 1 --use-all-table-starts 1 --metaeuk-tcov 0.95 --threads ${threads} --disk-space-limit 100G &> /dev/null
+    metaeuk predictexons ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB  ${working_dir}/temp/metaeukResults ${working_dir}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 0.95 -c 0.5 --cov-mode 1 --remove-tmp-files 1 --use-all-table-starts 1 --threads ${threads} --disk-space-limit 100G &> /dev/null
     metaeuk reduceredundancy ${working_dir}/temp/metaeukResults ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukgroups --threads ${threads} -v 0 &> /dev/null
     metaeuk unitesetstofasta ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukFinal --threads ${threads} -v 0 &> /dev/null
 

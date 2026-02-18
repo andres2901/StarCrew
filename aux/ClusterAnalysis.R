@@ -201,7 +201,7 @@ analyze_individual_clusters <- function(Individual_clusters, transposase_OrthoFi
   return(Selected_clusters)
 }
 
-plot_cluster_synteny <- function(Cluster_matrix, orthogroup_table, core_genes, seq_data, gene_data, blast_links, Cluster_number = "") {
+plot_cluster_synteny <- function(Cluster_matrix, orthogroup_table, core_genes, seq_data, gene_data, blast_links, Cluster_number = "", SubCluster_number = "") {
   Cluster_distance <- dist(Cluster_matrix, method = 'binary')
   Cluster_Hier <- hclust(Cluster_distance, method = 'average')
   my_tree <- as.phylo(Cluster_Hier)
@@ -232,7 +232,7 @@ plot_cluster_synteny <- function(Cluster_matrix, orthogroup_table, core_genes, s
 
   p_tree <- p_tree_base + ggtree::geom_tiplab(align = TRUE, size = ifelse(nrow(Cluster_matrix) < 100, 2.5, 3), family = "mono") + ggtree::theme_tree2()
 
-  p_genome <- gggenomes(seqs = ordered_seqs, links = links_filtered, genes = genes_filtered) +
+  p_genome <- suppressMessages(gggenomes(seqs = ordered_seqs, links = links_filtered, genes = genes_filtered) +
     geom_seq(aes(y = y)) +
     geom_gene(aes(y = y, fill = attribute), show.legend = T) +
     scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4"), na.value = "cornsilk3", limits = c("general", "specific")) +
@@ -241,7 +241,7 @@ plot_cluster_synteny <- function(Cluster_matrix, orthogroup_table, core_genes, s
     scale_fill_continuous(name = "Alignment Identity (%)") +
     geom_bin_label(aes(y = y), x = -10, size = ifelse(nrow(Cluster_matrix) < 50, 2.5, 3)) +
     scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max_seq_len)) +
-    scale_y_continuous(expand = expansion(mult = 1.0001 * (nrow(Cluster_matrix) ^ -1.1728)))
+    scale_y_continuous(expand = expansion(mult = 1.0001 * (nrow(Cluster_matrix) ^ -1.1728))))
       
   final_plot <- p_tree + p_genome
   plot_width_final <- min(49, max(16, round(max_seq_len * 0.0001) + round(max(tree_sorted$edge.length, na.rm = TRUE) * 10)))
@@ -249,6 +249,8 @@ plot_cluster_synteny <- function(Cluster_matrix, orthogroup_table, core_genes, s
       
   if (Cluster_number != "") {
     ggsave(final_plot, filename = paste("CargoSynteny_Cluster", Cluster_number, ".svg", sep = ""), width = plot_width_final, height = plot_height_final, limitsize = FALSE)
+  } else if (SubCluster_number != "") {
+    ggsave(final_plot, filename = paste("CargoSynteny_SubCluster", SubCluster_number, ".svg", sep = ""), width = plot_width_final, height = plot_height_final, limitsize = FALSE)
   } else {
     ggsave(final_plot, filename = "CargoSynteny.svg", width = plot_width_final, height = plot_height_final, limitsize = FALSE)
   }
@@ -281,8 +283,6 @@ check_nesting <- function(ortho_counts, seq_data, gene_data, blast_links) {
             seq_id2Length <- as.numeric(seq_data[seq_data$seq_id %in% unique(links_filtered2$seq_id2), 2])
             is_nested_q <- any(links_filtered2$start < seq_idLength * 0.2) && any(links_filtered2$end > seq_idLength * 0.8)
             is_not_nested_s <- any(links_filtered2$start2 < seq_id2Length * 0.2) 
-            #&& any(links_filtered2$end2 > seq_id2Length * 0.8)
-            #(xor(is_nested_q, is_nested_s))
 
             if (is_nested_q && ! is_not_nested_s) {
               cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Element ", Element_name, " is nested in element ", Element_compare, "\n", sep = ""))
@@ -360,8 +360,7 @@ gene_movement_analysis <- function(subcluster_number, matrix, ortho_counts, core
   return(list(movement = single_movements, multiple = multiple_movements, orthogroups = Gene_movement, elements_in = elements_cluster, elements_out = elements_other, K_analysis = test_NbClust))
 }
 
-plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_matrix, cluster_fit, ortho_counts, core_genes, seq_data, gene_data, blast_links, Cluster_number = "", subcluster) {
-  
+plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_matrix, cluster_fit, ortho_counts, core_genes, seq_data, gene_data, blast_links, cluster_matrix, Cluster_number = "", subcluster) {
   for (ClusterId in 1:subcluster_number) {
     if(Cluster_number != "") {
       matrix <- dist_matrix[grep(ClusterId, cluster_fit), ]
@@ -379,6 +378,21 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
     multiple_movements <- FALSE
     
     if (is.matrix(matrix)) {
+      subcluster_matrix <- cluster_matrix[rownames(cluster_matrix) %in% Cluster_elements,]
+
+      links <- blast_links %>%
+          select(seq_id = qseqid, start = qstart, end = qend, seq_id2 = sseqid, start2 = sstart, end2 = send, pident)
+
+      plot_cluster_synteny(
+        Cluster_matrix = subcluster_matrix, 
+        orthogroup_table = orthogroup_table, 
+        core_genes = core_genes, 
+        seq_data = seq_data, 
+        gene_data = gene_data, 
+        blast_links = links,
+        SubCluster_number = ClusterId
+      )
+
       reduce_matrix <- matrix[, colSums(matrix) < nrow(matrix) * 0.98]
       
       if (ncol(reduce_matrix) >= nrow(reduce_matrix) + 2) {
@@ -465,7 +479,7 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
           geom_bin_label(aes(y = y), x = -10) + scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
           theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
         
-        ggsave(p_genome, filename = paste(Cluster_number, "CargoSynteny_SubCluster", ClusterId, ".svg", sep = ""), 
+        ggsave(p_genome, filename = paste(Cluster_number, "MovementSynteny_SubCluster", ClusterId, ".svg", sep = ""), 
                width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)), height = min(49, length(selected_seqs2)), limitsize = FALSE)
       } else if (selected_seqs2_defined & multiple_movements) {
         k_out_cluster <- unique(test_NbClust$Best.partition[elements_other])
@@ -520,17 +534,17 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
                   geom_bin_label(aes(y = y), x = -10) + scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
                   theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
                 
-                ggsave(p_genome, filename = paste(Cluster_number, "CargoSynteny_SubCluster", ClusterId, "-", i, "vs", j, ".svg", sep = ""), 
+                ggsave(p_genome, filename = paste(Cluster_number, "MovementSynteny_SubCluster", ClusterId, "-", i, "vs", j, ".svg", sep = ""), 
                        width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)), height = min(49, length(sel_seq2)), limitsize = FALSE)
               }
             }
           }
         }
       } else {
-        cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Subcluster ", ClusterId, " can not be analyzed automatically", "\n", sep = ""))
+        cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Subcluster ", ClusterId, " do not have identifiable putative movement event.", "\n", sep = ""))
       }
     } else {
-      cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Subcluster ", ClusterId, " can not be analyzed automatically", "\n", sep = ""))
+      cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Subcluster ", ClusterId, " can not be analyzed automatically.", "\n", sep = ""))
     }
   }
 }
@@ -602,7 +616,8 @@ if (clustering_data$Individual_clusters == 1) {
         seq_data = data_list$seqs, 
         gene_data = data_list$genes, 
         blast_links = data_list$blast_results,
-        subcluster = data_list$subclusters
+        subcluster = data_list$subclusters,
+        cluster_matrix = clustering_data$transposed_counts
       )
     } else {
       cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Analyzing subclusters with NbClust optimization", "\n", sep = ""))
@@ -618,7 +633,9 @@ if (clustering_data$Individual_clusters == 1) {
         core_genes = core_genes, 
         seq_data = data_list$seqs, 
         gene_data = data_list$genes, 
-        blast_links = data_list$blast_results
+        blast_links = data_list$blast_results,
+        subcluster = data_list$subclusters,
+        cluster_matrix = clustering_data$transposed_counts
       )
     }
   } else {
