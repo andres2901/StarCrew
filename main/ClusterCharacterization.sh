@@ -281,6 +281,7 @@ organize_information() {
             cp -r ${working_dir}/${SubCluster}_moveOrthologs/ ${Characterization_dir}/Movement_genes/${SubCluster}/Orthogroups
             cp ${working_dir}/${SubCluster}_moveOrthologs.txt ${Characterization_dir}/Movement_genes/${SubCluster}/OrthogroupsID.txt
             cp ${working_dir}/${SubCluster}_moveOrthologsTable.csv ${Characterization_dir}/Movement_genes/${SubCluster}/Matrix.txt
+            cp ${working_dir}/${SubCluster}*_moveOrthologsMatrix.csv ${Characterization_dir}/Movement_genes/${SubCluster}/ 2>/dev/null
         done
     fi
 }

@@ -139,8 +139,7 @@ run_orthofinder() {
     if $captain_phylogeny; then
         orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization
     else
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 --scores-v2 -o ${output_dir} -n characterization
-        #&> ${working_dir}/orthofinder.log
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
     fi
 
     local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
@@ -448,6 +447,9 @@ if ! $skip_orthofinder; then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running orthofinder..."
     run_orthofinder "${Working_directory}"
+    if ! $orthofinder_flag; then
+        echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder. Please check Orthofinder log.\n"
+    fi
 else
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Skipping the working directory organization and orthofinder run."
 fi

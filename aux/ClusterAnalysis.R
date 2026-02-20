@@ -497,7 +497,13 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
             OF_sub_oth <- subset(ortho_counts, select = oth_seqs) %>% filter(!if_all(everything(), ~ .x == 0))
             
             G_mov <- intersect(rownames(OF_sub_cl), rownames(OF_sub_oth))
-            sel_seq2 <- c(cl_seqs, oth_seqs)
+            OF_sub_cl <- OF_sub_cl[G_mov,]
+            OF_sub_cl <- OF_sub_cl[,  colSums(abs(OF_sub_cl)) > 0]
+            OF_sub_oth <- OF_sub_oth[G_mov,]
+            OF_sub_oth <- OF_sub_oth[,  colSums(abs(OF_sub_oth)) > 0]
+
+            sel_seq2 <- c(colnames(OF_sub_cl), colnames(OF_sub_oth))
+            #sel_seq2 <- c(cl_seqs, oth_seqs)
             sel_seq2 <- sel_seq2[!is.na(sel_seq2)]
             
             if (length(sel_seq2) >= 2) {
@@ -520,7 +526,7 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
                 genes_filtered <- genes_filtered %>% mutate(attribute = ifelse(ID %in% gen_vector, "general", attribute))
               }
         
-              mov_table <- orthogroup_table[orthogroup_table$Orthogroup %in% Movement$orthogroups, ]
+              mov_table <- orthogroup_table[orthogroup_table$Orthogroup %in% G_mov, ]
               mov_vector <- unlist(strsplit(mov_table[, 2], split = " "))
               mov_vector <- mov_vector[mov_vector != ""]
               genes_filtered <- genes_filtered %>% mutate(attribute = ifelse(ID %in% mov_vector, "Movement associated", attribute))
@@ -536,6 +542,9 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
                 
                 ggsave(p_genome, filename = paste(Cluster_number, "MovementSynteny_SubCluster", ClusterId, "-", i, "vs", j, ".svg", sep = ""), 
                        width = min(49, max(16, round(max(ordered_seqs$length) * 0.0001) / 2)), height = min(49, length(sel_seq2)), limitsize = FALSE)
+
+                New_ortho_count <- ortho_counts[G_mov,sel_seq2]
+                write.csv(New_ortho_count, file = paste(Cluster_number, "SubCluster", ClusterId, "-", i, "vs", j, "_moveOrthologsMatrix.csv", sep = ""), row.names = T, quote = F)
               }
             }
           }

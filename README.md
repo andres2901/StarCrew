@@ -115,6 +115,7 @@ To use StarCrew, you must have the results from both the `geneFinder` and `eleme
 1.  **Elements File (Multifasta):**
     - This is the `*.elements.fna` file resulting from the `starfish summarize` command.
     - This file contains the nucleotide sequences of the elements to be studied.
+    - **Note:** The `|+` and `|-` characters must be removed from the element headers to ensure compatibility. You can perform this cleanup quickly using the following `sed` command: `sed -i -e 's/|+//g' -e 's/|-//g' *.elements.fna`.
     - **Recommendation:** Ideally, the user should remove elements identified as false positives during their preliminary inspection.
 
 2.  **Boundaries File (Metadata):**
@@ -444,11 +445,11 @@ After a successful run of the characterization command, the following files and 
     - This directory contains information about the core orthogroups identified (if any).
     - It includes:
         - A subdirectory containing multifasta files of the protein sequences per orthogroup.
-        - File(s) listing the gene IDs, named by the core gene group (general or specific) they correspond to.
+        - File(s) listing the gene IDs, named by the core gene group (general or subcluster/specific) they correspond to.
         - A presence/absence matrix of these core genes across the elements.
 - **Movement_genes/**:
     - This directory contains information about the orthogroups identified as potentially being associated with movement events (if any).
-    - It includes:
+    - The following information is divided in subdirectories for each subcluster that have a putative gene movement witho other elements:
         - A subdirectory containing multifasta files of the protein sequences per orthogroup.
         - File(s) listing the gene IDs, named by the subcluster where the gene was identified.
         - A presence/absence matrix of these movement genes on the elements that allegedly participated in the movement.
