@@ -709,6 +709,7 @@ if (clustering_data$Individual_clusters == 1) {
     dist_matrix <- cophenetic.phylo(phylo_tree)
     normalized_dist_matrix <- (dist_matrix - min(dist_matrix)) / (max(dist_matrix) - min(dist_matrix))
     hclust_tree <- hclust(as.dist(normalized_dist_matrix), method = "average")
+    hclust_tree$height <- sort(hclust_tree$height)
     
     if (length(phylo_tree$tip.label) > 4) {
       test_nb <- NbClust(scale(normalized_dist_matrix), method = "average", min.nc = 1, max.nc = min(6, nrow(normalized_dist_matrix) - 1), index = "ball")

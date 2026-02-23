@@ -130,6 +130,11 @@ def check_filters(gene_id, gff_df, exon_range, pos_range_kb):
     gene_info = matches.iloc[0]
     pos_range = pos_range_kb * 1000 
     
+    #  Dynamic range adjustment for consistency
+    seq_length = gene_info['Element_End'] - gene_info['Element_Start']
+    if seq_length < (2 * pos_range):
+        pos_range = seq_length / 2
+
     if not (exon_range[0] <= gene_info['Exon_Count'] <= exon_range[1]):
         return False, f"ID '{gene_id}' has {gene_info['Exon_Count']} exons, not in the required range {exon_range}."
 
@@ -149,6 +154,15 @@ def run_gff_analysis(hmm_ids, gff_df, pos_range_kb):
 
     candidates = gff_df[gff_df['ID'].isin(common_ids)].copy()
     pos_range = pos_range_kb * 1000
+
+    # Dynamic range adjustment based on sequence length
+    # We assume all candidates share the same element bounds
+    element_start = candidates['Element_Start'].iloc[0]
+    element_end = candidates['Element_End'].iloc[0]
+    seq_length = element_end - element_start
+    
+    if seq_length < (2 * pos_range):
+        pos_range = seq_length / 2
 
     cond_plus = (candidates['Strand'] == '+') & (candidates['Start_Pos'] - candidates['Element_Start'] <= pos_range)
     cond_minus = (candidates['Strand'] == '-') & (candidates['Element_End'] - candidates['End_Pos'] <= pos_range)

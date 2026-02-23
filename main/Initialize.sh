@@ -426,26 +426,28 @@ Process_starfish() {
     metaeuk createdb ${working_dir}/Sequences.fa ${working_dir}/temp/ContigsDB --dbtype 2 -v 0 &> /dev/null
     metaeuk createdb $captains_path ${working_dir}/temp/ProteinDB --dbtype 1 -v 0 &> /dev/null
 
-    metaeuk predictexons ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB  ${working_dir}/temp/metaeukResults ${working_dir}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 0.95 -c 0.5 --cov-mode 1 --remove-tmp-files 1 --use-all-table-starts 1 --threads ${threads} --disk-space-limit 100G &> /dev/null
+    metaeuk predictexons ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB  ${working_dir}/temp/metaeukResults ${working_dir}/temp/tempFolder -s 7.5 --exhaustive-search 1 --orf-start-mode 0 --min-seq-id 0.95 --metaeuk-tcov 0.75 --min-length 200 --remove-tmp-files 1 --use-all-table-starts 1 --threads ${threads} --disk-space-limit 100G &> /dev/null
     metaeuk reduceredundancy ${working_dir}/temp/metaeukResults ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukgroups --threads ${threads} -v 0 &> /dev/null
     metaeuk unitesetstofasta ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukFinal --threads ${threads} -v 0 &> /dev/null
 
     sed -e 's/Target_ID=.*;TCS_//g' ${working_dir}/temp/metaeukFinal.gff > ${working_dir}/temp/metaeuk.gff
 
+    agat_sp_filter_by_ORF_size.pl --config ${agat_config} --gff ${working_dir}/temp/metaeuk.gff -s 200 -o ${working_dir}/temp/metaeuk_ORF.gff &> /dev/null
+
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Merging gff files..."
-    Total_states=$(grep -v "#" ${working_dir}/temp/metaeuk.gff | awk '{print $1}' | sort -u | wc -l)
+    Total_states=$(grep -v "#" ${working_dir}/temp/metaeuk_ORF_sup200.gff | awk '{print $1}' | sort -u | wc -l)
     State=0
 
     rm ${working_dir}/temp/gff/*
     mkdir ${working_dir}/temp/modelsKeep/
 
-    grep -v "#" ${working_dir}/temp/metaeuk.gff | awk '{print $1}' | sort -u | while read line 
+    grep -v "#" ${working_dir}/temp/metaeuk_ORF_sup200.gff | awk '{print $1}' | sort -u | while read line 
     do
         State=$(($State + 1))
 
         echo "#gff version-3" > ${working_dir}/temp/gff/temp_captain_${line}.gff
 
-        grep -w "^${line}" ${working_dir}/temp/metaeuk.gff >> ${working_dir}/temp/gff/temp_captain_${line}.gff
+        grep -w "^${line}" ${working_dir}/temp/metaeuk_ORF_sup200.gff >> ${working_dir}/temp/gff/temp_captain_${line}.gff
         agat_sp_manage_IDs.pl --config ${agat_config} --gff ${working_dir}/temp/gff/temp_captain_${line}.gff --prefix ${line}.metaeuk -o ${working_dir}/temp/gff/temp_captain2_${line}.gff &> /dev/null
         cp ${working_dir}/Data/Gff/${line}.gff ${working_dir}/temp/gff/${line}_merge.gff
         grep -v "^#" ${working_dir}/temp/gff/temp_captain2_${line}.gff >> ${working_dir}/temp/gff/${line}_merge.gff 

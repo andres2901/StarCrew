@@ -248,6 +248,7 @@ Captain_pseudogene() {
         echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] \033[01;31mWARNING\033[m: Not all elements have an identifible captain. Trying to identify a region possibly associated to a captain pseudogene..."
 
         Total_states=$(wc -l ${empty_elements} | awk '{print $1}')
+        local element_length=0
         local Full_range=$(( ${range} * 1000 ))
         State=0
 
@@ -255,6 +256,12 @@ Captain_pseudogene() {
         cat ${empty_elements} | while read line 
         do
             State=$(($State + 1))
+
+            # Determine real range to analyze
+            element_length=$(seqkit stats ${nucleotide_path}/${line}.fa | grep "DNA" | awk '{print $5}' | sed s/,//)
+            if [[ $element_length -lt $(( $Full_range * 2)) ]]; then
+                Full_range=$(( $element_length / 2 ))
+            fi
             
             # Search for captain pseudogene at the beginning in the positive strand
             seqkit subseq --quiet -r 1:${Full_range} ${nucleotide_path}/${line}.fa > ${temp_dir}/blast/${line}_start.fa
@@ -336,7 +343,9 @@ Captain_pseudogene() {
                     echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."
                     echo "${line}" >> ${Remove_elements}
                 fi
-            fi 
+            fi
+
+            Full_range=$(( ${range} * 1000 )) 
 
             ProgressBar $State $Total_states
         done
@@ -769,7 +778,9 @@ elif [[ "${mode}" == "Cluster" ]]; then
     do
         internal_dir="${Working_directory}/Clusters/${ClusterId}/"
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
         check_directory_structure "${internal_dir}"
+        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${internal_dir}' is valid. Proceeding."
 
         if $overwrite; then
             echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
@@ -803,7 +814,11 @@ elif [[ "${mode}" == "Cluster" ]]; then
         fi
 
         echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
+        alingmentless_flag=false
+        captainless_flag=false
+        
         Alignment "${internal_dir}"
+        
         if $captainless_flag || $alingmentless_flag; then
             continue
         fi
