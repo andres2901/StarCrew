@@ -27,8 +27,8 @@ Interpro_path=$(realpath $Interpro_path)
 
 # Function to print help message
 function print_help() {
-   echo -e "Script to run a functional annotation for orthogroups.
-   This script perform three steps:
+   echo -e "Command to run a functional annotation for orthogroups.
+   It performs three steps:
    1. Organize the Orthogroups that are selected base on the mode.
      1.1 Core: Orthogoups that were identify as core by the ClusterCharacteriation command.
      1.2 MoveAssociated: Orthogoups that were identify as part of a putative movement event between subclusters by the ClusterCharacterization command.

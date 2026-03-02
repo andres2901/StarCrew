@@ -57,10 +57,10 @@ database_path=$(realpath $database_path)
 # ==============================================================================
 
 function print_help() {
-   echo -e "Script to identify captain genes within each element and construct a phylogenetic tree based on these captains.
+   echo -e "Command to identify captain genes/pseudogenes within each element and construct a phylogenetic tree based on these sequences.
    It executes five main steps:
    1. Run hmmscan using hmm profiles of specific domains in captains against the proteome of each element.
-   2. Processes the data to identify Captains and regions suitable for phylogenetic analysis. Three confidence levels can be used for captain identification:
+   2. Processes the data to identify Captains based on hmm results and position. Three confidence levels can be used for captain identification:
       2.1 Only a match with the Captain HMM profile from Starfish \033[01;31mWARNING\033[m: This may lead to false positive identifications and result in an unreliable phylogenetic analysis.
       2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
       2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with HMM profile associated with the YR Recombinase Active Site.
@@ -83,16 +83,16 @@ function print_help() {
    echo "-w, --workingDirectory: Specify the working directory where all data are stored."
    echo ""
    echo "Required args with Default:"
-   echo "-m, --mode: specified the mode (Default: AllID) [Available mode: Cluster, FullAll, AllID]."
+   echo "-m, --mode: Specified the mode (Default: AllID) [Available mode: Cluster, FullAll, AllID]."
    echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 250) [range: 200 - 800]."
    echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
-   echo "-r, --rangeKb:The distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]."
+   echo "-r, --rangeKb: Distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]."
    echo ""
    echo "Required args with Default in 'Cluster' mode:"
    echo "-ms, --minSize: Minimum size of a Cluster to be include in the analysis when running the 'Cluster' mode (Default: 4) [range: 4 - 10]."
    echo ""
    echo "Optional args:"
-   echo "-t, --threads: Number of threads to use for phylogenetic tree inference (Default: 1)."
+   echo "-t, --threads: Number of threads to use for hmmscan search and phylogenetic tree inference (Default: 1)."
    echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)."
    echo "-help: Display this help message."
 }

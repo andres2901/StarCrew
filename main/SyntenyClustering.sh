@@ -483,35 +483,7 @@ process_collinearity() {
 
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Filtering results base on a minimum metric value of '${Metric_treshold}'..."
 
-        Total_states=$(($(wc -l "${temp_prefix}_Collinearity_percentage.txt" | awk '{print $1}') - 1))
-        State=0
-
-        awk 'BEGIN{FS=";";OFS=" "}NR>1{file1=$1"_"$2;file2=$2"_"$1; print file1 OFS file2}' "${temp_prefix}_Collinearity_percentage.txt" | while read line
-        do
-            State=$(($State + 1))
-            grep -E "[0-9]*-.*[0-9]*:" ${collinearity_path}/$(echo $line | awk '{print $1}').collinearity | awk 'BEGIN{FS=OFS="\t"}{print $2 OFS $3}' | sort -u > ${temp_prefix}_collinear1.txt
-            local Max_points=$(($(wc -l "${temp_prefix}_collinear1.txt" | awk '{print $1}') * 2))
-            awk 'BEGIN{FS=OFS="\t"}{swap=$1;$1=$2;$2=swap;print $0}' "${temp_prefix}_collinear1.txt" > "${temp_prefix}_collinear2.txt"
-            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits1.txt" 
-            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $1}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits1.txt" 
-            grep -f "${temp_prefix}_collinear1.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits2.txt" 
-            grep -f "${temp_prefix}_collinear2.txt" ${diamond_results_dir}/$(echo $line | awk '{print $2}').tsv 2> /dev/null | awk 'BEGIN{FS=OFS="\t"}{if($4>100 && $3>=60){print}}' >> "${temp_prefix}_hits2.txt" 
-
-            local hits1=$(wc -l "${temp_prefix}_hits1.txt" | awk '{print $1}') 
-            local hits2=$(wc -l "${temp_prefix}_hits2.txt" | awk '{print $1}')
-            local bonus1=$(awk -F '\t' '{if($3>=95){sum+= 0.1*($4/200)}}END{if(sum!=""){print sum}else{print 0}}' "${temp_prefix}_hits1.txt")
-            local bonus2=$(awk -F '\t' '{if($3>=95){sum+= 0.1*($4/200)}}END{if(sum!=""){print sum}else{print 0}}' "${temp_prefix}_hits2.txt")
-            local Metric=$(echo "$hits1 + $hits2 + $bonus1 + $bonus2" | bc)
-            if (( $(bc <<< "$Metric >= $Metric_treshold") )); then
-                local Metric_index=$(echo "print(min(round(${Metric}/${Max_points},2),1))" | python)
-                echo $(echo $line | awk '{split($1,array,"_");print array[1]";"array[2]}')";"${Metric_index} >> "${working_dir}/Metrics_selected.out"
-            fi
-            rm "${temp_prefix}_hits1.txt" "${temp_prefix}_hits2.txt"
-            ProgressBar $State $Total_states
-        done
-        echo ""
-
-        join -t ';' <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage.txt" | sort -t ";" -k1,1) <(sed -e 's/;/-/' "${working_dir}/Metrics_selected.out" | sort -t ";" -k1,1) | awk 'BEGIN{FS=OFS=";"}{$2=$2*$5;$3=$3*$5;$4=$4*$5;print $1 OFS $2 OFS $3 OFS $4}' | sed 's/-/;/g' >> "${temp_dir}/Collinearity_percentage.txt"
+        python ${auxiliary_path}/FilterMetric.py --collinearity "${temp_prefix}_Collinearity_percentage.txt" --syntenet ${collinearity_path}/ --diamond ${diamond_results_dir}/ --threshold ${Metric_treshold} --output "${temp_dir}/Collinearity_percentage.txt" &>/dev/null
 
         # Final stage
         echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Generating final report..."

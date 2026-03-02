@@ -282,7 +282,7 @@ check_auxiliary_scripts() {
             fi
         done
     elif [[ $command == "SyntenyClustering" ]]; then
-        scripts_file=("PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "syntenetPreprocess.R")
+        scripts_file=("PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "syntenetPreprocess.R" "FilterMetric.py")
         for file in "${scripts_file[@]}"; do
             if [[ ! -f "${auxiliary_path}/${file}" ]]; then
                 echo "Error: Missing auxiliary script '${file}'."
@@ -305,7 +305,7 @@ check_auxiliary_scripts() {
             exit 1
         fi
     elif [[ $command == "All" ]]; then
-        scripts_file=("rip_calculator.py" "gff_slicer.py" "merge.py" "PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "syntenetPreprocess.R" "hmmscan_process.py" "ClusterAnalysis.R" "OverrepresentationAnalysis.R")
+        scripts_file=("rip_calculator.py" "gff_slicer.py" "merge.py" "PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "FilterMetric.py" "syntenetPreprocess.R" "hmmscan_process.py" "ClusterAnalysis.R" "OverrepresentationAnalysis.R")
         for file in "${scripts_file[@]}"; do
             if [[ ! -f "${auxiliary_path}/${file}" ]]; then
                 echo "Error: Missing auxiliary script '${file}'."

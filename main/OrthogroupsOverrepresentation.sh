@@ -25,8 +25,8 @@ check_required_software "$(basename -s .sh "$0" )"
 # ==============================================================================
 
 function print_help() {
-    echo -e "Script to identify orthogroups that are overrepresented in a specific dataset.
-    This script perform three main steps:
+    echo -e "Command to identify orthogroups that are overrepresented in a specific dataset.
+    It performs three main steps:
     1. Run Orthofinder with DIAMOND ultra-sensitive mode.
     2. Remove orthogroups associated with captains.
     3. Perform the analysis depending on the selected mode:

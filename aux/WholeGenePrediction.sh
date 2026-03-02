@@ -205,14 +205,13 @@ run_captain_metaeuk() {
     metaeuk unitesetstofasta ContigsDB ProteinDB metaeukpred metaeukFinal -v 0
 
     # Modify gff that agat can recognize
-    sed -e 's/Target_ID=.*;TCS_//g' metaeukFinal.gff > metaeuk.gff
+    sed -i -e 's/Target_ID=.*;TCS_//g' metaeukFinal.gff 
+    sed -i -e 's/exon/CDS/g' metaeukFinal.gff
+    agat_convert_sp_gxf2gxf.pl --gff metaeukFinal.gff -o metaeuk.gff
 
     #Remove elements with incomplete gene coding models
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing gene models without start and stop codon."
 
-    agat_sp_filter_incomplete_gene_coding_models.pl --gff metaeuk.gff --fasta ${fasta_path} -o metaeuk_fix.gff
-
-    agat_sp_manage_IDs.pl --gff metaeuk_fix.gff --prefix metaeuk. -o metaeuk_fix2.gff
+    agat_sp_manage_IDs.pl --gff metaeuk.gff --prefix metaeuk. -o metaeuk_fix2.gff
 
     agat_sp_extract_sequences.pl --gff metaeuk_fix2.gff --fasta $fasta_path -t exon --merge -p -o metaeuk_protein.fa
 

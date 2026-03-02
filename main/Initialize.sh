@@ -212,8 +212,26 @@ Header_processing() {
                 done
             fi
         else
-            # The group is within the limit, use the full cleaned header
-            new_header="$cleaned_header"
+            if [ "${#cleaned_header}" -gt 30 ]; then
+                while true; do
+                    UNIQUE_ID=$(base62 "$ID_COUNTER")
+                    # Pad to 5 characters with '0'
+                    PADDED_ID=$(printf "%05s" "$UNIQUE_ID" | sed 's/ /0/g')
+
+                    # **CRITICAL FIX: Check if the generated ID is already used**
+                    if ! grep -q "^$PADDED_ID$" "$temp_used_ids"; then
+                        new_header="$PADDED_ID"
+                        echo "$new_header" >> "$temp_used_ids" # <-- TRACK THE BASE62 ID IMMEDIATELY
+                        ID_COUNTER=$((ID_COUNTER + 1))
+                        break # Exit the while true loop
+                    fi
+                    ID_COUNTER=$((ID_COUNTER + 1)) # Increment if collision found and try again
+                done
+            else
+                # The group is within the limit, use the full cleaned header
+                new_header="$cleaned_header"
+            fi
+            
             # Only track if it's a 5-char header, to prevent collisions with
             # the last-5-char logic later on.
             if [ "${#new_header}" -eq 5 ]; then
@@ -294,7 +312,7 @@ organize_info() {
             agat_sp_extract_sequences.pl --config ${agat_config} --gff ${working_dir}/Data/Gff/${line}.gff --fasta ${working_dir}/Data/Nucleotide/${line}.fa -t exon --merge -o ${working_dir}/temp/CDS/${line}.fa &> /dev/null
         fi
 
-        awk '{if($2){$1=">"$2} print $1}' ${working_dir}/temp/CDS/${line}.fa| sed 's/gene=//g' > ${working_dir}/Data/CDS/${line}.fa
+        awk '{if($2){$1=">"$2} print $1}' ${working_dir}/temp/CDS/${line}.fa | sed 's/gene=//g' > ${working_dir}/Data/CDS/${line}.fa
 
         seqkit translate -f 1 ${working_dir}/Data/CDS/${line}.fa > ${working_dir}/Data/Protein/${line}.fa
 
@@ -430,9 +448,12 @@ Process_starfish() {
     metaeuk reduceredundancy ${working_dir}/temp/metaeukResults ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukgroups --threads ${threads} -v 0 &> /dev/null
     metaeuk unitesetstofasta ${working_dir}/temp/ContigsDB ${working_dir}/temp/ProteinDB ${working_dir}/temp/metaeukpred ${working_dir}/temp/metaeukFinal --threads ${threads} -v 0 &> /dev/null
 
-    sed -e 's/Target_ID=.*;TCS_//g' ${working_dir}/temp/metaeukFinal.gff > ${working_dir}/temp/metaeuk.gff
+    sed -i -e 's/Target_ID=.*;TCS_//g' ${working_dir}/temp/metaeukFinal.gff
+    sed -i -e 's/exon/CDS/g' ${working_dir}/temp/metaeukFinal.gff
+    agat_convert_sp_gxf2gxf.pl --config ${agat_config} --gff ${working_dir}/temp/metaeukFinal.gff -o ${working_dir}/temp/metaeuk.gff &> /dev/null
 
     agat_sp_filter_by_ORF_size.pl --config ${agat_config} --gff ${working_dir}/temp/metaeuk.gff -s 200 -o ${working_dir}/temp/metaeuk_ORF.gff &> /dev/null
+
 
     echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Merging gff files..."
     Total_states=$(grep -v "#" ${working_dir}/temp/metaeuk_ORF_sup200.gff | awk '{print $1}' | sort -u | wc -l)

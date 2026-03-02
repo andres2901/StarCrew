@@ -25,8 +25,8 @@ check_required_software "$(basename -s .sh "$0" )"
 # ==============================================================================
 
 function print_help() {
-   echo -e "Script to run the characterization of each cluster.
-   This script perform eight steps per cluster:
+   echo -e "Command to run the characterization of each cluster.
+   It performs eight steps per cluster:
    1. Identify orthogroups through OrthoFinder.
    2. Perform all-vs-all Blastn for synteny visualization.
    3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including singletons.
@@ -34,7 +34,7 @@ function print_help() {
    5. Identify possible individual nesting events inside the cluster.
    6. Identify core genes in the cluster in two ways:
      6.1. General core: Orthogroups that are present in at least 80% of the elements in the cluster.
-     6.2. Specific core: Orthogroups that are present in at least 80% of the elements whitin specific subclusters.
+     6.2. Subcluster core: Orthogroups that are present in at least 80% of the elements whitin specific subclusters.
        6.2.1. Subcluster Definition: The script first uses definitions from the graph-based approach. If no subclusters were identified, it delimits subclusters at a height above 0.8 in the hierarchical clustering.
        6.2.2. If subslusters are present, identify core genes in each one that have at least 5 elements using the same logic of general core.
    7. If subclusters were identified in the graph-based approach, it try to identify putative cargo movement events.
@@ -283,6 +283,10 @@ organize_information() {
             cp ${working_dir}/${SubCluster}_moveOrthologsTable.csv ${Characterization_dir}/Movement_genes/${SubCluster}/Matrix.txt
             cp ${working_dir}/${SubCluster}*_moveOrthologsMatrix.csv ${Characterization_dir}/Movement_genes/${SubCluster}/ 2>/dev/null
         done
+    fi
+
+    if [[ -f "${working_dir}/Discordant_elements.txt" ]]; then
+        cp ${working_dir}/Discordant_elements.txt ${Characterization_dir}/
     fi
 }
 

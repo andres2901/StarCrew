@@ -273,7 +273,7 @@ check_nesting <- function(ortho_counts, seq_data, gene_data, blast_links) {
           
           if (length(Genes_compare) > (length(Genes_element) * 1.5)) {
             links_filtered2 <- blast_links %>% filter(qseqid %in% Element_name & sseqid %in% Element_compare) %>%
-              select(seq_id = qseqid, start = qstart, end = qend, seq_id2 = sseqid, start2 = sstart, end2 = send, pident)
+              select(seq_id = qseqid, start = qstart, end = qend, seq_id2 = sseqid, start2 = sstart, end2 = send, pident) %>% filter(pident >= 90)
             
             if (nrow(links_filtered2) == 0) {
               next
@@ -474,7 +474,7 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
         ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, selected_seqs2))
         p_genome <- gggenomes(seqs = ordered_seqs, links = links_filtered, genes = genes_filtered) +
           geom_seq(aes(y = y)) + geom_gene(aes(y = y, fill = attribute), show.legend = T) +
-          scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4", "Movement associated" = "darkorchid"), na.value = "cornsilk3", limits = c("general", "specific", "Movement associated")) +
+          scale_fill_manual(name = "Genes group", values = c("general" = "red4", "specific" = "green4", "Movement associated" = "darkorchid"), na.value = "cornsilk3", limits = c("general", "specific", "Movement associated")) +
           new_scale_fill() + geom_link(aes(y = y, fill = pident), colour = NA) + scale_fill_continuous(name = "Alignment Identity (%)") +
           geom_bin_label(aes(y = y), x = -10) + scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
           theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
@@ -497,11 +497,12 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
             OF_sub_oth <- subset(ortho_counts, select = oth_seqs) %>% filter(!if_all(everything(), ~ .x == 0))
             
             G_mov <- intersect(rownames(OF_sub_cl), rownames(OF_sub_oth))
-            OF_sub_cl <- OF_sub_cl[G_mov,]
-            OF_sub_cl <- OF_sub_cl[,  colSums(abs(OF_sub_cl)) > 0]
-            OF_sub_oth <- OF_sub_oth[G_mov,]
-            OF_sub_oth <- OF_sub_oth[,  colSums(abs(OF_sub_oth)) > 0]
 
+            OF_sub_cl <- as.data.frame(OF_sub_cl[G_mov,])
+            OF_sub_oth <- as.data.frame(OF_sub_oth[G_mov,])
+            OF_sub_cl <- OF_sub_cl[,  colSums(abs(OF_sub_cl)) > 0]
+            OF_sub_oth <- OF_sub_oth[,  colSums(abs(OF_sub_oth)) > 0]
+            
             sel_seq2 <- c(colnames(OF_sub_cl), colnames(OF_sub_oth))
             #sel_seq2 <- c(cl_seqs, oth_seqs)
             sel_seq2 <- sel_seq2[!is.na(sel_seq2)]
@@ -535,7 +536,7 @@ plot_subcluster_synteny <- function(subcluster_number, orthogroup_table, dist_ma
                 ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, sel_seq2))
                 p_genome <- gggenomes(seqs = ordered_seqs, links = links_filtered, genes = genes_filtered) +
                   geom_seq(aes(y = y)) + geom_gene(aes(y = y, fill = attribute), show.legend = T) +
-                  scale_fill_manual(name = "Core genes", values = c("general" = "red4", "specific" = "green4", "Movement associated" = "darkorchid"), na.value = "cornsilk3", limits = c("general", "specific", "Movement associated")) +
+                  scale_fill_manual(name = "Genes group", values = c("general" = "red4", "specific" = "green4", "Movement associated" = "darkorchid"), na.value = "cornsilk3", limits = c("general", "specific", "Movement associated")) +
                   new_scale_fill() + geom_link(aes(y = y, fill = pident), colour = NA) + scale_fill_continuous(name = "Alignment Identity (%)") +
                   geom_bin_label(aes(y = y), x = -10) + scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max(ordered_seqs$length))) +
                   theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
