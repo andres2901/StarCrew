@@ -164,10 +164,10 @@ process_enrichment <- function(annotation, orthogroups_mcl, metadata, variable_n
   Genes_elements <- annotation %>% filter(seq_id %in% ElementsIn$ElementID_updated) %>% select(ID) %>% unlist()
   Candidate_gene <- Reference_gene[Reference_gene %in% Genes_elements]
 
-  Enrichment_results <- enrichment(Candidate_gene, Reference_gene, Gene_list, adj = "fdr", verbose = FALSE)
+  Enrichment_results <- enrichment(Candidate_gene, Reference_gene, Gene_list, adj = "bonferroni", verbose = FALSE)
   write.table(Enrichment_results, file = "Enrichment_results.txt", sep = '\t', row.names = F, col.names = T, quote = F)
 
-  Significant_results <- Enrichment_results[Enrichment_results$padj <= arguments$psignificant, ]
+  Significant_results <- Enrichment_results %>% filter(padj <= arguments$psignificant) %>% filter((genes / all) >= 0.5 )
 
   if (nrow(Significant_results) >= 1) {
     cat(paste("  [", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "] ", "Enriched orthogroups identified", "\n", sep = ""))

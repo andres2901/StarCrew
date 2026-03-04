@@ -25,8 +25,8 @@ check_required_software "$(basename -s .sh "$0" )"
 # ==============================================================================
 
 function print_help() {
-    echo -e "Command to identify orthogroups that are overrepresented in a specific dataset.
-    It performs three main steps:
+    echo -e "Script to identify orthogroups that are overrepresented in a specific dataset.
+    This script perform three main steps:
     1. Run Orthofinder with DIAMOND ultra-sensitive mode.
     2. Remove orthogroups associated with captains.
     3. Perform the analysis depending on the selected mode:
@@ -58,7 +58,7 @@ function print_help() {
     echo "Optional args:"
     echo "-t, --threads: Number of threads (Default: 8)"
     echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ). Not compatible wit '--skip-orthofinder' flag (Default: off)"
-    echo "--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode or other value of the analysis. 
+    echo "--skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode or other value of the analysis (This will remove any other result from previous runs). 
                               Not compatible with '--overwrite' flag (Default: off) "
     echo "-help: Display this help message."
 }
@@ -137,7 +137,7 @@ run_orthofinder() {
     fi  
 
     if $captain_phylogeny; then
-        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization
+        orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 -s ${captainPhylogeny} --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
     else
         orthofinder -a "$(( ${threads} / 2 ))" -t "${threads}" -f ${protein_dir} -A mafft -S diamond_ultra_sens --matrix PAM30 --scores-v2 -o ${output_dir} -n characterization &> ${working_dir}/orthofinder.log
     fi
@@ -161,7 +161,9 @@ run_orthofinder() {
          }
          printf "%s%d\n", OFS, ROW_TOTAL;
         }' ${output_dir}/Results_characterization/Orthogroups/Orthogroups_UnassignedGenes.tsv | sed '1d' >> ${working_dir}/Orthogroups.GeneCount.tsv
-        cp ${output_dir}/Results_characterization/Orthogroups/Orthogroups.txt ${working_dir}
+        cp ${output_dir}/Results_characterization/Orthogroups/Orthogroups.txt ${working_dir}/
+
+        #awk '{if($3) {print}}' ${output_dir}/Results_characterization/Orthogroups/Orthogroups.txt > ${working_dir}
     else
         orthofinder_flag=false
     fi
@@ -229,6 +231,33 @@ organize_information() {
         do 
             cp ${orthogroups_dir}/${Orthogroup}.fa ${Overrepresented_dir}/Orthogroups/
         done
+    fi
+}
+
+Clean_previousrun() {
+    local base_dir="$1"
+    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )"
+
+    local Overrepresented_dir="${base_dir}/$(basename -s .sh "$0" )/"
+
+    if [[ -d "${Overrepresented_dir}" ]]; then
+        rm -r "${Overrepresented_dir}"
+    fi
+
+    if [[ -f "${working_dir}/OrthogroupsSizeHistogram.svg" ]]; then
+        cp ${working_dir}/OrthogroupsSizeHistogram.svg ${Overrepresented_dir}
+    fi
+
+    if [[ -f "${working_dir}/Overrepresented_orthogroups.txt" ]]; then
+        rm ${working_dir}/Overrepresented_orthogroups.txt
+    fi
+
+    if [[ -f "${working_dir}/Enrichment_results.txt" ]]; then
+        rm ${working_dir}/Enrichment_results.txt
+    fi
+
+    if [[ -f "${working_dir}/Enrich_orthogroups.txt" ]]; then
+        rm ${working_dir}/Enrich_orthogroups.txt
     fi
 }
 
@@ -384,14 +413,21 @@ if [[ "$mode" == "Enrichment" ]]; then
         if [[ "$value" == "NA" ]]; then
             echo "Error: 'Enrichment' mode do not accept to analyze 'NA' as target value"
         else
-            value_number=$(cut -d ";" -f $column_number ${Working_directory}/metadata_files/metadata.csv | grep -c "$value")
+            find  ${Working_directory}/Data/Protein/ -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa > "${Working_directory}/temp_dataset"
+
+            value_number=$(grep -f ${Working_directory}/temp_dataset ${Working_directory}/metadata_files/metadata.csv | cut -d ";" -f $column_number | grep -c "$value")
 
             if [[ $value_number -eq 0 ]]; then
                 echo "Error: provide value '$value' do not exist in the column '$column' of metadata."
+                rm ${Working_directory}/temp_dataset
                 exit 1
-            elif [[ $value_number -lt 10 ]]; then
+            elif [[ $value_number -lt 5 ]]; then
                 echo "Error: provide value '$value' have an n of '$value_number' and it's too low for enrichment analysis."
+                rm ${Working_directory}/temp_dataset
                 exit 1
+            else
+                echo "  '$value_number' Elements are in the 'ingroup' for the enrichment analysis."
+                rm ${Working_directory}/temp_dataset
             fi
         fi
     fi
@@ -447,11 +483,9 @@ if ! $skip_orthofinder; then
 
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Running orthofinder..."
     run_orthofinder "${Working_directory}"
-    if ! $orthofinder_flag; then
-        echo -e "  \033[01;31mERROR\033[m: There was an error with orthofinder. Please check Orthofinder log.\n"
-    fi
 else
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Skipping the working directory organization and orthofinder run."
+    Clean_previousrun "${Working_directory}"
 fi
 
 echo "[$(date "+%Y-%m-%d %H:%M:%S")] Removing orthogroups associated with Captains..."
