@@ -11,17 +11,27 @@ import argparse
 import sys
 
 
-def process_blast_hits(args):
-    """
-    Filter and merge BLAST hits based on user-defined thresholds.
+def process_blast_hits(args: argparse.Namespace) -> tuple[dict, dict]:
+    """Filter and merge BLAST hits based on user-defined thresholds.
+
+    Reads the input BLAST file line by line, removes self-hits and
+    reciprocal duplicates, filters by identity and fragment size,
+    merges overlapping intervals, and validates final hit coverage.
 
     Args:
-        args (argparse.Namespace): Validated command-line arguments.
+        args: Validated command-line arguments containing input/output
+              paths and all filtering thresholds.
 
     Returns:
-        dict: A dictionary of cleaned hits ready for output.
-        dict: A dictionary containing statistics of the filtering process.
+        Tuple (clean_hits, stats) where:
+            - clean_hits: Dictionary mapping hit keys to their merged
+                          and validated hit data.
+            - stats: Dictionary with counts for each filtering step.
+
+    Raises:
+        FileNotFoundError: If the input file does not exist.
     """
+
     dirty = {}
     clean = {}
     
@@ -34,7 +44,6 @@ def process_blast_hits(args):
         "filtered_coverage": 0
     }
 
-    # Loop through the input file
     try:
         with open(args.file_in, "r") as f_in:
             for line_num, line_content in enumerate(f_in, 1):
@@ -56,7 +65,6 @@ def process_blast_hits(args):
                     stats["removed"] += 1
                     continue
 
-                # Normalize coordinates
                 q_span = (min(qstart_val, qend_val), max(qstart_val, qend_val))
                 s_span = (min(sstart_val, send_val), max(sstart_val, send_val))
 
@@ -67,11 +75,11 @@ def process_blast_hits(args):
                 curr_q_len = q_span[1] - q_span[0] + 1
                 curr_s_len = s_span[1] - s_span[0] + 1
 
-                if curr_q_len < args.MINIMUM_FRAGMENT_SIZE or curr_s_len < args.MINIMUM_FRAGMENT_SIZE:
+                if curr_q_len < args.min_fragment_size or curr_s_len < args.min_fragment_size:
                     stats["filtered_size"] += 1
                     continue
 
-                if pident_val < args.MINIMUM_PIDENT:
+                if pident_val < args.min_pident:
                     stats["filtered_pident"] += 1
                     continue
 
@@ -93,22 +101,18 @@ def process_blast_hits(args):
     except FileNotFoundError:
         sys.exit(f"Error: File {args.file_in} not found.")
 
-    # Process intervals and merge
     for hit_key, fragments in dirty.items():
         qlen_orig = fragments[0]['q_len']
         slen_orig = fragments[0]['s_len']
 
-        # Merge Query Intervals
         fragments.sort(key=lambda x: x['q_start'])
         merged_q = merge_intervals(fragments, 'q_start', 'q_end')
 
-        # Merge Subject Intervals
         fragments.sort(key=lambda x: x['s_start'])
         merged_s = merge_intervals(fragments, 's_start', 's_end')
 
-        # Filter intervals by size
-        filtered_q = [i for i in merged_q if (i[1] - i[0] + 1) >= args.MINIMUM_MERGED_SIZE]
-        filtered_s = [i for i in merged_s if (i[1] - i[0] + 1) >= args.MINIMUM_MERGED_SIZE]
+        filtered_q = [i for i in merged_q if (i[1] - i[0] + 1) >= args.min_merged_size]
+        filtered_s = [i for i in merged_s if (i[1] - i[0] + 1) >= args.min_merged_size]
 
         if not filtered_q or not filtered_s:
             stats["filtered_size"] += 1
@@ -124,7 +128,7 @@ def process_blast_hits(args):
         q_cover = (100.0 * total_q_sum / qlen_orig) if qlen_orig > 0 else 0.0
         s_cover = (100.0 * total_s_sum / slen_orig) if slen_orig > 0 else 0.0
 
-        if q_cover < args.MINIMUM_HIT_COVERAGE and s_cover < args.MINIMUM_HIT_COVERAGE:
+        if q_cover < args.min_hit_coverage and s_cover < args.min_hit_coverage:
             stats["filtered_coverage"] += 1
             continue
 
@@ -137,8 +141,22 @@ def process_blast_hits(args):
     return clean, stats
 
 
-def merge_intervals(fragments, start_attr, end_attr):
-    """Function to merge overlapping numeric intervals."""
+def merge_intervals(fragments: list[dict], start_attr: str, end_attr: str) -> list[tuple]:
+    """Merge overlapping numeric intervals from a list of fragments.
+
+    Assumes fragments are already sorted by the start attribute before
+    this function is called.
+
+    Args:
+        fragments: List of fragment dictionaries, each containing at least
+                   the start and end attribute keys.
+        start_attr: Dictionary key used to access the interval start value.
+        end_attr: Dictionary key used to access the interval end value.
+
+    Returns:
+        List of (start, end) tuples representing the merged intervals.
+    """
+
     if not fragments:
         return []
     merged = []
@@ -156,32 +174,38 @@ def merge_intervals(fragments, start_attr, end_attr):
     return merged
 
 
-def main():
-    """Main CLI execution entry point."""
+def main() -> None:
+    """Parse command-line arguments and launch the BLAST cleanup pipeline."""
+
     parser = argparse.ArgumentParser(
         description="Clean up BLAST results by removing reciprocal hits and filtering."
     )
     parser.add_argument("-f", "--file", dest="file_in", required=True, help="Input BLAST file")
     parser.add_argument("-o", "--output", dest="file_out", required=True, help="Output file")
-    parser.add_argument("-fs", "--fragmentSize", type=int, default=2000, dest="MINIMUM_FRAGMENT_SIZE")
-    parser.add_argument("-i", "--identity", type=float, default=70.0, dest="MINIMUM_PIDENT")
-    parser.add_argument("-ms", "--mergeSize", type=int, default=2000, dest="MINIMUM_MERGED_SIZE")
-    parser.add_argument("-c", "--coverage", type=float, default=20.0, dest="MINIMUM_HIT_COVERAGE")
+    parser.add_argument("-fs", "--fragmentSize", type=int, default=2000, dest="min_fragment_size")
+    parser.add_argument("-i", "--identity", type=float, default=70.0, dest="min_pident")
+    parser.add_argument("-ms", "--mergeSize", type=int, default=2000, dest="min_merged_size")
+    parser.add_argument("-c", "--coverage", type=float, default=20.0, dest="min_hit_coverage")
 
     args = parser.parse_args()
 
     print(f"\n  Processing: {args.file_in}")
-    print(f"  Min Fragment: {args.MINIMUM_FRAGMENT_SIZE} bp | Min Identity: {args.MINIMUM_PIDENT}%")
+    print(f"  Min Fragment: {args.min_fragment_size} bp | Min Identity: {args.min_pident}%")
 
     clean_hits, stats = process_blast_hits(args)
 
-    with open(args.file_out, "w") as outfile:
-        for hit_key, data in clean_hits.items():
-            seq1, seq2 = hit_key.split('\t')
-            row = [seq1, seq2, str(data['pident']), str(data['qlen']), 
-                   str(data['slen']), str(data['total_q_hit_len_sum']), 
-                   str(data['total_s_hit_len_sum'])]
-            print('\t'.join(row), file=outfile)
+    try:
+        with open(args.file_out, "w") as outfile:
+            for hit_key, data in clean_hits.items():
+                seq1, seq2 = hit_key.split('\t')
+                row = [seq1, seq2, str(data['pident']), str(data['qlen']), 
+                       str(data['slen']), str(data['total_q_hit_len_sum']), 
+                       str(data['total_s_hit_len_sum'])]
+                print('\t'.join(row), file=outfile)
+    except PermissionError:
+        sys.exit(f"Error: No write permission for: {args.file_out}")
+    except OSError as e:
+        sys.exit(f"Error writing output file: {e}")
 
     print(f"  Writing cleaned file with {stats['accepted']} hits")
     print(f"    Removed reciprocal: {stats['removed']}")

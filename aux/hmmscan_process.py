@@ -11,25 +11,45 @@ import os
 import glob
 import pandas as pd
 import argparse
+import sys
 
-# --- Variables that can be easily changed ---
+
+# CONSTANT
 EXON_RANGE = (2, 11)
 
-def parse_hmm_file(file_path):
-    """Parses a single HMMER domtblout file and returns unique IDs"""
+
+def parse_hmm_file(file_path: str) -> tuple[set, pd.DataFrame]:
+    """Parse a single HMMER domtblout file and extract unique hit IDs.
+
+    Args:
+        file_path: Path to the HMMER domtblout output file.
+
+    Returns:
+        Tuple (id_set, df_raw) where:
+            - id_set: Set of unique hit IDs found in the file.
+            - df_raw: DataFrame with columns ['ID', 'Length'] for
+                      all parsed hits.
+    """
+
     parsed_data = []
     if not os.path.exists(file_path):
         return set(), pd.DataFrame()
 
-    with open(file_path, 'r') as f:
-        for line in f:
-            if line.startswith('#'):
-                continue
-            parts = line.split()
-            if len(parts) >= 19:
-                hmm_id = parts[3].strip()
-                target_length = parts[5].strip()
-                parsed_data.append([hmm_id, target_length])
+    try:
+        with open(file_path, 'r') as f:
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                parts = line.split()
+                if len(parts) >= 19:
+                    hmm_id = parts[3].strip()
+                    target_length = parts[5].strip()
+                    parsed_data.append([hmm_id, target_length])
+    except PermissionError:
+        return set(), pd.DataFrame()
+    except OSError as e:
+        print(f"Error reading HMM file '{file_path}': {e}", file=sys.stderr)
+        return set(), pd.DataFrame()
     
     if not parsed_data:
         return set(), pd.DataFrame()
@@ -39,27 +59,83 @@ def parse_hmm_file(file_path):
     
     return set(df_raw['ID'].values), df_raw
 
-def get_fasta_length(fasta_path):
-    """Parses a single FASTA file and returns the total sequence length."""
+
+def get_fasta_length(fasta_path: str) -> int | None:
+    """Calculate the total sequence length of a FASTA file.
+
+    Args:
+        fasta_path: Path to the FASTA file.
+
+    Returns:
+        Total number of nucleotide characters across all sequences,
+        or None if the file does not exist or cannot be read.
+    """
+
     length = 0
     if not os.path.exists(fasta_path):
         return None
-    with open(fasta_path, 'r') as f:
-        for line in f:
-            if not line.startswith('>'):
-                length += len(line.strip())
+    try:
+        with open(fasta_path, 'r') as f:
+            for line in f:
+                if not line.startswith('>'):
+                    length += len(line.strip())
+    except PermissionError:
+        return None
+    except OSError as e:
+        print(f"Error reading FASTA file '{fasta_path}': {e}", file=sys.stderr)
+        return None
+    
     return length
 
-def find_fasta_path(folder, base_name, extensions=['.fa', '.fasta', '.fna']):
-    """Finds a FASTA file in a folder with matching base name."""
+
+def find_fasta_path(
+    folder: str,
+    base_name: str,
+    extensions: list[str] | None = None
+) -> str | None:
+    """Search for a FASTA file matching a base name in a folder.
+
+    Args:
+        folder: Path to the folder to search in.
+        base_name: Base filename without extension.
+        extensions: List of extensions to try, in order.
+                    Defaults to ['.fa', '.fasta', '.fna'].
+
+    Returns:
+        Full path to the first matching file found, or None if
+        no match exists.
+    """
+
+    if extensions is None:
+        extensions = ['.fa', '.fasta', '.fna']
+
     for ext in extensions:
         file_path = os.path.join(folder, f'{base_name}{ext}')
         if os.path.exists(file_path):
             return file_path
     return None
 
-def get_gff_data(gff_path, fasta_path):
-    """Parses a GFF file and returns a DataFrame of gene features and exon counts."""
+
+def get_gff_data(gff_path: str, fasta_path: str) -> tuple[pd.DataFrame, str]:
+    """Parse a GFF file and return a DataFrame of gene features with exon counts.
+
+    Performs a single pass over the GFF, collecting gene coordinates,
+    mapping mRNA IDs to parent genes, and counting exons per gene.
+    Uses the FASTA file to determine the full element length.
+
+    Args:
+        gff_path: Path to the input GFF file.
+        fasta_path: Path to the corresponding FASTA file, used to
+                    determine total sequence length.
+
+    Returns:
+        Tuple (gff_df, message) where:
+            - gff_df: DataFrame with columns ID, Start_Pos, End_Pos,
+                      Strand, Exon_Count, Element_Start, Element_End,
+                      and Relative_Pos. Empty if parsing fails.
+            - message: Status string, 'Success' or an error description.
+    """
+
     if not os.path.exists(gff_path):
         return pd.DataFrame(), "GFF file not found."
     
@@ -70,41 +146,46 @@ def get_gff_data(gff_path, fasta_path):
     gff_data = []
     mrna_exons = {}
     mrna_to_gene_map = {}
-    
-    with open(gff_path, 'r') as gff_f:
-        for gff_line in gff_f:
-            if gff_line.startswith('#') or not gff_line.strip():
-                continue
-            gff_parts = gff_line.split('\t')
-            if len(gff_parts) >= 9:
-                try:
-                    attributes = gff_parts[8]
-                    feature_type = gff_parts[2]
-                    id_part, parent_part = None, None
-                    
-                    for item in attributes.split(';'):
-                        if item.startswith('ID='):
-                            id_part = item.split('ID=')[1].strip()
-                        elif item.startswith('Parent='):
-                            parent_part = item.split('Parent=')[1].strip()
-                    
-                    if feature_type == 'gene' and id_part:
-                        gff_data.append({
-                            'ID': id_part,
-                            'Start_Pos': int(gff_parts[3]),
-                            'End_Pos': int(gff_parts[4]),
-                            'Strand': gff_parts[6],
-                            'Exon_Count': 0,
-                            'Element_Start': 1,
-                            'Element_End': fasta_length
-                        })
-                    elif feature_type == 'mRNA' and id_part and parent_part:
-                        mrna_to_gene_map[id_part] = parent_part
-                    elif feature_type == 'exon' and parent_part:
-                        mrna_exons[parent_part] = mrna_exons.get(parent_part, 0) + 1
-                except (ValueError, IndexError):
+
+    try:
+        with open(gff_path, 'r') as gff_f:
+            for gff_line in gff_f:
+                if gff_line.startswith('#') or not gff_line.strip():
                     continue
-    
+                gff_parts = gff_line.split('\t')
+                if len(gff_parts) >= 9:
+                    try:
+                        attributes = gff_parts[8]
+                        feature_type = gff_parts[2]
+                        id_part, parent_part = None, None
+                    
+                        for item in attributes.split(';'):
+                            if item.startswith('ID='):
+                                id_part = item.split('ID=')[1].strip()
+                            elif item.startswith('Parent='):
+                                parent_part = item.split('Parent=')[1].strip()
+                    
+                        if feature_type == 'gene' and id_part:
+                            gff_data.append({
+                                'ID': id_part,
+                                'Start_Pos': int(gff_parts[3]),
+                                'End_Pos': int(gff_parts[4]),
+                                'Strand': gff_parts[6],
+                                'Exon_Count': 0,
+                                'Element_Start': 1,
+                                'Element_End': fasta_length
+                            })
+                        elif feature_type == 'mRNA' and id_part and parent_part:
+                            mrna_to_gene_map[id_part] = parent_part
+                        elif feature_type == 'exon' and parent_part:
+                            mrna_exons[parent_part] = mrna_exons.get(parent_part, 0) + 1
+                    except (ValueError, IndexError):
+                        continue
+    except PermissionError:
+        return pd.DataFrame(), f"No read permission for '{gff_path}'."
+    except OSError as e:
+        return pd.DataFrame(), f"Error reading GFF file: {e}"
+
     if not gff_data:
         return pd.DataFrame(), "No 'gene' features found in GFF."
     
@@ -121,8 +202,28 @@ def get_gff_data(gff_path, fasta_path):
     
     return gff_df, "Success"
 
-def check_filters(gene_id, gff_df, exon_range, pos_range_kb):
-    """Checks if a gene meets the exon count and location criteria."""
+
+def check_filters(
+    gene_id: str,
+    gff_df: pd.DataFrame,
+    exon_range: tuple[int, int],
+    pos_range_kb: int
+) -> tuple[bool, str]:
+    """Validate a single gene against exon count and location filters.
+
+    Args:
+        gene_id: Gene ID to look up in the GFF DataFrame.
+        gff_df: DataFrame as returned by get_gff_data().
+        exon_range: Tuple (min, max) defining the accepted exon count range.
+        pos_range_kb: Maximum allowed distance in kb from the element
+                      boundary, depending on strand orientation.
+
+    Returns:
+        Tuple (passed, message) where:
+            - passed: True if the gene passes all filters.
+            - message: Description of the result or the reason for failure.
+    """
+
     matches = gff_df[gff_df['ID'] == gene_id]
     if matches.empty:
         return False, f"ID '{gene_id}' not found in GFF."
@@ -130,7 +231,6 @@ def check_filters(gene_id, gff_df, exon_range, pos_range_kb):
     gene_info = matches.iloc[0]
     pos_range = pos_range_kb * 1000 
     
-    #  Dynamic range adjustment for consistency
     seq_length = gene_info['Element_End'] - gene_info['Element_Start']
     if seq_length < (2 * pos_range):
         pos_range = seq_length / 2
@@ -146,8 +246,30 @@ def check_filters(gene_id, gff_df, exon_range, pos_range_kb):
     
     return True, "All filters passed."
 
-def run_gff_analysis(hmm_ids, gff_df, pos_range_kb):
-    """Performs tie-breaking based on location and strand."""
+
+def run_gff_analysis(
+    hmm_ids: set,
+    gff_df: pd.DataFrame,
+    pos_range_kb: int
+) -> tuple[str | None, str]:
+    """Select the best candidate gene from a set of HMM hits using GFF data.
+
+    Filters candidates by location and strand, then ranks them by strand
+    preference, relative genomic position, and exon count.
+
+    Args:
+        hmm_ids: Set of gene IDs identified by HMMER.
+        gff_df: DataFrame as returned by get_gff_data().
+        pos_range_kb: Maximum allowed distance in kb from the element
+                      boundary for a candidate to be considered.
+
+    Returns:
+        Tuple (selected_id, message) where:
+            - selected_id: ID of the top-ranked candidate, or None if
+                           no candidate passes the filters.
+            - message: Description of the result or reason for failure.
+    """
+
     common_ids = set(hmm_ids).intersection(set(gff_df['ID'].values))
     if not common_ids:
         return None, "No common IDs found between HMM and GFF files."
@@ -155,8 +277,6 @@ def run_gff_analysis(hmm_ids, gff_df, pos_range_kb):
     candidates = gff_df[gff_df['ID'].isin(common_ids)].copy()
     pos_range = pos_range_kb * 1000
 
-    # Dynamic range adjustment based on sequence length
-    # We assume all candidates share the same element bounds
     element_start = candidates['Element_Start'].iloc[0]
     element_end = candidates['Element_End'].iloc[0]
     seq_length = element_end - element_start
@@ -176,7 +296,43 @@ def run_gff_analysis(hmm_ids, gff_df, pos_range_kb):
     
     return all_candidates.iloc[0]['ID'], "Success"
 
-def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_folder, output_file, empty_output_file, min_common, min_length, range_kb):
+
+def process_hmm_files(
+    hmm_folder1: str,
+    hmm_folder2: str,
+    hmm_folder3: str,
+    gff_folder: str,
+    fasta_folder: str,
+    output_file: str,
+    empty_output_file: str,
+    min_common: int,
+    min_length: int,
+    range_kb: int
+) -> None:
+    """Orchestrate the full HMM and GFF integration pipeline.
+
+    Iterates over all HMM files in the first folder, resolves consensus
+    IDs across three HMMER runs at decreasing stringency levels, validates
+    each candidate against GFF filters, and writes accepted IDs to the
+    output file.
+
+    Args:
+        hmm_folder1: Path to the first HMMER results folder.
+        hmm_folder2: Path to the second HMMER results folder.
+        hmm_folder3: Path to the third HMMER results folder.
+        gff_folder: Path to the folder containing GFF files.
+        fasta_folder: Path to the folder containing FASTA files.
+        output_file: Path to the output file for accepted gene IDs.
+        empty_output_file: Path to the log file for elements with no result.
+        min_common: Minimum consensus level required (1, 2, or 3 HMM runs).
+        min_length: Minimum hit length to consider from the first HMM run.
+        range_kb: Distance threshold in kb from element boundary.
+
+    Raises:
+        PermissionError: If the output file cannot be written.
+        OSError: If any other I/O error occurs during writing.
+    """
+
     hmm_files1 = glob.glob(os.path.join(hmm_folder1, '*.txt'))
     all_results = []
     
@@ -252,11 +408,18 @@ def process_hmm_files(hmm_folder1, hmm_folder2, hmm_folder3, gff_folder, fasta_f
                 empty_f.write(f"{base_name}\n")
     
     if all_results:
-        pd.DataFrame(all_results)['ID'].to_csv(output_file, index=False, header=False)
-        print(f"\nSuccessfully wrote {len(all_results)} IDs to {output_file}")
+        try:
+            pd.DataFrame(all_results)['ID'].to_csv(output_file, index=False, header=False)
+            print(f"\nSuccessfully wrote {len(all_results)} IDs to {output_file}")
+        except PermissionError:
+            sys.exit(f"Error: No write permission for '{output_file}'.")
+        except OSError as e:
+            sys.exit(f"Error writing output file: {e}")
 
-def main():
-    """Main CLI execution."""
+
+def main() -> None:
+    """Parse command-line arguments and launch the HMM-GFF pipeline."""
+
     parser = argparse.ArgumentParser(description='Process HMMSEARCH domtblout and GFF files.')
     parser.add_argument('--hmm1', dest='hmm_folder1', required=True, help='Path to first HMMER folder.')
     parser.add_argument('--hmm2', dest='hmm_folder2', required=True, help='Path to second HMMER folder.')
@@ -273,6 +436,7 @@ def main():
     process_hmm_files(args.hmm_folder1, args.hmm_folder2, args.hmm_folder3, 
                       args.gff_folder, args.fasta_folder, args.output_file, 
                       args.empty_output_file, args.min_common, args.min_length, args.range_kb)
+
 
 if __name__ == "__main__":
     main()

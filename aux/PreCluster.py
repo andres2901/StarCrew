@@ -10,8 +10,26 @@ import collections
 import argparse
 import os
 
-def read_input_file(input_path):
-    """Parses a two-column file into an unweighted edge list."""
+
+def read_input_file(input_path: str) -> list[tuple]:
+    """Parse a two-column file into an unweighted edge list.
+
+    Supports both tab and space-separated files. Skips empty lines
+    and lines starting with '#'. Warns about lines with fewer than
+    two columns.
+
+    Args:
+        input_path: Path to the input file.
+
+    Returns:
+        List of (node_a, node_b) tuples representing the edges.
+
+    Raises:
+        FileNotFoundError: If the input file does not exist.
+        PermissionError: If the file cannot be read.
+        OSError: If any other I/O error occurs.
+    """
+
     print(f"STEP 1: Reading input from '{input_path}'...")
     edges = []
 
@@ -31,17 +49,29 @@ def read_input_file(input_path):
                     print(f"Warning: Skipping line {i+1} (needs 2 columns).", file=sys.stderr)
     except FileNotFoundError:
         sys.exit(f"Error: File '{input_path}' not found.")
-    except Exception as e:
-        sys.exit(f"Error reading file: {e}")
+    except PermissionError:
+        sys.exit(f"Error: No read permission for '{input_path}'.")
+    except OSError as e:
+        sys.exit(f"Error reading file '{input_path}': {e}")
 
     print(f"Finished. Total edges: {len(edges)}")
     return edges
 
-def find_clusters(pairs):
+
+def find_clusters(pairs: list[tuple]) -> list[set]:
+    """Group nodes into weakly connected components using iterative DFS.
+
+    Builds an adjacency list from the edge list and performs a
+    stack-based depth-first search to identify all connected components.
+
+    Args:
+        pairs: List of (node_a, node_b) tuples representing undirected edges.
+
+    Returns:
+        List of sets, where each set contains the nodes of one
+        connected component.
     """
-    Groups nodes into Weakly Connected Components using iterative DFS.
-    """
-    # 1. Build Adjacency List
+
     graph = collections.defaultdict(set)
     all_nodes = set()
     for u, v in pairs:
@@ -53,7 +83,6 @@ def find_clusters(pairs):
     visited = set()
     clusters = []
 
-    # 2. DFS Traversal
     for node in all_nodes:
         if node not in visited:
             current_cluster = set()
@@ -73,24 +102,45 @@ def find_clusters(pairs):
             
     return clusters
 
-def write_results(output_dir, clusters):
-    """Writes clusters to a file, sorted by size (largest first)."""
+
+def write_results(output_dir: str, clusters: list[set]) -> None:
+    """Write clusters to a file sorted by size in descending order.
+
+    Assigns a zero-padded numeric ID to each cluster and writes one
+    cluster per line as a tab-separated ID and space-separated node list.
+
+    Args:
+        output_dir: Path to the directory where the output file will
+                    be written.
+        clusters: List of sets as returned by find_clusters().
+
+    Raises:
+        PermissionError: If the output file cannot be written.
+        OSError: If any other I/O error occurs during writing.
+    """
+
     output_path = os.path.join(output_dir, "Clusters.txt")
     print(f"STEP 3: Writing clusters to {output_path}...")
 
-    # Sort: Largest components first, then alphabetically by first node
     sorted_clusters = sorted(clusters, key=lambda x: (-len(x), sorted(list(x))[0]))
 
-    with open(output_path, 'w') as f_out:
-        for i, cluster_set in enumerate(sorted_clusters):
-            cluster_id = f"Cluster{i+1:04d}"
-            elements = sorted(list(cluster_set))
-            f_out.write(f"{cluster_id}\t{' '.join(elements)}\n")
+    try:
+        with open(output_path, 'w') as f_out:
+            for i, cluster_set in enumerate(sorted_clusters):
+                cluster_id = f"Cluster{i+1:04d}"
+                elements = sorted(list(cluster_set))
+                f_out.write(f"{cluster_id}\t{' '.join(elements)}\n")
+    except PermissionError:
+        sys.exit(f"Error: No write permission for '{output_path}'.")
+    except OSError as e:
+        sys.exit(f"Error writing output file: {e}")
             
     print(f"Successfully identified {len(clusters)} clusters.")
 
-def main():
-    """CLI Entry Point."""
+
+def main() -> None:
+    """Parse command-line arguments and launch the clustering pipeline."""
+
     parser = argparse.ArgumentParser(
         description='Community detection via Connected Components.'
     )
@@ -102,7 +152,6 @@ def main():
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    # Execution logic
     edge_list = read_input_file(args.input_file)
     if not edge_list:
         sys.exit("No data to process.")
@@ -111,6 +160,7 @@ def main():
     clusters = find_clusters(edge_list)
     
     write_results(args.output_dir, clusters)
+
 
 if __name__ == "__main__":
     main()

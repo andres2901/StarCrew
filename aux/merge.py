@@ -12,10 +12,26 @@ import os
 import argparse
 import collections
 
-def get_maintained_gene_ids(gff_file_path):
+
+def get_maintained_gene_ids(gff_file_path: str) -> list[str]:
+    """Identify the longest gene from each same-strand overlapping cluster.
+
+    Builds a temporary gffutils database from the input GFF, then uses
+    a breadth-first search to group overlapping genes on the same strand
+    into clusters. Returns the ID of the longest gene in each cluster.
+
+    Args:
+        gff_file_path: Path to the input GFF file.
+
+    Returns:
+        Sorted list of gene IDs to retain after overlap resolution.
+        Returns an empty list if the database cannot be created.
+
+    Raises:
+        FileNotFoundError: If the GFF file does not exist.
+        PermissionError: If the file cannot be read.
     """
-    Identifies and returns the IDs of the longest genes in overlapping clusters.
-    """
+
     dbfn = f'temp_{os.path.basename(gff_file_path)}.db'
     
     try:
@@ -32,6 +48,12 @@ def get_maintained_gene_ids(gff_file_path):
             disable_infer_transcripts=True,
             disable_infer_genes=True
         )
+    except FileNotFoundError:
+        print(f"Error: GFF file '{gff_file_path}' not found.", file=sys.stderr)
+        return []
+    except PermissionError:
+        print(f"Error: No read permission for '{gff_file_path}'.", file=sys.stderr)
+        return []
     except Exception as e:
         print(f"Error creating gffutils database: {e}", file=sys.stderr)
         return []
@@ -73,8 +95,9 @@ def get_maintained_gene_ids(gff_file_path):
 
     return sorted(maintained_gene_ids)
 
-def main():
-    """CLI Entry Point."""
+
+def main() -> None:
+    """Parse command-line arguments and launch the GFF overlap resolver."""
     parser = argparse.ArgumentParser(
         description="Pick the longest gene from same-strand overlapping clusters."
     )
@@ -91,12 +114,21 @@ def main():
     maintained_ids = get_maintained_gene_ids(args.input_gff)
     
     if maintained_ids:
-        with open(args.output_file, 'w') as out_file:
-            for gene_id in maintained_ids:
-                out_file.write(f"{gene_id}\n")
+        try:
+            with open(args.output_file, 'w') as out_file:
+                for gene_id in maintained_ids:
+                    out_file.write(f"{gene_id}\n")
+        except PermissionError:
+            print(f"Error: No write permission for '{args.output_file}'.", file=sys.stderr)
+            sys.exit(1)
+        except OSError as e:
+            print(f"Error writing output file: {e}", file=sys.stderr)
+            sys.exit(1)
+
         print(f"Done. Kept {len(maintained_ids)} genes. IDs saved to: {args.output_file}")
     else:
         print("No gene features found to process.")
+
 
 if __name__ == "__main__":
     main()

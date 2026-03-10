@@ -12,14 +12,28 @@ import sys
 import os
 
 
-def load_gff_features(input_path):
-    """
-    Read GFF into memory once, indexed by contig (SeqID).
+def load_gff_features(input_path: str) -> tuple[dict, list]:
+    """Read and index a GFF file into memory by contig ID.
+
+    Performs a single pass over the file, separating header lines from
+    feature lines and grouping features by their SeqID (column 1).
+
+    Args:
+        input_path: Path to the input GFF file.
 
     Returns:
-        tuple: (dict of {contig_id: [list_of_parts]}, list of header lines)
+        Tuple (indexed_features, header_lines) where:
+            - indexed_features: Dictionary mapping contig ID to a list
+                                of feature rows (each row is a list of
+                                9 string columns).
+            - header_lines: List of comment/header lines preserved
+                            for output.
+
+    Raises:
+        FileNotFoundError: If the GFF file does not exist.
+        PermissionError: If the file cannot be read.
+        OSError: If any other I/O error occurs.
     """
-    print(f"STEP 1: Loading and indexing GFF: '{input_path}'...")
     
     indexed_features = {}
     header_lines = []
@@ -45,18 +59,51 @@ def load_gff_features(input_path):
                 
                 indexed_features[f_seqid].append(parts)
 
-    except Exception as e:
-        sys.exit(f"Error during GFF loading: {e}")
+    except FileNotFoundError:
+        sys.exit(f"Error: GFF file '{input_path}' not found.")
+    except PermissionError:
+        sys.exit(f"Error: No read permission for '{input_path}'.")
+    except OSError as e:
+        sys.exit(f"Error reading GFF file: {e}")
 
     print(f"Finished loading. Found {len(indexed_features)} contigs.")
+
     return indexed_features, header_lines
 
 
-def process_section(all_features, header_lines, output_path, section_name, 
-                    target_seqid, slice_start, slice_end, target_strand):
+def process_section(
+    all_features: dict,
+    header_lines: list,
+    output_path: str,
+    section_name: str,
+    target_seqid: str,
+    slice_start: int,
+    slice_end: int,
+    target_strand: str
+) -> None:
+    """Slice, transform, and write GFF features for a single genomic region.
+
+    Filters features using strict containment within the slice boundaries,
+    applies coordinate transformation relative to the slice origin, flips
+    strand orientation for reverse-complement regions, re-sorts features
+    by start position, and writes the result to a new GFF file.
+
+    Args:
+        all_features: Indexed GFF features as returned by load_gff_features().
+        header_lines: Header lines to include in the output file.
+        output_path: Path to the output GFF file to write.
+        section_name: Name assigned to this slice, used as the SeqID
+                      in the output GFF.
+        target_seqid: Contig ID to slice from the indexed features.
+        slice_start: Start coordinate of the slice (1-based, inclusive).
+        slice_end: End coordinate of the slice (1-based, inclusive).
+        target_strand: Strand orientation of the slice ('+' or '-').
+
+    Raises:
+        PermissionError: If the output file cannot be written.
+        OSError: If any other I/O error occurs during writing.
     """
-    Slice features using strict containment and re-sorts results.
-    """
+
     if slice_start >= slice_end:
         print(f"Error: Start >= End for '{section_name}'. Skipping.", file=sys.stderr)
         return
@@ -70,7 +117,6 @@ def process_section(all_features, header_lines, output_path, section_name,
         contig_features = all_features[target_seqid]
         
         for parts in contig_features:
-            # Copy to avoid modifying the indexed master list in memory
             current_parts = parts[:] 
             
             try:
@@ -80,18 +126,14 @@ def process_section(all_features, header_lines, output_path, section_name,
             except ValueError:
                 continue 
 
-            # 1. STRICT CONTAINMENT FILTER
-            # Feature must be 100% inside [slice_start, slice_end]
             if f_start < slice_start or f_end > slice_end:
                 continue
 
-            # 2. COORDINATE TRANSFORMATION
             if target_strand == '+':
                 new_start = f_start - slice_start + 1
                 new_end = f_end - slice_start + 1
                 new_strand = f_strand
             else:
-                # Reverse orientation: Flip strand and invert coordinates
                 if f_strand == '+':
                     new_strand = '-'
                 elif f_strand == '-':
@@ -99,25 +141,20 @@ def process_section(all_features, header_lines, output_path, section_name,
                 else:
                     new_strand = f_strand
                 
-                # Recalculate relative to slice_end
                 n_coord_start = slice_end - f_end + 1
                 n_coord_end = slice_end - f_start + 1
                 new_start = min(n_coord_start, n_coord_end)
                 new_end = max(n_coord_start, n_coord_end)
 
-            # Update parts
             current_parts[0] = section_name
-            current_parts[3] = new_start  # Keep as int for sorting
-            current_parts[4] = new_end    # Keep as int for sorting
+            current_parts[3] = new_start
+            current_parts[4] = new_end
             current_parts[6] = new_strand
             
             processed_features.append(current_parts)
 
-        # 3. RE-SORT BY START POSITION
-        # Critical for GFF validity after reverse-complement transformations
         processed_features.sort(key=lambda x: x[3])
 
-        # --- 4. WRITE TO FILE ---
         with open(output_path, 'w') as outfile:
             outfile.write("## GFF Slicer Output\n")
             outfile.write(f"## Section: {section_name}\n")
@@ -129,13 +166,36 @@ def process_section(all_features, header_lines, output_path, section_name,
                 outfile.write('\t'.join(f) + '\n')
 
         print(f"-> '{section_name}': Wrote {len(processed_features)} features.")
+        
+    except PermissionError:
+        print(f"Error: No write permission for '{output_path}'.", file=sys.stderr)
+    except OSError as e:
+        print(f"Error writing '{section_name}': {e}", file=sys.stderr)
 
-    except Exception as e:
-        print(f"Error processing '{section_name}': {e}", file=sys.stderr)
 
+def process_coordinate_file(
+    coord_file_path: str,
+    input_gff_path: str,
+    output_dir: str
+) -> None:
+    """Orchestrate batch GFF slicing from a coordinate file.
 
-def process_coordinate_file(coord_file_path, input_gff_path, output_dir):
-    """Orchestrate the batch processing."""
+    Loads the master GFF once into memory and iterates over each entry
+    in the coordinate file, calling process_section() for each valid row.
+
+    Args:
+        coord_file_path: Path to the TSV coordinate file. Each row must
+                         contain: Name, Contig, Start, End, Strand.
+        input_gff_path: Path to the master GFF file to slice from.
+        output_dir: Path to the directory where output GFF files will
+                    be written. Created if it does not exist.
+
+    Raises:
+        FileNotFoundError: If the coordinate file does not exist.
+        PermissionError: If the coordinate file cannot be read.
+        OSError: If any other I/O error occurs.
+    """
+
     all_features, header_lines = load_gff_features(input_gff_path)
     
     if not os.path.isdir(output_dir):
@@ -160,12 +220,17 @@ def process_coordinate_file(coord_file_path, input_gff_path, output_dir):
         
         print("\nBatch processing complete.")
 
-    except Exception as e:
-        print(f"Error in coordinate file: {e}", file=sys.stderr)
+    except FileNotFoundError:
+        sys.exit(f"Error: Coordinate file '{coord_file_path}' not found.")
+    except PermissionError:
+        sys.exit(f"Error: No read permission for '{coord_file_path}'.")
+    except OSError as e:
+        sys.exit(f"Error reading coordinate file: {e}")
 
 
-def main():
-    """Main CLI execution."""
+def main() -> None:
+    """Parse command-line arguments and launch the GFF slicing pipeline."""
+
     parser = argparse.ArgumentParser(
         description="High-performance GFF slicer with strict containment and sorting."
     )

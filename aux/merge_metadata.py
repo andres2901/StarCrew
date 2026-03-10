@@ -11,10 +11,33 @@ import argparse
 import sys
 import os
 
-def merge_and_process_files(data_file_path, metadata_file_path, output_file_path):
+
+def merge_and_process_files(
+    data_file_path: str,
+    metadata_file_path: str,
+    output_file_path: str
+) -> None:
+    """Enrich a paired data file with metadata for both element columns.
+
+    Performs two sequential left joins to attach metadata to element01
+    and element02 independently, interleaves the resulting columns, fills
+    missing values with 'N/A', and writes the result as a TSV file.
+
+    Args:
+        data_file_path: Path to the semicolon-separated input data file.
+                        Must contain 'element01' and 'element02' columns.
+        metadata_file_path: Path to the metadata file. Separator is
+                            auto-detected. The second column is used as
+                            the join key.
+        output_file_path: Path to the output TSV file to write.
+
+    Raises:
+        FileNotFoundError: If the data file does not exist.
+        PermissionError: If a file cannot be read or written.
+        pd.errors.ParserError: If either input file cannot be parsed.
+        OSError: If any other I/O error occurs during writing.
     """
-    Performs dual-column enrichment and interleaved reordering.
-    """
+
     try:
         data_df = pd.read_csv(
             data_file_path, 
@@ -22,21 +45,22 @@ def merge_and_process_files(data_file_path, metadata_file_path, output_file_path
             dtype={'element01': str, 'element02': str}
         )
         
-        # Metadata file: Auto-detect separator, treat all as strings
         try:
             metadata_df = pd.read_csv(metadata_file_path, sep=None, engine='python', dtype=str)
-        except Exception:
-            metadata_df = pd.read_csv(metadata_file_path, sep='\t', dtype=str)
+        except pd.errors.ParserError:
+            try:
+                metadata_df = pd.read_csv(metadata_file_path, sep='\t', dtype=str)
+            except pd.errors.ParserError as e:
+                sys.exit(f"Error parsing metadata file '{metadata_file_path}': {e}")
+        except PermissionError:
+            sys.exit(f"Error: No read permission for '{metadata_file_path}'.")
 
-        # 2. Setup Join Keys
         if len(metadata_df.columns) < 2:
             sys.exit("Error: Metadata file must have at least two columns.")
             
-        # Standardize the join key name (second column)
         join_key = "ElementID_updated"
         metadata_df.columns.values[1] = join_key
 
-        # Identify columns to be added (everything from index 2 onwards)
         meta_payload_cols = metadata_df.columns[2:].tolist()
         
         if not meta_payload_cols:
@@ -44,10 +68,6 @@ def merge_and_process_files(data_file_path, metadata_file_path, output_file_path
             data_df.to_csv(output_file_path, sep='\t', index=False)
             return
 
-        # 3. Sequential Merging
-        # We perform two left-joins to enrich both element01 and element02
-        
-        # Merge for element01
         meta01 = metadata_df[[join_key] + meta_payload_cols].copy()
         meta01.columns = [join_key] + [f"element01_{c}" for c in meta_payload_cols]
         
@@ -55,7 +75,6 @@ def merge_and_process_files(data_file_path, metadata_file_path, output_file_path
             data_df, meta01, left_on='element01', right_on=join_key, how='left'
         ).drop(columns=[join_key])
         
-        # Merge for element02
         meta02 = metadata_df[[join_key] + meta_payload_cols].copy()
         meta02.columns = [join_key] + [f"element02_{c}" for c in meta_payload_cols]
         
@@ -63,13 +82,10 @@ def merge_and_process_files(data_file_path, metadata_file_path, output_file_path
             merged_df, meta02, left_on='element02', right_on=join_key, how='left'
         ).drop(columns=[join_key])
 
-        # 4. Cleanup and Reorder
-        # Fill missing metadata with N/A
         new_merged_cols = [f"element01_{c}" for c in meta_payload_cols] + \
                           [f"element02_{c}" for c in meta_payload_cols]
         merged_df[new_merged_cols] = merged_df[new_merged_cols].fillna('N/A')
 
-        # Interleave columns: [Originals..., element01_ColA, element02_ColA, element01_ColB...]
         interleaved_cols = []
         for c in meta_payload_cols:
             interleaved_cols.extend([f"element01_{c}", f"element02_{c}"])
@@ -77,15 +93,26 @@ def merge_and_process_files(data_file_path, metadata_file_path, output_file_path
         final_order = data_df.columns.tolist() + interleaved_cols
         merged_df = merged_df[final_order]
 
-        # 5. Save
-        merged_df.to_csv(output_file_path, sep='\t', index=False)
+        try:
+            merged_df.to_csv(output_file_path, sep='\t', index=False)
+        except PermissionError:
+            sys.exit(f"Error: No write permission for '{output_file_path}'.")
+        except OSError as e:
+            sys.exit(f"Error writing output file: {e}")
+
         print(f"Success! Processed data saved to: {output_file_path}")
 
-    except Exception as e:
-        sys.exit(f"An unexpected error occurred: {e}")
+    except FileNotFoundError:
+        sys.exit(f"Error: Data file '{data_file_path}' not found.")
+    except PermissionError:
+        sys.exit(f"Error: No read permission for '{data_file_path}'.")
+    except pd.errors.ParserError as e:
+        sys.exit(f"Error parsing data file '{data_file_path}': {e}")
 
-def main():
-    """Main CLI entry point."""
+
+def main() -> None:
+    """Parse command-line arguments and launch the metadata enrichment tool."""
+    
     parser = argparse.ArgumentParser(
         description="Enrich pair-data with metadata for both elements."
     )
@@ -95,10 +122,13 @@ def main():
     
     args = parser.parse_args()
     
-    if not os.path.exists(args.data_file) or not os.path.exists(args.metadata_file):
-        sys.exit("Error: One or more input files do not exist.")
+    if not os.path.exists(args.data_file):
+        sys.exit(f"Error: Data file '{args.data_file}' not found.")
+    if not os.path.exists(args.metadata_file):
+        sys.exit(f"Error: Metadata file '{args.metadata_file}' not found.")
 
     merge_and_process_files(args.data_file, args.metadata_file, args.output_file)
+
 
 if __name__ == "__main__":
     main()
