@@ -61,12 +61,6 @@ option_list <- list(
     metavar = "STRING"
   ),
   make_option(
-    c("-a", "--approximation"),
-    type = "character", action = "store", default = NULL,
-    help = "IQR approximation method for Outliers mode. Accepted values: Standard, Skew.",
-    metavar = "STRING"
-  ),
-  make_option(
     c("-c", "--coefficient"),
     type = "numeric", action = "store", default = 1.5,
     help = "Fence coefficient for outlier detection [default: %default] [range: 1.5 - 3].",
@@ -111,7 +105,6 @@ arguments <- parse_args(OptionParser(option_list = option_list))
 # ==============================================================================
 
 valid_modes        <- c("Outliers", "Enrichment")
-valid_approx       <- c("Standard", "Skew")
 valid_countmodes   <- c("Gene", "Ship")
 valid_padjust      <- c("BH", "BY", "bonferroni", "fdr", "hochberg", "holm", "hommel")
 
@@ -131,14 +124,6 @@ if (is.null(arguments$mode) || !arguments$mode %in% valid_modes) {
 
 # --- Mode-specific arguments --------------------------------------------------
 if (arguments$mode == "Outliers") {
-
-  if (is.null(arguments$approximation) || !arguments$approximation %in% valid_approx) {
-    stop(
-      paste0("Argument '--approximation' is required for Outliers mode and must be one of: ",
-             paste(valid_approx, collapse = ", "), "."),
-      call. = FALSE
-    )
-  }
 
   if (arguments$coefficient < 1.5 || arguments$coefficient > 3) {
     stop("Argument '--coefficient' must be between 1.5 and 3.", call. = FALSE)
@@ -264,29 +249,22 @@ load_and_preprocess_data <- function(
 
 #' Identify overrepresented orthogroups using IQR-based outlier detection
 #'
-#' Computes an upper fence based on the interquartile range and an optional
-#' skewness correction. Orthogroups above the fence are written to disk and
-#' a histogram is saved as an SVG file.
+#' Computes an upper fence based on the interquartile range with skewness
+#' correction. Orthogroups above the fence are written to disk and a
+#' histogram is saved as an SVG file.
 #'
 #' @param orthocounts   Named numeric vector. Orthogroup sizes.
-#' @param approximation Character. IQR method: "Standard" or "Skew".
 #' @param coefficient   Numeric. Multiplier for the IQR fence (1.5 - 3).
 #'
 #' @return NULL
-process_outliers <- function(orthocounts, approximation, coefficient) {
+process_outliers <- function(orthocounts, coefficient) {
 
   quartiles <- quantile(orthocounts, probs = c(0, 0.25, 0.5, 0.75, 1))
   iqr_val   <- quartiles["75%"] - quartiles["25%"]
 
   # Compute upper fence
-  if (approximation == "Standard") {
-    fence <- quartiles["75%"] + (coefficient * iqr_val)
-
-  } else if (approximation == "Skew") {
-    # Medcouple-based skewness correction (Brys et al., 2004)
-    mc    <- medcouple(orthocounts, do.reflect = FALSE)
-    fence <- quartiles["75%"] + ((coefficient * exp(3 * mc[1])) * iqr_val)
-  }
+  mc    <- medcouple(orthocounts, do.reflect = FALSE)
+  fence <- quartiles["75%"] + ((coefficient * exp(3 * mc[1])) * iqr_val)
 
   outliers <- orthocounts[orthocounts > fence]
 
@@ -410,7 +388,6 @@ log_message(paste0("Processing data in '", arguments$mode, "' mode..."))
 if (arguments$mode == "Outliers") {
   process_outliers(
     orthocounts   = data_list$orthocounts,
-    approximation = arguments$approximation,
     coefficient   = arguments$coefficient
   )
 

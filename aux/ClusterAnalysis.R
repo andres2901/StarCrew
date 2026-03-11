@@ -1188,7 +1188,8 @@ get_discordant <- function(tree1, tree2) {
     aligned_tree1[tree1 == names(best_match)[i]] <- as.numeric(best_match[i])
   }
 
-  discordant_names <- names(tree2)[tree2 != aligned_tree1]
+  mismatched_indices <- which(tree2 != aligned_tree1)
+  discordant_names <- names(tree2)[mismatched_indices]
   return(discordant_names)
 }
 
@@ -1429,9 +1430,8 @@ if (clustering_data$individual_clusters == 1) {
       k_num <- 2
     }
 
-    # Align element names before comparing partitions
-    fit_tree  <- sort(cutree(hclust_tree, k = k_num))
-    fit_cargo <- sort(cutree(clustering_data$hierar_cl, k = k_num))
+    fit_tree  <- cutree(hclust_tree, k = k_num)
+    fit_cargo <- cutree(clustering_data$hierar_cl, k = k_num)
 
     discordant <- unique(c(
       get_discordant(fit_tree,  fit_cargo),
