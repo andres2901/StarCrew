@@ -1,540 +1,686 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# NAME:        CaptainIdentification.sh
+# DESCRIPTION: Identifies captain genes/pseudogenes within each element and
+#              constructs a phylogenetic tree based on those sequences.
+#              Executes five main steps:
+#              1. HMM profile search against each element proteome.
+#              2. Captain identification from HMM results by position/confidence.
+#              3. Pseudogene search in elements lacking a confident captain.
+#              4. Sequence alignment with MACSE and trimming with ClipKit.
+#              5. Maximum-likelihood phylogenetic tree inference with IQ-TREE.
+# USAGE:       StarCrew CaptainIdentification [options]
+#              StarCrew CaptainIdentification -help
+# AUTHOR:      Andres F. Lizcano Salas
+# DATE:        12/Mar/2026
+# VERSION:     1.0.0
+# ==============================================================================
+
+set -uo pipefail
 
 # ==============================================================================
-# SOFTWARE CHECK AND ENVIRONMENT SETUP
+# ENVIRONMENT SETUP
 # ==============================================================================
 
-# Define library and auxiliary paths
-SCRIPT_DIR="$( dirname -- "$( readlink -f -- "$0"; )"; )"
-source "${SCRIPT_DIR}/../lib/Utils.sh"
-source "${SCRIPT_DIR}/../lib/Check.sh"
+readonly SCRIPT_DIR="$( dirname -- "$( readlink -f -- "$0" )" )"
+readonly LIB_DIR="${SCRIPT_DIR}/../lib"
+readonly AUXILIARY_DIR="${SCRIPT_DIR}/../aux"
+readonly HMM_DIR="${SCRIPT_DIR}/../hmm"
+readonly DATABASE_DIR="${SCRIPT_DIR}/../databases"
 
-auxiliary_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../aux/"
-if [[ ! -d "$auxiliary_path" ]]; then
-    echo "Error: directory '$auxiliary_path' does not exist."
-    exit 1
-else
-    auxiliary_path=$(realpath $auxiliary_path)
-    check_auxiliary_scripts "${auxiliary_path}" "$(basename -s .sh "$0" )"
+# Source required libraries
+if [[ ! -f "${LIB_DIR}/Utils.sh" ]]; then
+  echo "Error: file '${LIB_DIR}/Utils.sh' does not exist." >&2
+  exit 1
+fi
+source "${LIB_DIR}/Utils.sh"
+
+if [[ ! -f "${LIB_DIR}/Check.sh" ]]; then
+  echo "Error: file '${LIB_DIR}/Check.sh' does not exist." >&2
+  exit 1
+fi
+source "${LIB_DIR}/Check.sh"
+
+# Validate auxiliary directory and scripts
+if [[ ! -d "$AUXILIARY_DIR" ]]; then
+  echo "Error: directory '${AUXILIARY_DIR}' does not exist." >&2
+  exit 1
+fi
+check_auxiliary_scripts "$(realpath "${AUXILIARY_DIR}")" "$(basename -s .sh "$0")"
+
+# Validate required software
+check_required_software "$(basename -s .sh "$0")"
+
+# Validate HMM profile directory and required files
+if [[ ! -d "$HMM_DIR" ]]; then
+  echo "Error: HMM profile directory '${HMM_DIR}' not found." >&2
+  exit 1
 fi
 
-# Validate required software for the current script
-check_required_software "$(basename -s .sh "$0" )"
+readonly HMM_PATH="$(realpath "${HMM_DIR}")"
+readonly HMM_DOMAINS=("CAT_domain" "DUF3435" "Captain")
+readonly HMM_EXTENSIONS=("" ".h3f" ".h3i" ".h3m" ".h3p")
 
-# HMM Profile Verification
-hmmprofile_path="${SCRIPT_DIR}/../hmm/"
-if [[ ! -d "$hmmprofile_path" ]]; then
-    echo "Error: HMM profile directory '$hmmprofile_path' not found."
-    exit 1
-else
-    hmmprofile_path=$(realpath "$hmmprofile_path")
-  
-    # Validate binary compressed datafiles for hmmscan
-    domains=("CAT_domain" "DUF3435" "Captain")
-    extensions=("" ".h3f" ".h3i" ".h3m" ".h3p")
+for dom in "${HMM_DOMAINS[@]}"; do
+  for ext in "${HMM_EXTENSIONS[@]}"; do
+    if [[ ! -f "${HMM_PATH}/${dom}.hmm${ext}" ]]; then
+      echo "Error: missing HMM data for '${dom}' (${dom}.hmm${ext})." >&2
+      exit 1
+    fi
+  done
+done
 
-    for dom in "${domains[@]}"; do
-      for ext in "${extensions[@]}"; do
-        if [[ ! -f "${hmmprofile_path}/${dom}.hmm${ext}" ]]; then
-          echo "Error: Missing HMM data for '${dom}' (${ext})."
-          exit 1
-        fi
-      done
-    done
-  
-    CAT_hmm="${hmmprofile_path}/CAT_domain.hmm"
-    DUF_hmm="${hmmprofile_path}/DUF3435.hmm"
-    CAPTAIN_hmm="${hmmprofile_path}/Captain.hmm"
-fi
+readonly CAT_HMM="${HMM_PATH}/CAT_domain.hmm"
+readonly DUF_HMM="${HMM_PATH}/DUF3435.hmm"
+readonly CAPTAIN_HMM="${HMM_PATH}/Captain.hmm"
 
-# Database Verification
-database_path="$( dirname -- "$( readlink -f -- "$0"; )"; )""/../databases/"
-check_databases "${database_path}" "$(basename -s .sh "$0" )"
-database_path=$(realpath $database_path)
+# Validate databases
+check_databases "${DATABASE_DIR}" "$(basename -s .sh "$0")"
+readonly DATABASE_PATH="$(realpath "${DATABASE_DIR}")"
 
 # ==============================================================================
-# FUNCTION DEFINITIONS
+# FUNCTIONS
 # ==============================================================================
 
-function print_help() {
-   echo -e "Command to identify captain genes/pseudogenes within each element and construct a phylogenetic tree based on these sequences.
-   It executes five main steps:
-   1. Run hmmscan using hmm profiles of specific domains in captains against the proteome of each element.
-   2. Processes the data to identify Captains based on hmm results and position. Three confidence levels can be used for captain identification:
-      2.1 Only a match with the Captain HMM profile from Starfish \033[01;31mWARNING\033[m: This may lead to false positive identifications and result in an unreliable phylogenetic analysis.
-      2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
-      2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with HMM profile associated with the YR Recombinase Active Site.
-   3. For elements lacking a confident captain gene, the script searches for a putative captain pseudogene at the beginning and end of the element.
-   4. Aligns CDS and pseudogene sequences using MACSE (with amino acid output) and processes the alignment with Clipkit.
-   5. Runs maximum-likelihood phylogenetic tree inference, when there at least two unique captain sequences:
-      5.1 Run IQ-TREE with 1000 UFBotstrap and 1000 sh-aLRT if there at least 4 unique sequence, in other case run it without support.
-      5.2 Collapsed near-zero and low-support (when available) branches.
-      5.3 mid-root the tree.
-
-   There are three available mode:
-   -Cluster: Analyzes and performs all five steps per cluster, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
-   -FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset. \033[01;31mWARNING\033[m: For big datasets, MACSE could fail without any specific error reported.
-   -AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
-   "
-   echo
-   echo "Syntax: StarCrew $(basename -s .sh "$0" ) [ -help ] -w <directory_path> [ -m <string> -l <integer> -c <integer> -r <integer> -ms <integer> -t <integer> --overwrite ]"
-   echo ""
-   echo "Required args:"
-   echo "-w, --workingDirectory: Specify the working directory where all data are stored."
-   echo ""
-   echo "Required args with Default:"
-   echo "-m, --mode: Specified the mode (Default: AllID) [Available mode: Cluster, FullAll, AllID]."
-   echo "-l, --length: Minimum length of the protein to be identify as captain (Default: 250) [range: 200 - 800]."
-   echo "-c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3]."
-   echo "-r, --rangeKb: Distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20]."
-   echo ""
-   echo "Required args with Default in 'Cluster' mode:"
-   echo "-ms, --minSize: Minimum size of a Cluster to be include in the analysis when running the 'Cluster' mode (Default: 4) [range: 4 - 10]."
-   echo ""
-   echo "Optional args:"
-   echo "-t, --threads: Number of threads to use for hmmscan search and phylogenetic tree inference (Default: 1)."
-   echo "--overwrite: Flag to overwrite in case there is already a previous run of $(basename -s .sh "$0" ) (Default: off)."
-   echo "-help: Display this help message."
+# Displays the help message with all available options.
+# Arguments:
+#   None
+# Returns:
+#   0 always
+print_help() {
+  echo "Command to identify captain genes/pseudogenes and build a phylogenetic tree."
+  echo "Executes five main steps:"
+  echo "  1. HMM profile search against each element proteome."
+  echo "  2. Captain identification from HMM results. Three confidence levels:"
+  echo "     1 - Captain HMM match only."
+  echo "         WARNING: May produce false positives and unreliable phylogenies."
+  echo "     2 - Captain HMM + DUF3435 HMM match."
+  echo "     3 - Captain HMM + DUF3435 HMM + YR Recombinase Active Site HMM match."
+  echo "  3. Pseudogene search at element boundaries for captainless elements."
+  echo "  4. MACSE alignment (AA output) trimmed with ClipKit."
+  echo "  5. IQ-TREE phylogenetic inference (>=4 unique sequences: 1000 UFBootstrap"
+  echo "     + sh-aLRT; 2-3 sequences: no support; 1 sequence: skipped)."
+  echo
+  echo "Available modes:"
+  echo "  Cluster  - Runs all five steps per cluster; removes captainless elements."
+  echo "  FullAll  - Runs all five steps on the full dataset; removes captainless elements."
+  echo "             WARNING: MACSE may fail silently on large datasets."
+  echo "  AllID    - Runs only steps 1-3 (identification) on the full dataset."
+  echo
+  echo "Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>"
+  echo "       [ -m <string> -l <integer> -c <integer> -r <integer>"
+  echo "         -ms <integer> -t <integer> --overwrite ]"
+  echo
+  echo "Required args:"
+  echo "  -w, --workingDirectory  Working directory where all data are stored."
+  echo
+  echo "Required args with defaults:"
+  echo "  -m, --mode              Run mode (Default: AllID) [Available: Cluster, FullAll, AllID]."
+  echo "  -l, --length            Minimum captain protein length in aa (Default: 250) [range: 200-800]."
+  echo "  -c, --confidenceLevel   Minimum confidence level for captain calling (Default: 2) [range: 1-3]."
+  echo "  -r, --rangeKb           Distance in kb from element boundary for captain search (Default: 10) [range: 3-20]."
+  echo
+  echo "Required args with defaults in 'Cluster' mode:"
+  echo "  -ms, --minSize          Minimum cluster size to include in analysis (Default: 4) [range: 4-10]."
+  echo
+  echo "Optional args:"
+  echo "  -t, --threads           Threads for hmmscan and IQ-TREE (Default: 1)."
+  echo "  --overwrite             Overwrite a previous run (Default: off)."
+  echo "  -help                   Display this help message."
 }
 
-Check_previous_information() {
-    local base_dir="$1"
+# Checks for and loads captain data from a previous run if available.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 always; sets previous_captain_run=true if prior data exists
+check_previous_information() {
+  local base_dir="$1"
+  local captain_dir="${base_dir}/$(basename -s .sh "$0")"
 
-    local captain_dir="${base_dir}/$(basename -s .sh "$0" )/"
-
-    if [[ ! -f "${captain_dir}/Captains_CDS.fa" ]]; then
-        return 0
-    else
-        check_fasta_dna "${captain_dir}/Captains_CDS.fa"
-    fi
-
-    if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
-        check_fasta_dna "${captain_dir}/Captains_pseudo.fa"
-    fi
-
-    Previous_captain_run=true
-}
-
-organize_working_directory() {
-    local base_dir="$1"
-
-    local data_dir="${base_dir}/Data/"
-
-    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
-
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
-    local temp_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/temp/"
-
-    if [[ -d "$working_dir" && ! $Previous_captain_run ]]; then
-        echo "Error: There's a previous run in the Workspace."
-        echo "If you want to overwrite the previous work, add the '--overwrite' flag to the command line."
-        exit 1
-    elif [[ -d "$working_dir" && $Previous_captain_run ]]; then
-        rm -r $working_dir
-    fi
-
-    mkdir -p ${working_dir}
-    mkdir -p ${temp_dir}
-
-    cp -r ${gff_dir} ${working_dir}
-    cp -r ${nucleotide_dir} ${working_dir}
-    cp -r ${protein_dir} ${working_dir}
-    cp -r ${CDS_dir} ${working_dir}
-
-    if ${Previous_captain_run}; then
-        local captain_dir="${base_dir}/$(basename -s .sh "$0" )/"
-
-        if [[ -f "${captain_dir}/Captains_CDS.fa" ]]; then
-            cp "${captain_dir}/Captains_CDS.fa" ${working_dir}
-        fi
-
-        if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
-            cp "${captain_dir}/Captains_pseudo.fa" ${working_dir}
-        fi
-    fi
-}
-
-# Function to run hmmscan for all three profiles in every element proteome
-process_hmmscan() {
-    local base_dir="$1"
-
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
-
-    local protein_path=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    
-    local hmmer_results_prefix="${working_dir}/Hmmsearch_"
-    local hmmer_results_CAT="${hmmer_results_prefix}CAT"
-    local hmmer_results_DUF="${hmmer_results_prefix}DUF"
-    local hmmer_results_CAPTAIN="${hmmer_results_prefix}Captain"
-
-    mkdir -p "${hmmer_results_CAT}"
-    mkdir -p "${hmmer_results_DUF}"
-    mkdir -p "${hmmer_results_CAPTAIN}"
-
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing profile searches..."
-    
-    local fa_files=( $(find "$protein_path" -maxdepth 1 -type f -name "*.fa") )
-
-    Total_states=${#fa_files[@]}
-    State=0
-    
-    for fa_file in "${fa_files[@]}"
-    do
-        State=$(($State + 1))
-
-        local species_name=$(basename "$fa_file" .fa)
-        local query="$fa_file"
-        local outfileCAPTAIN="${hmmer_results_CAPTAIN}/${species_name}.txt"
-        local outfileDUF="${hmmer_results_DUF}/${species_name}.txt"
-        local outfileCAT="${hmmer_results_CAT}/${species_name}.txt"
-        
-        # Perform profile search
-        hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAPTAIN} ${CAPTAIN_hmm} ${query} >/dev/null
-        hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileDUF} ${DUF_hmm} ${query} >/dev/null
-        hmmscan --max --noali --cpu ${threads} --domE 0.001 --domtblout ${outfileCAT} ${CAT_hmm} ${query} >/dev/null
-        
-        ProgressBar $State $Total_states
-    done
-
-    echo -e "\n  [$(date "+%Y-%m-%d %H:%M:%S")] Analysis complete."
+  if [[ ! -f "${captain_dir}/Captains_CDS.fa" ]]; then
     return 0
+  fi
+
+  check_fasta_dna "${captain_dir}/Captains_CDS.fa"
+
+  if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
+    check_fasta_dna "${captain_dir}/Captains_pseudo.fa"
+  fi
+
+  previous_captain_run=true
 }
 
-Captain_identification() {
-    local base_dir="$1"
+# Sets up the workspace by copying Data subdirectories and any prior captain files.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success, exits with 1 if a previous run exists without --overwrite
+organize_working_directory() {
+  local base_dir="$1"
+  local data_dir="${base_dir}/Data"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local temp_dir="${working_dir}/temp"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+  local gff_dir nucleotide_dir protein_dir cds_dir
+  gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+  nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+  protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+  cds_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
 
-    local gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local CAPTAIN_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_Captain" 2>/dev/null)
-    local CAT_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_CAT" 2>/dev/null)
-    local DUF_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_DUF" 2>/dev/null)
-    local results_path="${working_dir}/CaptainsID.txt"
-    local empty_elements="${working_dir}/EmptyElements.txt"
+  if [[ -d "$working_dir" && ! $previous_captain_run ]]; then
+    echo "Error: a previous run exists in '${working_dir}'." >&2
+    echo "Use '--overwrite' to overwrite it." >&2
+    exit 1
+  elif [[ -d "$working_dir" && $previous_captain_run ]]; then
+    rm -r "$working_dir"
+  fi
 
-    python ${auxiliary_path}/hmmscan_process.py --hmm1 "${CAPTAIN_path}" --hmm2 "${DUF_path}" --hmm3 "${CAT_path}" --gff "${gff_dir}" --fasta "${nucleotide_dir}" --output "${results_path}" --empty "${empty_elements}" --min_common "${level}" --min_length "${length}" --range_kb "${range}" >/dev/null
+  mkdir -p "$working_dir" "$temp_dir"
+  cp -r "$gff_dir" "$working_dir"
+  cp -r "$nucleotide_dir" "$working_dir"
+  cp -r "$protein_dir" "$working_dir"
+  cp -r "$cds_dir" "$working_dir"
+
+  if $previous_captain_run; then
+    local captain_dir="${base_dir}/$(basename -s .sh "$0")"
+    [[ -f "${captain_dir}/Captains_CDS.fa" ]] && \
+      cp "${captain_dir}/Captains_CDS.fa" "$working_dir"
+    [[ -f "${captain_dir}/Captains_pseudo.fa" ]] && \
+      cp "${captain_dir}/Captains_pseudo.fa" "$working_dir"
+  fi
 }
 
-# Function to identify pseudogenes in 'empty' elements
-Captain_pseudogene() {
-    local base_dir="$1"
+# Runs hmmscan for all three HMM profiles against each element proteome.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
+process_hmmscan() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local protein_path
+  protein_path=$(find "$working_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+  local hmmer_prefix="${working_dir}/Hmmsearch_"
+  local hmmer_cat="${hmmer_prefix}CAT"
+  local hmmer_duf="${hmmer_prefix}DUF"
+  local hmmer_captain="${hmmer_prefix}Captain"
 
-    local nucleotide_path=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local CDS_path=$(find "$working_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
-    local captain_file="$working_dir/CaptainsID.txt"
-    
-    local empty_elements="${working_dir}/EmptyElements.txt"
-    local pseudoExons="${working_dir}/Captains_pseudo.fa"
-    local Remove_elements="${working_dir}/Captainless_elements.txt"
-    local temp_dir="${working_dir}/temp/"
+  mkdir -p "$hmmer_cat" "$hmmer_duf" "$hmmer_captain"
 
-    if [ ! -s "${captain_file}" ]; then
-        echo -e "\033[01;31mWARNING\033[m: there is no captain gene identify in this set of data. Looking for pseudogenes only."
-        cp ${database_path}/Captains_CDS.fa ${temp_dir}/Captains_CDS.fa
-    else
-        # Select captains that were correctly identify 
-        cat ${CDS_path}/*.fa > ${temp_dir}/CDS.fa
-        seqkit grep --quiet -f ${captain_file} ${temp_dir}/CDS.fa -o ${working_dir}/Captains_CDS.fa
-        cat ${database_path}/Captains_CDS.fa ${working_dir}/Captains_CDS.fa > ${temp_dir}/Captains_CDS.fa
+  log_step "Performing HMM profile searches..."
+
+  local fa_files=()
+  while IFS= read -r -d '' f; do
+    fa_files+=("$f")
+  done < <(find "$protein_path" -maxdepth 1 -type f -name "*.fa" -print0)
+
+  local total_states=${#fa_files[@]}
+  local state=0
+
+  for fa_file in "${fa_files[@]}"; do
+    state=$(( state + 1 ))
+    local starship_name
+    starship_name=$(basename "$fa_file" .fa)
+
+    hmmscan --max --noali --cpu "${threads}" --domE 0.001 \
+      --domtblout "${hmmer_captain}/${starship_name}.txt" \
+      "${CAPTAIN_HMM}" "${fa_file}" > /dev/null
+    hmmscan --max --noali --cpu "${threads}" --domE 0.001 \
+      --domtblout "${hmmer_duf}/${starship_name}.txt" \
+      "${DUF_HMM}" "${fa_file}" > /dev/null
+    hmmscan --max --noali --cpu "${threads}" --domE 0.001 \
+      --domtblout "${hmmer_cat}/${starship_name}.txt" \
+      "${CAT_HMM}" "${fa_file}" > /dev/null
+
+    ProgressBar "$state" "$total_states"
+  done
+  echo ""
+  log_step "HMM profile searches complete."
+}
+
+# Identifies captain genes from hmmscan results using position and confidence level.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
+captain_identification() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+
+  local gff_dir captain_path cat_path duf_path
+  gff_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+  nucleotide_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+  captain_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_Captain" 2>/dev/null)
+  cat_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_CAT" 2>/dev/null)
+  duf_path=$(find "$working_dir" -maxdepth 1 -type d -name "Hmmsearch_DUF" 2>/dev/null)
+
+  python "${AUXILIARY_DIR}/hmmscan_process.py" \
+    --hmm1 "${captain_path}" \
+    --hmm2 "${duf_path}" \
+    --hmm3 "${cat_path}" \
+    --gff "${gff_dir}" \
+    --fasta "${nucleotide_dir}" \
+    --output "${working_dir}/CaptainsID.txt" \
+    --empty "${working_dir}/EmptyElements.txt" \
+    --min_common "${level}" \
+    --min_length "${length}" \
+    --range_kb "${range}" > /dev/null
+}
+
+# Searches for captain pseudogenes at element boundaries for captainless elements.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
+captain_pseudogene() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local temp_dir="${working_dir}/temp"
+
+  local nucleotide_path cds_path
+  nucleotide_path=$(find "$working_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+  cds_path=$(find "$working_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
+
+  local captain_file="${working_dir}/CaptainsID.txt"
+  local empty_elements="${working_dir}/EmptyElements.txt"
+  local pseudo_exons="${working_dir}/Captains_pseudo.fa"
+  local remove_elements="${working_dir}/Captainless_elements.txt"
+  local full_range=$(( range * 1000 ))
+
+  if [[ ! -s "$captain_file" ]]; then
+    log_warning "No captain gene identified in this dataset. Looking for pseudogenes only."
+    cp "${DATABASE_PATH}/Captains_CDS.fa" "${temp_dir}/Captains_CDS.fa"
+  else
+    cat "${cds_path}"/*.fa > "${temp_dir}/CDS.fa"
+    seqkit grep --quiet -f "$captain_file" "${temp_dir}/CDS.fa" \
+      -o "${working_dir}/Captains_CDS.fa"
+    cat "${DATABASE_PATH}/Captains_CDS.fa" "${working_dir}/Captains_CDS.fa" \
+      > "${temp_dir}/Captains_CDS.fa"
+  fi
+
+  if [[ ! -s "$empty_elements" ]]; then
+    rm "$empty_elements"
+    log_step "All elements have a confident captain gene model."
+    return 0
+  fi
+
+  log_warning "Not all elements have an identifiable captain. Searching for pseudogenes..."
+
+  local total_states
+  total_states=$(wc -l < "$empty_elements")
+  local state=0
+
+  mkdir -p "${temp_dir}/blast"
+
+  while read -r element; do
+    state=$(( state + 1 ))
+
+    # Adjust range if element is shorter than 2x full range
+    local element_length
+    element_length=$(seqkit stats "${nucleotide_path}/${element}.fa" \
+      | grep "DNA" | awk '{print $5}' | sed 's/,//')
+    if (( element_length < full_range * 2 )); then
+      full_range=$(( element_length / 2 ))
     fi
 
-    if [ -s "${empty_elements}" ]; then
-        echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] \033[01;31mWARNING\033[m: Not all elements have an identifible captain. Trying to identify a region possibly associated to a captain pseudogene..."
+    # Search at the start of element (positive strand)
+    seqkit subseq --quiet -r "1:${full_range}" \
+      "${nucleotide_path}/${element}.fa" > "${temp_dir}/blast/${element}_start.fa"
+    makeblastdb -in "${temp_dir}/blast/${element}_start.fa" \
+      -dbtype nucl -out "${temp_dir}/blast/${element}_start" > /dev/null
 
-        Total_states=$(wc -l ${empty_elements} | awk '{print $1}')
-        local element_length=0
-        local Full_range=$(( ${range} * 1000 ))
-        State=0
+    blastn -query "${temp_dir}/Captains_CDS.fa" \
+      -db "${temp_dir}/blast/${element}_start" \
+      -outfmt "6 sseqid sstart send" \
+      | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' \
+      | sort -k2 -n -u \
+      | awk -F'\t' '
+        BEGIN { last_start=-1; last_end=-1 }
+        {
+          current_start = ($2 < $3) ? $2 : $3
+          current_end   = ($2 < $3) ? $3 : $2
+          if (last_start == -1) {
+            last_start = current_start; last_end = current_end
+          } else if (current_start <= last_end) {
+            if (current_end > last_end) last_end = current_end
+          } else {
+            print $1 "\t" last_start "\t" last_end
+            last_start = current_start; last_end = current_end
+          }
+        }
+        END { if (last_start != -1) print $1 "\t" last_start "\t" last_end }
+      ' > "${temp_dir}/${element}_start.bed"
 
-        mkdir -p ${temp_dir}/blast
-        cat ${empty_elements} | while read line 
-        do
-            State=$(($State + 1))
+    local exon_number exon_length
+    exon_number=$(wc -l < "${temp_dir}/${element}_start.bed")
+    exon_length=$(awk '{sum += $3 - $2} END {print sum+0}' \
+      "${temp_dir}/${element}_start.bed")
 
-            # Determine real range to analyze
-            element_length=$(seqkit stats ${nucleotide_path}/${line}.fa | grep "DNA" | awk '{print $5}' | sed s/,//)
-            if [[ $element_length -lt $(( $Full_range * 2)) ]]; then
-                Full_range=$(( $element_length / 2 ))
-            fi
-            
-            # Search for captain pseudogene at the beginning in the positive strand
-            seqkit subseq --quiet -r 1:${Full_range} ${nucleotide_path}/${line}.fa > ${temp_dir}/blast/${line}_start.fa
+    if (( exon_number >= 2 && exon_length >= 600 )); then
+      seqkit subseq --quiet --bed "${temp_dir}/${element}_start.bed" \
+        "${nucleotide_path}/${element}.fa" \
+        | grep -v ">" | sed -z 's/\n//g' \
+        | sed "1i >${element}" | sed -e '$a\' >> "$pseudo_exons"
+    else
+      # Search at the end of element (negative strand)
+      seqkit subseq --quiet -r "-${full_range}:-1" \
+        "${nucleotide_path}/${element}.fa" \
+        | seqkit seq --quiet --reverse --complement -v --seq-type dna \
+        > "${temp_dir}/blast/${element}_end.fa"
+      makeblastdb -in "${temp_dir}/blast/${element}_end.fa" \
+        -dbtype nucl -out "${temp_dir}/blast/${element}_end" > /dev/null
 
-            makeblastdb -in ${temp_dir}/blast/${line}_start.fa -dbtype nucl -out ${temp_dir}/blast/${line}_start >/dev/null
-
-            blastn -query ${temp_dir}/Captains_CDS.fa -db ${temp_dir}/blast/${line}_start -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
-            BEGIN {
-            last_start = -1;
-            last_end = -1;
-            }
-            {
-                current_start = ($2 < $3) ? $2 : $3;
-                current_end = ($2 < $3) ? $3 : $2;
-
-                if (last_start == -1) {
-                    last_start = current_start;
-                    last_end = current_end;
-                } else if (current_start <= last_end) {
-                if (current_end > last_end) {
-                    last_end = current_end;
-                }
+      blastn -query "${temp_dir}/Captains_CDS.fa" \
+        -db "${temp_dir}/blast/${element}_end" \
+        -outfmt "6 sseqid sstart send" \
+        | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' \
+        | sort -k2 -n -u \
+        | awk -F'\t' '
+          BEGIN { last_start=-1; last_end=-1 }
+          {
+            current_start = ($2 < $3) ? $2 : $3
+            current_end   = ($2 < $3) ? $3 : $2
+            if (last_start == -1) {
+              last_start = current_start; last_end = current_end
+            } else if (current_start <= last_end) {
+              if (current_end > last_end) last_end = current_end
             } else {
-                print $1 "\t" last_start "\t" last_end;
-                last_start = current_start;
-                last_end = current_end;
+              print $1 "\t" last_start "\t" last_end
+              last_start = current_start; last_end = current_end
             }
-            }
-            END {
-                if (last_start != -1) {
-                    print $1 "\t" last_start "\t" last_end;
-                }
-            }' > ${temp_dir}/${line}_start.bed
+          }
+          END { if (last_start != -1) print $1 "\t" last_start "\t" last_end }
+        ' > "${temp_dir}/${element}_end.bed"
 
-            local exonNumber=$(wc -l ${temp_dir}/${line}_start.bed | awk '{print $1}')
-            local exon_length=$(awk '{$4 = $3 - $2} {sum += $4} END {print sum}' ${temp_dir}/${line}_start.bed)
+      exon_number=$(wc -l < "${temp_dir}/${element}_end.bed")
+      exon_length=$(awk '{sum += $3 - $2} END {print sum+0}' \
+        "${temp_dir}/${element}_end.bed")
 
-            if [[ ${exonNumber} -ge 2 && ${exon_length} -ge 600 ]]; then
-                seqkit subseq --quiet --bed ${temp_dir}/${line}_start.bed ${nucleotide_path}/${line}.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
-            else
-                # Search for captain pseudogene at the end in the negative strand
-                seqkit subseq --quiet -r -${Full_range}:-1 ${nucleotide_path}/${line}.fa | seqkit seq --quiet --reverse --complement -v --seq-type dna > ${temp_dir}/blast/${line}_end.fa
-                makeblastdb -in ${temp_dir}/blast/${line}_end.fa -dbtype nucl -out ${temp_dir}/blast/${line}_end >/dev/null
-
-                blastn -query ${temp_dir}/Captains_CDS.fa -db ${temp_dir}/blast/${line}_end -outfmt "6 sseqid sstart send" | awk 'BEGIN{FS=OFS="\t"}{if($2 < $3){print}}' | sort -k2 -n -u | awk -F'\t' '
-                BEGIN {
-                last_start = -1;
-                last_end = -1;
-                }
-                {
-                current_start = ($2 < $3) ? $2 : $3;
-                current_end = ($2 < $3) ? $3 : $2;
-
-                if (last_start == -1) {
-                    last_start = current_start;
-                    last_end = current_end;
-                } else if (current_start <= last_end) {
-                if (current_end > last_end) {
-                    last_end = current_end;
-                }
-                } else {
-                print $1 "\t" last_start "\t" last_end;
-                last_start = current_start;
-                last_end = current_end;
-                }
-                }
-                END {
-                if (last_start != -1) {
-                    print $1 "\t" last_start "\t" last_end;
-                }
-                }' > ${temp_dir}/${line}_end.bed
-
-                local exonNumber=$(wc -l ${temp_dir}/${line}_end.bed | awk '{print $1}')
-                local exon_length=$(awk '{$4 = $3 - $2} {sum += $4} END {print sum}' ${temp_dir}/${line}_end.bed)
-
-                if [[ ${exonNumber} -ge 2 && ${exon_length} -ge 600 ]]; then
-                    seqkit subseq --quiet --bed ${temp_dir}/${line}_end.bed ${temp_dir}/blast/${line}_end.fa  | grep -v ">" | sed -z  's/\n//g' | sed "1i >${line}" | sed -e '$a\' >> ${pseudoExons}
-                else 
-                    echo -e "  \033[01;31mWARNING\033[m: Element \033[1m'${line}'\033[m do not have an identifiable confident pseudogene. It will be removed from the final alignment."
-                    echo "${line}" >> ${Remove_elements}
-                fi
-            fi
-
-            Full_range=$(( ${range} * 1000 )) 
-
-            ProgressBar $State $Total_states
-        done
-        echo ""
-
-        rm ${nucleotide_path}/*seqkit* > /dev/null
-    else
-        rm ${empty_elements}
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] All elements have a confident captain gene model"
+      if (( exon_number >= 2 && exon_length >= 600 )); then
+        seqkit subseq --quiet --bed "${temp_dir}/${element}_end.bed" \
+          "${temp_dir}/blast/${element}_end.fa" \
+          | grep -v ">" | sed -z 's/\n//g' \
+          | sed "1i >${element}" | sed -e '$a\' >> "$pseudo_exons"
+      else
+        log_warning "Element '${element}' has no identifiable captain pseudogene. It will be removed."
+        echo "${element}" >> "$remove_elements"
+      fi
     fi
+
+    full_range=$(( range * 1000 ))
+    ProgressBar "$state" "$total_states"
+  done < "$empty_elements"
+  echo ""
+
+  rm -f "${nucleotide_path}/"*seqkit* 2> /dev/null
 }
 
-Alignment() {
-    local base_dir="$1"
+# Aligns captain CDS and pseudogene sequences with MACSE and trims with ClipKit.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success, 1 if no sequences are available or MACSE fails
+run_alignment() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local temp_dir="${working_dir}/temp"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+  local pseudo_exons="${working_dir}/Captains_pseudo.fa"
+  local captain_file="${working_dir}/Captains_CDS.fa"
 
-    # Locate required subdirectories and define output path
-    local pseudoExons="${working_dir}/Captains_pseudo.fa"
-    local captain_file="${working_dir}/Captains_CDS.fa"
-    local temp_dir="${working_dir}/temp/"
+  log_step "Performing captain alignment..."
 
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Performing captain alignment..."
+  if [[ ! -s "$pseudo_exons" && -s "$captain_file" ]]; then
+    macse -prog alignSequences \
+      -seq "${captain_file}" \
+      -out_AA "${working_dir}/Captain_proteins_aligned.fa" > /dev/null
 
-    if [[ ! -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
-        macse -prog alignSequences -seq ${working_dir}/Captains_CDS.fa -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
-    elif [[ -s "${pseudoExons}"  && -s "${captain_file}" ]]; then
-        macse -prog alignSequences -seq ${working_dir}/Captains_CDS.fa -seq_lr ${pseudoExons} -out_AA ${working_dir}/Captain_proteins_aligned.fa >/dev/null
-    elif [[ -s "${pseudoExons}"  && ! -s "${captain_file}" ]]; then
-        #Select a subset of captain CDSs from the big database that looks similar to our pseudogenes
-        makeblastdb -in ${database_path}/Captains_CDS.fa -dbtype nucl -out ${temp_dir}/blast/Captains_CDS_database >/dev/null
-        blastn -query ${pseudoExons} -db ${temp_dir}/blast/Captains_CDS_database -task blastn -perc_identity 60 -qcov_hsp_perc 60 -evalue 1e-5 -max_hsps 1 -outfmt "6 sseqid" | sort -u > ${temp_dir}/Selected_captain_CDSs.txt
-        seqkit grep --quiet -f ${temp_dir}/Selected_captain_CDSs.txt ${database_path}/Captains_CDS.fa -o ${temp_dir}/Selected_captain_CDSs.fa
+  elif [[ -s "$pseudo_exons" && -s "$captain_file" ]]; then
+    macse -prog alignSequences \
+      -seq "${captain_file}" \
+      -seq_lr "${pseudo_exons}" \
+      -out_AA "${working_dir}/Captain_proteins_aligned.fa" > /dev/null
 
-        #Perform alignment with this selected sequences
-        macse -prog alignSequences -seq ${temp_dir}/Selected_captain_CDSs.fa -seq_lr ${pseudoExons} -out_AA ${temp_dir}/Captain_proteins_aligned_pre.fa >/dev/null
+  elif [[ -s "$pseudo_exons" && ! -s "$captain_file" ]]; then
+    # Select a subset of database captains similar to the pseudogenes
+    makeblastdb -in "${DATABASE_PATH}/Captains_CDS.fa" \
+      -dbtype nucl -out "${temp_dir}/blast/Captains_CDS_database" > /dev/null
+    blastn -query "${pseudo_exons}" \
+      -db "${temp_dir}/blast/Captains_CDS_database" \
+      -task blastn -perc_identity 60 -qcov_hsp_perc 60 \
+      -evalue 1e-5 -max_hsps 1 -outfmt "6 sseqid" \
+      | sort -u > "${temp_dir}/Selected_captain_CDSs.txt"
+    seqkit grep --quiet \
+      -f "${temp_dir}/Selected_captain_CDSs.txt" \
+      "${DATABASE_PATH}/Captains_CDS.fa" \
+      -o "${temp_dir}/Selected_captain_CDSs.fa"
 
-        #Remove sequences from the database
-        seqkit grep --quiet -v -f ${temp_dir}/Selected_captain_CDSs.txt ${temp_dir}/Captain_proteins_aligned_pre.fa -o ${working_dir}/Captain_proteins_aligned.fa
-    elif [[ ! -s "${pseudoExons}" && ! -s "${captain_file}" ]]; then
-        echo -e "\033[01;31mERROR\033[m: there is no captain gene or pseudogene identify in this set of data"
-        captainless_flag=true
-        return 1
-    fi
+    macse -prog alignSequences \
+      -seq "${temp_dir}/Selected_captain_CDSs.fa" \
+      -seq_lr "${pseudo_exons}" \
+      -out_AA "${temp_dir}/Captain_proteins_aligned_pre.fa" > /dev/null
 
-    if [[ ! -f "${working_dir}/Captain_proteins_aligned.fa" ]]; then
-        echo -e "Error: \033[01;31mERROR\033[m: There has been an error with MACSE run and there is no output of it."
-        alingmentless_flag=true
-        return 1
-    fi
+    # Remove database sequences from final alignment
+    seqkit grep --quiet -v \
+      -f "${temp_dir}/Selected_captain_CDSs.txt" \
+      "${temp_dir}/Captain_proteins_aligned_pre.fa" \
+      -o "${working_dir}/Captain_proteins_aligned.fa"
 
-    clipkit ${working_dir}/Captain_proteins_aligned.fa -m gappy -g 0.90 -l -q
-    awk -F '.' '{print $1}' ${working_dir}/Captain_proteins_aligned.fa.clipkit > ${working_dir}/Captain_proteins_aligned_trimmed.fa
-    rm ${working_dir}/Captain_proteins_aligned.fa.clipkit
+  else
+    echo "Error: no captain gene or pseudogene identified in this dataset." >&2
+    captainless_flag=true
+    return 1
+  fi
+
+  if [[ ! -f "${working_dir}/Captain_proteins_aligned.fa" ]]; then
+    echo "Error: MACSE produced no output file." >&2
+    alignmentless_flag=true
+    return 1
+  fi
+
+  clipkit "${working_dir}/Captain_proteins_aligned.fa" -m gappy -g 0.90 -l -q
+  awk -F '.' '{print $1}' "${working_dir}/Captain_proteins_aligned.fa.clipkit" \
+    > "${working_dir}/Captain_proteins_aligned_trimmed.fa"
+  rm "${working_dir}/Captain_proteins_aligned.fa.clipkit"
 }
 
-Tree_inference() {
-    local base_dir="$1"
+# Runs IQ-TREE phylogenetic inference and post-processes the resulting tree.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
+run_tree_inference() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local temp_dir="${working_dir}/temp"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+  local protein_file="${working_dir}/Captain_proteins_aligned_trimmed.fa"
+  local outdir="${working_dir}/captainPhylogeny"
 
-    local protein_file="${working_dir}/Captain_proteins_aligned_trimmed.fa"
-    local outdir="${working_dir}/captainPhylogeny"
-    local temp_dir="${working_dir}/temp/"
+  if [[ ! -f "$protein_file" ]]; then
+    echo "Error: input file '${protein_file}' not found." >&2
+    return 1
+  fi
 
-    if [[ ! -f "$protein_file" ]]; then
-        echo "Error: Input file '$protein_file' not found." >&2
-        exit 1
-    fi
+  seqkit rmdup --quiet -s "$protein_file" -o "${temp_dir}/unique" &> /dev/null
 
-    # Check that all captains are not the same
-    seqkit rmdup --quiet -s ${protein_file} -o ${temp_dir}/unique &> /dev/null
+  local unique_sequences
+  unique_sequences=$(grep -c ">" "${temp_dir}/unique")
 
-    local unique_sequences=$(grep -c ">" ${temp_dir}/unique)
+  if (( unique_sequences >= 4 )); then
+    mkdir -p "$outdir"
+    iqtree3 -T "${threads}" -m MFP \
+      --prefix "${outdir}/Captain_tree" \
+      -B 1000 --alrt 1000 \
+      -s "$protein_file" -quiet --polytomy
 
-    if [[ "$unique_sequences" -ge 4 ]]; then
-        mkdir -p ${outdir}
-        iqtree3 -T ${threads} -m MFP --prefix ${outdir}/Captain_tree -B 1000 --alrt 1000 -s ${protein_file} -quiet --polytomy
+    gotree collapse length -l 0.00001 \
+      -i "${outdir}/Captain_tree.treefile" \
+      -o "${temp_dir}/captainlength.nw"
 
-        gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_dir}/captainlength.nw
+    gotree collapse support -s 80 \
+      -i "${temp_dir}/captainlength.nw" \
+      -o "${temp_dir}/captainsupport.nw"
+    sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' \
+      "${temp_dir}/captainsupport.nw"
 
-        gotree collapse support -s 80 -i ${temp_dir}/captainlength.nw -o ${temp_dir}/captainsupport.nw
-        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_dir}/captainsupport.nw
-        gotree collapse support -s 95 -i ${temp_dir}/captainsupport.nw -o ${temp_dir}/captainsupport2.nw
-        sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' ${temp_dir}/captainsupport2.nw
-        mv ${temp_dir}/captainsupport2.nw ${temp_dir}/captainsupport.nw
+    gotree collapse support -s 95 \
+      -i "${temp_dir}/captainsupport.nw" \
+      -o "${temp_dir}/captainsupport2.nw"
+    sed -i 's/)\([0-9.]*\)\/\([0-9.]*\):/)\2\/\1:/g' \
+      "${temp_dir}/captainsupport2.nw"
+    mv "${temp_dir}/captainsupport2.nw" "${temp_dir}/captainsupport.nw"
 
-        gotree reroot midpoint -i ${temp_dir}/captainsupport.nw -o ${working_dir}/CaptainPhylogeny.nw
-    elif [[ "$unique_sequences" -ge 2 ]]; then
-        echo -e "  [$(date "+%Y-%m-%d %H:%M:%S")] \033[01;31mWARNING\033[m: There's only '${unique_sequences}' unique sequences in the current dataset. Tree inference will be perform without support values."
+    gotree reroot midpoint \
+      -i "${temp_dir}/captainsupport.nw" \
+      -o "${working_dir}/CaptainPhylogeny.nw"
 
-        mkdir -p ${outdir}
-        iqtree3 -T ${threads} -m MFP --prefix ${outdir}/Captain_tree -s ${protein_file} -quiet --polytomy
+  elif (( unique_sequences >= 2 )); then
+    log_warning "Only '${unique_sequences}' unique sequences found. Tree will be inferred without support values."
+    mkdir -p "$outdir"
+    iqtree3 -T "${threads}" -m MFP \
+      --prefix "${outdir}/Captain_tree" \
+      -s "$protein_file" -quiet --polytomy
 
-        gotree collapse length -l 0.00001 -i ${outdir}/Captain_tree.treefile -o ${temp_dir}/captainlength.nw
-        gotree reroot midpoint -i ${temp_dir}/captainlength.nw -o ${working_dir}/CaptainPhylogeny.nw
-    else
-        echo "  [$(date "+%Y-%m-%d %H:%M:%S")] There's only one unique sequence in the current dataset. Skipping tree inference."
-    fi
+    gotree collapse length -l 0.00001 \
+      -i "${outdir}/Captain_tree.treefile" \
+      -o "${temp_dir}/captainlength.nw"
+    gotree reroot midpoint \
+      -i "${temp_dir}/captainlength.nw" \
+      -o "${working_dir}/CaptainPhylogeny.nw"
+  else
+    log_step "Only one unique sequence in dataset. Skipping tree inference."
+  fi
 }
 
-Removed_empty_elements() {
-    local base_dir="$1"
+# Moves captainless elements out of the active Data directories.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
+remove_captainless_elements() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local data_dir
+  data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )/"
+  local gff_dir nucleotide_dir protein_dir cds_dir
+  gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+  protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+  nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+  cds_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
 
-    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+  local remove_elements="${working_dir}/Captainless_elements.txt"
+  local output="${data_dir}/Captainless_elements"
+  mkdir -p "$output"
 
-    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
+  log_step "Removing captainless elements from the final dataset..."
 
-    local Remove_elements="${working_dir}/Captainless_elements.txt"
-    local output="${data_dir}/Captainless_elements/"
-
-    mkdir -p "${output}"
-
-    echo "  [$(date "+%Y-%m-%d %H:%M:%S")] Removing elements without suitable gene or pseudogene model of captain from the final dataset."
-
-    cat "${Remove_elements}" | while read line
-    do
-        mv ${gff_dir}/${line}.gff ${output}
-        mv ${protein_dir}/${line}.fa ${output}${line}_protein.fa
-        mv ${nucleotide_dir}/${line}.fa ${output}${line}_nucleotide.fa
-        mv ${CDS_dir}/${line}.fa ${output}${line}_CDS.fa
-    done
+  while read -r element; do
+    mv "${gff_dir}/${element}.gff"        "${output}/"
+    mv "${protein_dir}/${element}.fa"     "${output}/${element}_protein.fa"
+    mv "${nucleotide_dir}/${element}.fa"  "${output}/${element}_nucleotide.fa"
+    mv "${cds_dir}/${element}.fa"         "${output}/${element}_CDS.fa"
+  done < "$remove_elements"
 }
 
+# Checks that cluster_stats.txt exists and counts qualifying clusters.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success, exits with 1 if file is missing
 check_clusters() {
-    local base_dir="$1"
+  local base_dir="$1"
+  local cluster_stats="${base_dir}/Clusters/cluster_stats.txt"
 
-    local cluster_information="${base_dir}/Clusters/cluster_stats.txt"
+  if [[ ! -f "$cluster_stats" ]]; then
+    echo "Error: 'cluster_stats.txt' not found in '${base_dir}/Clusters/'." >&2
+    exit 1
+  fi
 
-    if [[ ! -f $cluster_information ]]; then
-        echo "Error: cluster_stats.txt file does not exist in '${base_dir}/Clusters/'."
-        exit 1
-    else
-        Cluster_number=$(awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | wc -l)
-    fi
+  cluster_number=$(awk -v min="$minimum_size" \
+    'NR>1{if($2>=min){print $1}}' "$cluster_stats" | wc -l)
 }
 
+# Sets phylogeny_flag based on whether a phylogeny file was produced.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 always
 check_phylogeny() {
-    local base_dir="$1"
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
 
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )"
-    local phylogeny_file="${working_dir}/CaptainPhylogeny.nw"
-
-    if [[ -f $phylogeny_file ]]; then
-        phylogeny_flag=false
-    else
-        phylogeny_flag=true 
-    fi
+  if [[ -f "${working_dir}/CaptainPhylogeny.nw" ]]; then
+    phylogeny_flag=true
+  else
+    phylogeny_flag=false
+  fi
 }
 
+# Copies key result files from the workspace to the main output directory.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
 organize_information() {
-    local base_dir="$1"
-    local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0" )"
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local captain_dir="${base_dir}/$(basename -s .sh "$0")"
 
-    local Captain_dir="${base_dir}/$(basename -s .sh "$0" )/"
-    mkdir -p ${Captain_dir}
+  mkdir -p "$captain_dir"
 
-    if [[ ! -d "${working_dir}" ]]; then
-        echo "Error in working directory"
-    fi
+  if [[ ! -d "$working_dir" ]]; then
+    echo "Error: working directory '${working_dir}' not found." >&2
+    return 1
+  fi
 
-    if [[ -f "${working_dir}/CaptainsID.txt" ]]; then
-        cp ${working_dir}/CaptainsID.txt ${Captain_dir}
-    fi
+  [[ -f "${working_dir}/CaptainsID.txt" ]] && \
+    cp "${working_dir}/CaptainsID.txt" "$captain_dir"
+  [[ -f "${working_dir}/Captains_CDS.fa" ]] && \
+    cp "${working_dir}/Captains_CDS.fa" "$captain_dir"
+  [[ -f "${working_dir}/Captains_pseudo.fa" ]] && \
+    cp "${working_dir}/Captains_pseudo.fa" "$captain_dir"
 
-    if [[ -f "${working_dir}/Captains_CDS.fa" ]]; then
-        cp ${working_dir}/Captains_CDS.fa ${Captain_dir}
-    fi
+  if $phylogeny_flag; then
+    cp "${working_dir}/CaptainPhylogeny.nw" "$captain_dir"
+  fi
+}
 
-    if [[ -f "${working_dir}/Captains_pseudo.fa" ]]; then
-        cp ${working_dir}/Captains_pseudo.fa ${Captain_dir}
-    fi
+# Runs steps 1-3 (HMM search, captain identification, pseudogene search) for
+# a given directory, and removes captainless elements if any are found.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
+run_identification_steps() {
+  local base_dir="$1"
 
-    if ! $phylogeny_flag; then
-        cp "${working_dir}/CaptainPhylogeny.nw" ${Captain_dir}
-    fi
+  log_info "Step 1: Running hmmscan profile search."
+  process_hmmscan "${base_dir}"
+  log_info "-> Step 1 finished. Proceeding."
+
+  log_info "Step 2: Identifying captains from hmmscan results."
+  captain_identification "${base_dir}"
+  log_info "-> Step 2 finished. Proceeding."
+
+  log_info "Step 3: Searching for captain pseudogenes..."
+  captain_pseudogene "${base_dir}"
+
+  if [[ -s "${base_dir}/Workspace/$(basename -s .sh "$0")/Captainless_elements.txt" ]]; then
+    remove_captainless_elements "${base_dir}"
+    log_warning "Elements have been removed from the dataset. Please check."
+  fi
+  log_info "-> Step 3 finished. Proceeding."
 }
 
 # ==============================================================================
-# VARIABLES AND ARGUMENT PARSING
+# DEFAULT VARIABLE VALUES
 # ==============================================================================
 
-# Initialize variables
-Working_directory=""
+working_directory=""
 mode="AllID"
 length="250"
 level="2"
@@ -542,305 +688,234 @@ range="10"
 threads="1"
 minimum_size="4"
 overwrite=false
-help_flag=false
-Previous_captain_run=false
+previous_captain_run=false
 captainless_flag=false
-alingmentless_flag=false
+alignmentless_flag=false
+phylogeny_flag=false
+cluster_number=0
+
+# ==============================================================================
+# ARGUMENT PARSING
+# ==============================================================================
 
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -w|--workingDirectory)
-            shift
-            Working_directory="$1"
-            ;;
-        -m|--mode)
-            shift
-            mode="$1"
-            ;;
-        -l|--length)
-            shift
-            length="$1"
-            ;;
-        -c|--confidenceLevel)
-            shift
-            level="$1"
-            ;;
-        -r|--rangeKb)
-            shift
-            range="$1"
-            ;;
-        -t|--threads)
-            shift
-            threads="$1"
-            ;;
-        -m|--minSize)
-            shift
-            minimum_size="$1"
-            ;;
-        --overwrite)
-            overwrite=true
-            ;;
-        -help)
-            help_flag=true
-            ;;
-        *)
-            echo "Invalid option: $1"
-            print_help
-            exit 1
-            ;;
-    esac
-    shift
+  case "$1" in
+    -w|--workingDirectory)  shift; working_directory="$1" ;;
+    -m|--mode)              shift; mode="$1" ;;
+    -l|--length)            shift; length="$1" ;;
+    -c|--confidenceLevel)   shift; level="$1" ;;
+    -r|--rangeKb)           shift; range="$1" ;;
+    -t|--threads)           shift; threads="$1" ;;
+    -ms|--minSize)          shift; minimum_size="$1" ;;
+    --overwrite)            overwrite=true ;;
+    -help)
+      print_help
+      exit 0
+      ;;
+    *)
+      echo "Error: invalid option '$1'." >&2
+      print_help
+      exit 1
+      ;;
+  esac
+  shift
 done
 
-# Print help if requested
-if $help_flag; then
-    print_help
-    exit 0
-fi
+# ==============================================================================
+# PARAMETER SUMMARY
+# ==============================================================================
 
-echo "Running $(basename -s .sh "$0" ) command under the following parameters:"
-echo "  Working directory: " "$Working_directory"
-echo "  Mode: " "$mode"
-echo "  Length: " "$length"
-echo "  Confidence level: " "$level"
-echo "  Range of analysis: " "$range"
-echo "  Minimum size of a Cluster to analyzed in 'Cluster' mode: " "$minimum_size"
-echo "  Threads: " "$threads"
-echo "  Overwrite previous run: " "$overwrite"
+echo "Running $(basename -s .sh "$0") command with the following parameters:"
+echo "  Working directory:               ${working_directory}"
+echo "  Mode:                            ${mode}"
+echo "  Minimum captain length (aa):     ${length}"
+echo "  Confidence level:                ${level}"
+echo "  Range (kb):                      ${range}"
+echo "  Minimum cluster size:            ${minimum_size}"
+echo "  Threads:                         ${threads}"
+echo "  Overwrite previous run:          ${overwrite}"
 echo ""
 
 # ==============================================================================
-# ARGUMENTS AND INPUT CHECK
+# INPUT VALIDATION
 # ==============================================================================
 
-echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking arguments and input files..."
+log_info "Checking arguments and input files..."
 
-check_mode_parameter "$mode" "$(basename -s .sh "$0" )"
+check_mode_parameter "$mode" "$(basename -s .sh "$0")"
 
-if [[ -z "$Working_directory" ]]; then
-    echo "Error: Missing required arguments."
-    print_help
-    exit 1
-else
-    if [[ ! -d "$Working_directory" ]]; then
-        echo "Error: Directory '$Working_directory' does not exist."
-        exit 1
-    else
-        Working_directory=$(realpath $Working_directory)
-        check_directory_structure "${Working_directory}"
-    fi
+if [[ -z "$working_directory" ]]; then
+  echo "Error: missing required argument '-w / --workingDirectory'." >&2
+  print_help
+  exit 1
 fi
 
+if [[ ! -d "$working_directory" ]]; then
+  echo "Error: directory '${working_directory}' does not exist." >&2
+  exit 1
+fi
+working_directory=$(realpath "$working_directory")
+check_directory_structure "${working_directory}"
+
 if [[ "$level" =~ ^[0-9]+$ ]]; then
-    if (( $level < 1 || $level > 3 )); then
-        echo "Error: '$level' confidence level is not an accepted value."
-        print_help
-        exit 1
-    fi
+  if (( level < 1 || level > 3 )); then
+    echo "Error: confidence level '${level}' is out of range [1-3]." >&2
+    print_help; exit 1
+  fi
 else
-    echo "Error: '$level' is not a positive integer."
-    print_help
-    exit 1
+  echo "Error: confidence level '${level}' is not a positive integer." >&2
+  print_help; exit 1
 fi
 
 if [[ "$length" =~ ^[0-9]+$ ]]; then
-    if (( $length < 200 || $length > 800 )); then
-        echo "Error: '$length' length is not an accepted value."
-        print_help
-        exit 1
-    fi
+  if (( length < 200 || length > 800 )); then
+    echo "Error: length '${length}' is out of range [200-800]." >&2
+    print_help; exit 1
+  fi
 else
-    echo "Error: '$length' is not a positive integer."
-    print_help
-    exit 1
+  echo "Error: length '${length}' is not a positive integer." >&2
+  print_help; exit 1
 fi
 
-if [[ ! "$minimum_size" =~ ^[0-9]+$ || $minimum_size -lt 4 || $minimum_size -gt 10 ]]; then
-    echo "Error: '$minimum_size' minimum size is not an accepted value."
-    print_help
-    exit 1
+if [[ ! "$minimum_size" =~ ^[0-9]+$ ]] || (( minimum_size < 4 || minimum_size > 10 )); then
+  echo "Error: minimum size '${minimum_size}' is out of range [4-10]." >&2
+  print_help; exit 1
 fi
 
 if [[ "$range" =~ ^[0-9]+$ ]]; then
-    if (( $range < 3 || $range > 20 )); then
-        echo "Error: '$range' range is not an accepted value."
-        print_help
-        exit 1
-    fi
+  if (( range < 3 || range > 20 )); then
+    echo "Error: range '${range}' is out of range [3-20]." >&2
+    print_help; exit 1
+  fi
 else
-    echo "Error: '$range' is not a positive integer."
-    print_help
-    exit 1
+  echo "Error: range '${range}' is not a positive integer." >&2
+  print_help; exit 1
 fi
 
 check_threads "${threads}"
 
 # ==============================================================================
-# MAIN SCRIPT
+# MAIN WORKFLOW
 # ==============================================================================
 
 if [[ "${mode}" == "FullAll" ]]; then
-    if $overwrite; then
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-        overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
-        Previous_captain_run=false
-    else
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking if there is data of a previous run..."
-        Check_previous_information "${Working_directory}"
-    fi
-    
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace..."
-    organize_working_directory "${Working_directory}"
+  if $overwrite; then
+    log_info "Removing previous run if exists..."
+    overwrite "${working_directory}" "$(basename -s .sh "$0")"
+    previous_captain_run=false
+  else
+    log_info "Checking for data from a previous run..."
+    check_previous_information "${working_directory}"
+  fi
 
-    if ! $Previous_captain_run; then
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmscan."
-        process_hmmscan "${Working_directory}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+  log_info "Organizing workspace..."
+  organize_working_directory "${working_directory}"
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmscan results."
-        Captain_identification "${Working_directory}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+  if ! $previous_captain_run; then
+    run_identification_steps "${working_directory}"
+  else
+    log_info "Previous run data found. Steps 1, 2, and 3 will be skipped."
+  fi
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
-        Captain_pseudogene "${Working_directory}"
-        if [ -s "${Working_directory}/Workspace/$(basename -s .sh "$0" )/Captainless_elements.txt" ]; then
-            Removed_empty_elements "${Working_directory}"
-            echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
-        fi
-    else
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] There's information from a previous run. Steps 1, 2 and 3 will be skipped..."
-    fi
+  log_info "Step 4: Grouping captains and performing alignment."
+  run_alignment "${working_directory}"
+  if $captainless_flag || $alignmentless_flag; then exit 1; fi
+  log_info "-> Step 4 finished. Proceeding."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
-    Alignment "${Working_directory}"
+  log_info "Step 5: Running captain phylogenetic tree inference."
+  run_tree_inference "${working_directory}"
+  check_phylogeny "${working_directory}"
+  log_info "-> Step 5 finished."
 
-    if $captainless_flag || $alingmentless_flag; then
-        exit 1
-    fi
+  log_info "Organizing results to main directory."
+  organize_information "${working_directory}"
+  rm -r "${working_directory}/Workspace/$(basename -s .sh "$0")/temp" > /dev/null
+  log_info "Finished."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
-    Tree_inference "${Working_directory}"
-    check_phylogeny "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
-    organize_information "${Working_directory}"
-    rm -r "${Working_directory}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
 elif [[ "${mode}" == "AllID" ]]; then
+  if $overwrite; then
+    log_info "Removing previous run if exists..."
+    overwrite "${working_directory}" "$(basename -s .sh "$0")"
+  else
+    previous_captain_run=false
+  fi
 
-    if $overwrite; then
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-        overwrite "${Working_directory}" "$(basename -s .sh "$0" )"
-    else
-        Previous_captain_run=false
-    fi
+  log_info "Organizing workspace..."
+  organize_working_directory "${working_directory}"
+  run_identification_steps "${working_directory}"
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
-    organize_working_directory "${Working_directory}"
+  log_info "Organizing results to main directory."
+  organize_information "${working_directory}"
+  rm -r "${working_directory}/Workspace/$(basename -s .sh "$0")/temp" > /dev/null
+  log_info "Finished."
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmscan profile."
-    process_hmmscan "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmscan results."
-    Captain_identification "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
-    Captain_pseudogene "${Working_directory}"
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
-
-    if [ -s "${Working_directory}/Workspace/$(basename -s .sh "$0" )/Captainless_elements.txt" ]; then
-        Removed_empty_elements "${Working_directory}"
-        echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
-    fi
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
-    organize_information "${Working_directory}"
-    rm -r "${Working_directory}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
-
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Finished."
 elif [[ "${mode}" == "Cluster" ]]; then
-    check_clusters "${Working_directory}"
+  check_clusters "${working_directory}"
+
+  if $overwrite; then
+    rm -f "${working_directory}/Clusters/ClustersAnalyzed.txt"
+  fi
+
+  log_info "Analyzing '${cluster_number}' clusters.\n"
+
+  awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' \
+    "${working_directory}/Clusters/cluster_stats.txt" \
+    | sed $'s/[^[:print:]\t]//g' \
+    | while read -r cluster_id; do
+
+    local_dir="${working_directory}/Clusters/${cluster_id}"
+
+    log_info "Analyzing cluster '${cluster_id}'."
+    check_directory_structure "${local_dir}"
 
     if $overwrite; then
-        if [[ -f "${Working_directory}/Clusters/ClustersAnalyzed.txt" ]]; then
-            rm ${Working_directory}/Clusters/ClustersAnalyzed.txt
-        fi
+      log_info "Removing previous run if exists..."
+      overwrite "${local_dir}" "$(basename -s .sh "$0")"
+    else
+      log_info "Checking for data from a previous run..."
+      check_previous_information "${local_dir}"
     fi
 
-    echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing '${Cluster_number}' clusters.\n"
-    awk -v min="$minimum_size" 'NR>1{if($2>=min){print $1}}' ${Working_directory}/Clusters/cluster_stats.txt | sed $'s/[^[:print:]\t]//g' | while read ClusterId
-    do
-        internal_dir="${Working_directory}/Clusters/${ClusterId}/"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Analyzing Cluster '$ClusterId'."
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Working directory '${internal_dir}' structure."
-        check_directory_structure "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> The directory structure in '${internal_dir}' is valid. Proceeding."
+    log_info "Organizing workspace..."
+    organize_working_directory "${local_dir}"
 
-        if $overwrite; then
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking and removing previous run if exists..."
-            overwrite "${internal_dir}" "$(basename -s .sh "$0" )"
-        else
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking if there is data of a previous run..."
-            Check_previous_information "${internal_dir}"
-        fi
+    if ! $previous_captain_run; then
+      run_identification_steps "${local_dir}"
+    else
+      log_info "Previous run data found. Steps 1, 2, and 3 will be skipped."
+    fi
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing workspace"
-        organize_working_directory "${internal_dir}"
+    log_info "Step 4: Grouping captains and performing alignment."
+    captainless_flag=false
+    alignmentless_flag=false
+    run_alignment "${local_dir}"
 
-        if ! $Previous_captain_run; then
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 1: Perform hmmscan."
-            process_hmmscan "${internal_dir}"
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 1 finished. Proceeding."
+    if $captainless_flag || $alignmentless_flag; then
+      log_warning "There's no alignment available for this cluster."
+      continue
+    fi
+    log_info "-> Step 4 finished. Proceeding."
 
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 2: Identifying captains from hmmscan results."
-            Captain_identification "${internal_dir}"
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 2 finished. Proceeding."
+    log_info "Step 5: Running captain phylogenetic tree inference."
+    run_tree_inference "${local_dir}"
+    check_phylogeny "${local_dir}"
+    log_info "-> Step 5 finished."
 
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 3: Identifying if there are pseudogenes..."
-            Captain_pseudogene "${internal_dir}"
-            if [ -s "${internal_dir}/Workspace/$(basename -s .sh "$0" )/Captainless_elements.txt" ]; then
-                Removed_empty_elements "${internal_dir}"
-                echo -e "  \033[01;31mWARNING\033[m: Elements have been removed, check this dataset."
-            fi
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 3 finished. Proceeding..."
-        else
-            echo "[$(date "+%Y-%m-%d %H:%M:%S")] There's information from a previous run. Steps 1, 2 and 3 will be skipped..."
-        fi
+    log_info "Organizing results to main directory."
+    organize_information "${local_dir}"
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 4: Group captains and performed alignment."
-        alingmentless_flag=false
-        captainless_flag=false
-        
-        Alignment "${internal_dir}"
-        
-        if $captainless_flag || $alingmentless_flag; then
-            continue
-        fi
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 4 finished. Proceeding."
+    if ! $phylogeny_flag; then
+      log_warning "No captain phylogeny file produced. This cluster requires manual inspection."
+    else
+      log_info "Successful run. Storing cluster '${cluster_id}' for further analysis."
+      grep -w "${cluster_id}" \
+        "${working_directory}/Clusters/cluster_stats.txt" \
+        >> "${working_directory}/Clusters/ClustersAnalyzed.txt"
+    fi
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Step 5: Perform phylogenetic tree inference of captains."
-        Tree_inference "${internal_dir}"
-        check_phylogeny "${internal_dir}"
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")]  -> Step 5 finished."
+    rm -r "${local_dir}/Workspace/$(basename -s .sh "$0")/temp" > /dev/null
+    log_info "Cluster '${cluster_id}' finished.\n"
+  done
 
-        echo "[$(date "+%Y-%m-%d %H:%M:%S")] Organizing information to the main directory."
-        organize_information "${internal_dir}"
-
-        if $phylogeny_flag; then
-            echo -e "\033[01;31mWARNING\033[m: There's no captain phylogeny file, this cluster needs to be manually checked."
-            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
-        else
-            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")]  Successfull run. Storing this cluster for further analysis."
-            grep -w ${ClusterId} ${Working_directory}/Clusters/cluster_stats.txt >> ${Working_directory}/Clusters/ClustersAnalyzed.txt
-            echo -e "[$(date "+%Y-%m-%d %H:%M:%S")] Finished.\n"
-        fi
-        rm -r "${internal_dir}/Workspace/$(basename -s .sh "$0" )/temp/" > /dev/null
-    done
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] All clusters have been analyze"
+  log_info "All clusters have been analyzed."
 fi

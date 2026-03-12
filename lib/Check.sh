@@ -1,703 +1,753 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# NAME:        Check.sh
+# DESCRIPTION: Shared validation library for StarCrew pipeline scripts.
+#              Provides functions to check software availability, directory
+#              structure, file integrity, and database completeness.
+# USAGE:       source Check.sh
+# AUTHOR:      Andres F. Lizcano Salas
+# DATE:        12/Mar/2026
+# VERSION:     1.0.0
+# ==============================================================================
 
-check_installation() {
-    local Main_directory="$1"
+# ==============================================================================
+# FUNCTIONS
+# ==============================================================================
 
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking Interpro installation..."
-    check_interpro_software "${Main_directory}/interproscan/"
-    
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Checking databases..."
-    check_databases "${Main_directory}/databases/" "All"
-    check_foldseek_databases "${Main_directory}/databases/Foldseek/" "All"
+# Verifies that the StarCrew main directory contains all required subdirectories,
+# scripts, HMM profiles, and database files.
+# Arguments:
+#   $1 - path to the StarCrew main installation directory
+# Returns:
+#   0 on success, exits with 1 on any missing component
+check_main_directory() {
+  local main_dir="$1"
+
+  # bin/
+  if [[ ! -d "${main_dir}/bin" ]]; then
+    echo "Error: directory '${main_dir}/bin' does not exist." >&2
+    exit 1
+  fi
+  if [[ ! -f "${main_dir}/bin/StarCrew" ]]; then
+    echo "Error: StarCrew script not found in '${main_dir}/bin'." >&2
+    exit 1
+  fi
+
+  # main/
+  if [[ ! -d "${main_dir}/main" ]]; then
+    echo "Error: directory '${main_dir}/main' does not exist." >&2
+    exit 1
+  fi
+  local main_scripts=(
+    CaptainIdentification
+    ClusterCharacterization
+    Initialize
+    OrthogroupsAnnotation
+    OrthogroupsOverrepresentation
+    SyntenyClustering
+  )
+  for script in "${main_scripts[@]}"; do
+    if [[ ! -f "${main_dir}/main/${script}.sh" ]]; then
+      echo "Error: missing command script '${script}.sh' in '${main_dir}/main'." >&2
+      exit 1
+    fi
+  done
+
+  # aux/
+  if [[ ! -d "${main_dir}/aux" ]]; then
+    echo "Error: directory '${main_dir}/aux' does not exist." >&2
+    exit 1
+  fi
+  check_auxiliary_scripts "${main_dir}/aux" "All"
+
+  # hmm/
+  if [[ ! -d "${main_dir}/hmm" ]]; then
+    echo "Error: directory '${main_dir}/hmm' does not exist." >&2
+    exit 1
+  fi
+  local hmm_path="${main_dir}/hmm"
+  local domains=("CAT_domain" "DUF3435" "Captain")
+  local extensions=("" ".h3f" ".h3i" ".h3m" ".h3p")
+  for dom in "${domains[@]}"; do
+    for ext in "${extensions[@]}"; do
+      if [[ ! -f "${hmm_path}/${dom}.hmm${ext}" ]]; then
+        echo "Error: missing HMM file '${dom}.hmm${ext}' in '${hmm_path}'." >&2
+        exit 1
+      fi
+    done
+  done
+
+  # databases/
+  if [[ ! -d "${main_dir}/databases" ]]; then
+    echo "Error: directory '${main_dir}/databases' does not exist." >&2
+    exit 1
+  fi
+  local db_path="${main_dir}/databases"
+  if [[ ! -f "${db_path}/Captains.fa" ]]; then
+    echo "Error: 'Captains.fa' not found in '${db_path}'." >&2
+    exit 1
+  fi
+  check_fasta_protein "${db_path}/Captains.fa"
+
+  if [[ ! -f "${db_path}/Captains_CDS.fa" ]]; then
+    echo "Error: 'Captains_CDS.fa' not found in '${db_path}'." >&2
+    exit 1
+  fi
+  check_fasta_dna "${db_path}/Captains_CDS.fa"
+
+  # Required root files
+  local root_files=("agat_config.yaml" "json_updater.py" "StarCrew_environment.yml")
+  for f in "${root_files[@]}"; do
+    if [[ ! -f "${main_dir}/${f}" ]]; then
+      echo "Error: '${f}' not found in '${main_dir}'." >&2
+      exit 1
+    fi
+  done
 }
 
-check_main_directory(){
-    local Main_directory="$1"
-
-    if [[ ! -d "${Main_directory}/bin" ]]; then
-        echo "Error: folder '${Main_directory}/bin' does not exist."
-        exit 1
-    else
-        if [[ ! -f "${Main_directory}/bin/StarCrew" ]]; then
-            echo "Error: StarCrew script was not found in '${Main_directory}/bin'."
-            exit 1
-        fi
-    fi
-
-    if [[ ! -d "${Main_directory}/main" ]]; then
-        echo "Error: folder '${Main_directory}/main' does not exist."
-        exit 1
-    else
-        scripts_file=("CaptainIdentification" "ClusterCharacterization" "Initialize" "OrthogroupsAnnotation" "OrthogroupsOverrepresentation" "SyntenyClustering")
-        for file in "${scripts_file[@]}"; do
-            if [[ ! -f "${Main_directory}/main/${file}.sh" ]]; then
-                echo "Error: Missing HMM data for '${file}'."
-                exit 1
-            fi
-        done
-    fi
-
-    if [[ ! -d "${Main_directory}/aux" ]]; then
-        echo "Error: folder '${Main_directory}/aux' does not exist."
-        exit 1
-    else
-        check_auxiliary_scripts "${Main_directory}/aux" "All"
-    fi
-
-    if [[ ! -d "${Main_directory}/hmm" ]]; then
-        echo "Error: directory '$hmmprofile_path' does not exist."
-        exit 1
-    else
-        hmmprofile_path="${Main_directory}/hmm"
-        # Validate binary compressed datafiles for hmmscan
-        domains=("CAT_domain" "DUF3435" "Captain")
-        extensions=("" ".h3f" ".h3i" ".h3m" ".h3p")
-
-        for dom in "${domains[@]}"; do
-            for ext in "${extensions[@]}"; do
-                if [[ ! -f "${hmmprofile_path}/${dom}.hmm${ext}" ]]; then
-                    echo "Error: Missing HMM data for '${dom}' (${ext})."
-                    exit 1
-                fi
-            done
-        done
-    fi
-
-    if [[ ! -d "${Main_directory}/databases" ]]; then
-        echo "Error: folder '${Main_directory}/databases' does not exist."
-        exit 1
-    else
-        if [[ ! -f "${Main_directory}/databases/Captains.fa" ]]; then
-            echo "Error: fasta file with captains protein information was not found was not found in '${Main_directory}/databases'."
-            exit 1
-        else
-            check_fasta_protein "${Main_directory}/databases/Captains.fa"
-        fi
-        if [[ ! -f "${Main_directory}/databases/Captains_CDS.fa" ]]; then
-            echo "Error: fasta file with captains CDS information was not found was not found in '${Main_directory}/databases'."
-            exit 1
-        else
-            check_fasta_dna "${Main_directory}/databases/Captains_CDS.fa"
-        fi
-    fi
-
-    # Check for basic files
-    if [[ ! -f "${Main_directory}/agat_config.yaml" ]]; then
-        echo "Error: 'agat_config.yaml' file is not found in the '${Main_directory}' folder."
-        exit 1
-    fi
-
-    if [[ ! -f "${Main_directory}/json_updater.py" ]]; then
-        echo "Error: 'json_updater.py' script is not found in the '${Main_directory}' folder."
-        exit 1
-    fi
-}
-
+# Validates that the number of threads is a positive integer.
+# Arguments:
+#   $1 - threads value to validate
+# Returns:
+#   0 on success, exits with 1 if invalid
 check_threads() {
-	local threads="$1"
-
-	if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
-        echo "Error: '$threads' is not a positive integer."
-        print_help
-        exit 1
-    fi
+  local threads="$1"
+  if [[ ! "$threads" =~ ^[0-9]+$ ]]; then
+    echo "Error: threads '${threads}' is not a positive integer." >&2
+    print_help
+    exit 1
+  fi
 }
 
+# Validates that a file exists and is a valid DNA FASTA file.
+# Arguments:
+#   $1 - path to the FASTA file
+# Returns:
+#   0 on success, exits with 1 if missing or invalid
 check_fasta_dna() {
-	local fasta_path="$1"
-
-	if [[ ! -f "$fasta_path" ]]; then
-        echo "Error: file '$fasta_path' does not exist."
-        exit 1
-    else
-    	# Check if fasta file is valid
-    	local Fasta_check=$(seqkit seq --quiet --seq-type dna -v $fasta_path)
-    	if [[ "$Fasta_check" == "" ]]; then
-    		echo "Error: '${fasta_path}' is an invalid DNA fasta file"
-    		exit 1
-        else
-            return 0
-        fi
-    fi
+  local fasta_path="$1"
+  if [[ ! -f "$fasta_path" ]]; then
+    echo "Error: file '${fasta_path}' does not exist." >&2
+    exit 1
+  fi
+  local fasta_check
+  fasta_check=$(seqkit seq --quiet --seq-type dna -v "$fasta_path")
+  if [[ -z "$fasta_check" ]]; then
+    echo "Error: '${fasta_path}' is not a valid DNA FASTA file." >&2
+    exit 1
+  fi
 }
 
+# Validates that a file exists and is a valid protein FASTA file.
+# Arguments:
+#   $1 - path to the FASTA file
+# Returns:
+#   0 on success, exits with 1 if missing or invalid
 check_fasta_protein() {
-	local fasta_path="$1"
-
-	if [[ ! -f "$fasta_path" ]]; then
-        echo "Error: file '$fasta_path' does not exist."
-        exit 1
-    else
-    	# Check if fasta file is valid
-    	local Fasta_check=$(seqkit seq --quiet -t protein -v $fasta_path)
-    	if [[ "$Fasta_check" == "" ]]; then
-    		echo "Error: '${fasta_path}' is an invalid protein fasta file"
-    		exit 1
-        else
-            return 0
-    	fi
-    fi
+  local fasta_path="$1"
+  if [[ ! -f "$fasta_path" ]]; then
+    echo "Error: file '${fasta_path}' does not exist." >&2
+    exit 1
+  fi
+  local fasta_check
+  fasta_check=$(seqkit seq --quiet -t protein -v "$fasta_path")
+  if [[ -z "$fasta_check" ]]; then
+    echo "Error: '${fasta_path}' is not a valid protein FASTA file." >&2
+    exit 1
+  fi
 }
 
+# Validates that a GFF3 file exists and has consistent 9-column structure,
+# valid strand values, and ID attributes on all features.
+# Arguments:
+#   $1 - path to the GFF file
+# Returns:
+#   0 on success, exits with 1 if missing or malformed
 check_gff_file() {
-	local gff_path="$1"
+  local gff_path="$1"
+  if [[ ! -f "$gff_path" ]]; then
+    echo "Error: file '${gff_path}' does not exist." >&2
+    exit 1
+  fi
 
-	if [[ ! -f "$gff_path" ]]; then
-        echo "Error: file '${gff_path}' does not exist."
-        exit 1
-    else
-    	# Check if fasta file is valid
-    	local gff_check=$(grep -v "^#" $gff_path | awk -F '\t' '{print NF}' | sort -u)
+  local col_check
+  col_check=$(grep -v "^#" "$gff_path" | awk -F '\t' '{print NF}' | sort -u)
+  if [[ "$col_check" -ne 9 ]]; then
+    echo "Error: '${gff_path}' has inconsistent column count (expected 9)." >&2
+    exit 1
+  fi
 
-    	if [[ $gff_check -eq 9 ]]; then
-    		local gff_check2=$(grep -v "^#" $gff_path | awk -F '\t' '{print $7}' | egrep -v -c "\+|-|\.")
+  local strand_check
+  strand_check=$(grep -v "^#" "$gff_path" \
+    | awk -F '\t' '{print $7}' | grep -Evc "\+|-|\.")
+  if [[ "$strand_check" -ne 0 ]]; then
+    echo "Error: '${gff_path}' has invalid values in the strand column." >&2
+    exit 1
+  fi
 
-    		if [[ $gff_check2 -eq 0 ]]; then
-    			local gff_check3=$(grep -v "^#" $gff_path | egrep -v -c "ID=")
-
-    			if [[ $gff_check3 -eq 0 ]]; then
-                    return 0
-                else
-                	echo "Error: There are lines without ID in the gff file '${gff_path}'"
-            	    exit 1
-                fi
-            else
-            	echo "Error: Check gff file '${gff_path}' due to inconsistencies in the strand column"
-            	exit 1
-            fi
-        else
-        	echo "Error: Check gff file '${gff_path}' due to inconsistencies in the number of columns"
-        	exit 1
-        fi
-    fi
+  local id_check
+  id_check=$(grep -v "^#" "$gff_path" | grep -vc "ID=")
+  if [[ "$id_check" -ne 0 ]]; then
+    echo "Error: '${gff_path}' has lines missing the ID attribute." >&2
+    exit 1
+  fi
 }
 
+# Validates a two-column file mapping element IDs to GFF file paths, and checks
+# that all referenced GFF files exist on disk.
+# Arguments:
+#   $1 - path to the ome2gff mapping file
+# Returns:
+#   0 on success, exits with 1 if missing, malformed, or files not found
 check_gff_paths() {
-    local gff_path="$1"
+  local gff_path="$1"
+  if [[ ! -f "$gff_path" ]]; then
+    echo "Error: file '${gff_path}' does not exist." >&2
+    exit 1
+  fi
 
-    if [[ ! -f "$gff_path" ]]; then
-        echo "Error: file '$gff_path' does not exist."
-        exit 1
-    else
-        # Check if fasta file is valid
-        local gff_check=$(awk -F '\t' '{print NF}' $gff_path | sort -u)
+  local col_check
+  col_check=$(awk -F '\t' '{print NF}' "$gff_path" | sort -u)
+  if [[ "$col_check" -ne 2 ]]; then
+    echo "Error: '${gff_path}' does not have exactly 2 columns." >&2
+    exit 1
+  fi
 
-        if [[ $gff_check -eq 2 ]]; then
-            cat ${gff_path} | while read line
-            do
-                GFF_FILE=$(grep -w "${line}" ${gff_path} | awk '{print $2}')
-                if [[ ! -f ${GFF_FILE} ]]; then
-                    echo "ERROR: Do not find GFF file for $(grep "${line}" ${gff_path} | awk '{print $1}') genome"
-                    exit 1
-                fi
-            done
-            return 0
-        else
-            echo "Error: Check ome2gff file due to inconsistencies in the number of columns"
-            exit 1
-        fi
+  while read -r element gff_file; do
+    if [[ ! -f "$gff_file" ]]; then
+      echo "Error: GFF file '${gff_file}' for element '${element}' not found." >&2
+      exit 1
     fi
+  done < "$gff_path"
 }
 
+# Validates that a boundaries file exists and has 21 columns with valid strand
+# and coordinate values.
+# Arguments:
+#   $1 - path to the boundaries file
+# Returns:
+#   0 on success, exits with 1 if missing or malformed
 check_boundaries_file() {
-    local boundaries_path="$1"
+  local boundaries_path="$1"
+  if [[ ! -f "$boundaries_path" ]]; then
+    echo "Error: file '${boundaries_path}' does not exist." >&2
+    exit 1
+  fi
 
-    if [[ ! -f "$boundaries_path" ]]; then
-        echo "Error: file '$boundaries_path' does not exist."
-        exit 1
-    else
-        # Check if fasta file is valid
-        local boundaries_check=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print NF}' | sort -u)
+  local col_check
+  col_check=$(grep -v "^#" "$boundaries_path" \
+    | awk -F '\t' '{print NF}' | sort -u)
+  if [[ "$col_check" -ne 21 ]]; then
+    echo "Error: '${boundaries_path}' does not have 21 columns." >&2
+    exit 1
+  fi
 
-        if [[ $boundaries_check -eq 21 ]]; then
-            local boundaries_check2=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print $7}' | egrep -v -c "\+|-")
-            local boundaries_check3=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print $4}' | egrep -w -v -c "[0-9]]")
-            local boundaries_check4=$(grep -v "^#" $boundaries_path | awk -F '\t' '{print $5}' | egrep -w -v -c "[0-9]]")
+  local strand_check start_check end_check
+  strand_check=$(grep -v "^#" "$boundaries_path" \
+    | awk -F '\t' '{print $7}' | grep -Evc "\+|-")
+  start_check=$(grep -v "^#" "$boundaries_path" \
+    | awk -F '\t' '{print $4}' | grep -Ewvc "[0-9]*")
+  end_check=$(grep -v "^#" "$boundaries_path" \
+    | awk -F '\t' '{print $5}' | grep -Ewvc "[0-9]*")
 
-            if [[ $boundaries_check2 -eq 0 || $boundaries_check3 -eq 0 || $boundaries_check4 -eq 0  ]]; then
-                return 0
-            else
-                echo "Error: Check boundary file due to inconsistencies in its columns"
-                exit 1
-            fi
-        else
-            echo "Error: Check boundary file due to inconsistencies in the number of columns."
-            exit 1
-        fi
-    fi
+  if [[ "$strand_check" -ne 0 || "$start_check" -ne 0 || "$end_check" -ne 0 ]]; then
+    echo "Error: '${boundaries_path}' has inconsistent column values." >&2
+    exit 1
+  fi
 }
 
-check_metadata_file () {
-	local metadata_path=$1
-	local fasta_path=$2
+# Validates a metadata CSV file: checks existence, column consistency, unique
+# headers, and that at least some elements match the provided FASTA headers.
+# Arguments:
+#   $1 - path to the metadata CSV file
+#   $2 - path to a FASTA file whose headers are used for cross-validation
+# Returns:
+#   0 on success, exits with 1 if missing or malformed
+check_metadata_file() {
+  local metadata_path="$1"
+  local fasta_path="$2"
 
-    if [[ ! -f "$metadata_path" ]]; then
-        echo "Error: file '$metadata_path' does not exist."
-        exit 1
-    else
-        if [[ -s $metadata_path ]]; then
-        	if [[ $(head -n1 $metadata_path | grep -c "ElementID") -eq 1 ]]; then
+  if [[ ! -f "$metadata_path" ]]; then
+    echo "Error: file '${metadata_path}' does not exist." >&2
+    exit 1
+  fi
 
-        	    local Column_number=$(awk -F ';' '{print NF}' $metadata_path | sort -u)
-        	    local Columns=$(awk -F ';' '{print NF}' $metadata_path | sort -u | wc -l)
+  if [[ ! -s "$metadata_path" ]]; then
+    return 0
+  fi
 
-            	if [[ $Columns -ge 2 ]]; then
-            		echo "Error: There are discordances in the number of columns per row in the metadata file."
-            		exit
-        	    else
-                    if [[ $Column_number -eq 1 ]]; then
-        	            echo "Error: There's only one column in metadata file"
-            	        exit 1
-                    else
-                        if [[ $(head -n1 $metadata_path | tr ';' '\n' | sort | uniq -c | awk '{print $1}' |sort -u) -eq 1 ]]; then
+  if [[ $(head -n1 "$metadata_path" | grep -c "ElementID") -ne 1 ]]; then
+    return 0
+  fi
 
-                            local Headers_name=$(grep "^>" $fasta_path | awk -F '>' '{print $2}' | tr '\n' '|' | sed 's/|$//')
-        	                local Headers_count=$(grep -c "^>" $fasta_path)
-        	                local Metadata_count=$(egrep $Headers_name $metadata_path | wc -l)
-        	                if [[ $Metadata_count -eq 0 ]]; then
-        	        	        echo "Error: Metadata do not contain the elements in the fasta file"
-        	        	        exit 1
-            	            fi
-                        else
-                            echo "Error: There are duplicated header columns"
-                            exit 1
-                        fi
-        	        fi
-        	    fi
-        	fi
-        fi
-    fi
+  local col_counts col_unique
+  col_counts=$(awk -F ';' '{print NF}' "$metadata_path" | sort -u)
+  col_unique=$(echo "$col_counts" | wc -l)
+
+  if (( col_unique >= 2 )); then
+    echo "Error: inconsistent column count across rows in '${metadata_path}'." >&2
+    exit 1
+  fi
+
+  local col_number
+  col_number=$(echo "$col_counts")
+  if (( col_number == 1 )); then
+    echo "Error: only one column found in '${metadata_path}'." >&2
+    exit 1
+  fi
+
+  local dup_check
+  dup_check=$(head -n1 "$metadata_path" \
+    | tr ';' '\n' | sort | uniq -c | awk '{print $1}' | sort -u)
+  if [[ "$dup_check" -ne 1 ]]; then
+    echo "Error: duplicate header columns in '${metadata_path}'." >&2
+    exit 1
+  fi
+
+  local headers_pattern metadata_count
+  headers_pattern=$(grep "^>" "$fasta_path" \
+    | awk -F '>' '{print $2}' | tr '\n' '|' | sed 's/|$//')
+  metadata_count=$(grep -Ec "$headers_pattern" "$metadata_path")
+  if (( metadata_count == 0 )); then
+    echo "Error: metadata does not contain any elements from the FASTA file." >&2
+    exit 1
+  fi
 }
 
+# Validates that all required auxiliary Python and R scripts exist for the
+# given command.
+# Arguments:
+#   $1 - path to the auxiliary scripts directory
+#   $2 - command name (Initialize | SyntenyClustering | CaptainIdentification |
+#        ClusterCharacterization | OrthogroupsOverrepresentation | All)
+# Returns:
+#   0 on success, exits with 1 if any script is missing
 check_auxiliary_scripts() {
-	local auxiliary_path="$1"
-	local command="$2"
+  local auxiliary_path="$1"
+  local command="$2"
 
-    if [[ $command == "Initialize" ]]; then
-        scripts_file=("rip_calculator.py" "gff_slicer.py" "merge.py")
-        for file in "${scripts_file[@]}"; do
-            if [[ ! -f "${auxiliary_path}/${file}" ]]; then
-                echo "Error: Missing auxiliary script '${file}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "SyntenyClustering" ]]; then
-        scripts_file=("PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "syntenetPreprocess.R" "FilterMetric.py")
-        for file in "${scripts_file[@]}"; do
-            if [[ ! -f "${auxiliary_path}/${file}" ]]; then
-                echo "Error: Missing auxiliary script '${file}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "CaptainIdentification" ]]; then
-        if [[ ! -f "${auxiliary_path}/hmmscan_process.py" ]]; then
-            echo "Error: file '${auxiliary_path}/hmmscan_process.py' does not exist."
-            exit 1
-        fi
-    elif [[ $command == "ClusterCharacterization" ]]; then
-    	if [[ ! -f "${auxiliary_path}/ClusterAnalysis.R" ]]; then
-            echo "Error: file '${auxiliary_path}/ClusterAnalysis.R' does not exist."
-            exit 1
-        fi
-    elif [[ $command == "OrthogroupsOverrepresentation" ]]; then
-        if [[ ! -f "${auxiliary_path}/OverrepresentationAnalysis.R" ]]; then
-            echo "Error: file '${auxiliary_path}/OverrepresentationAnalysis.R' does not exist."
-            exit 1
-        fi
-    elif [[ $command == "All" ]]; then
-        scripts_file=("rip_calculator.py" "gff_slicer.py" "merge.py" "PreCluster.py" "Blast_CleanUp.py" "Clustering.py" "merge_metadata.py" "syntenetAnalysis.R" "FilterMetric.py" "syntenetPreprocess.R" "hmmscan_process.py" "ClusterAnalysis.R" "OverrepresentationAnalysis.R")
-        for file in "${scripts_file[@]}"; do
-            if [[ ! -f "${auxiliary_path}/${file}" ]]; then
-                echo "Error: Missing auxiliary script '${file}'."
-                exit 1
-            fi
-        done
-    else
-        echo "Error: command '$command' is incorrect."
-        exit 1
+  local scripts=()
+  case "$command" in
+    Initialize)
+      scripts=("rip_calculator.py" "gff_slicer.py" "merge.py")
+      ;;
+    SyntenyClustering)
+      scripts=(
+        "PreCluster.py" "Blast_CleanUp.py" "Clustering.py"
+        "merge_metadata.py" "FilterMetric.py"
+        "syntenetAnalysis.R" "syntenetPreprocess.R"
+      )
+      ;;
+    CaptainIdentification)
+      scripts=("hmmscan_process.py")
+      ;;
+    ClusterCharacterization)
+      scripts=("ClusterAnalysis.R")
+      ;;
+    OrthogroupsOverrepresentation)
+      scripts=("OverrepresentationAnalysis.R")
+      ;;
+    OrthogroupsAnnotation)
+      scripts=()
+      ;;
+    All)
+      scripts=(
+        "rip_calculator.py" "gff_slicer.py" "merge.py"
+        "PreCluster.py" "Blast_CleanUp.py" "Clustering.py"
+        "merge_metadata.py" "FilterMetric.py"
+        "syntenetAnalysis.R" "syntenetPreprocess.R"
+        "hmmscan_process.py" "ClusterAnalysis.R"
+        "OverrepresentationAnalysis.R"
+      )
+      ;;
+    *)
+      echo "Error: unknown command '${command}' in check_auxiliary_scripts." >&2
+      exit 1
+      ;;
+  esac
+
+  for script in "${scripts[@]}"; do
+    if [[ ! -f "${auxiliary_path}/${script}" ]]; then
+      echo "Error: missing auxiliary script '${script}' in '${auxiliary_path}'." >&2
+      exit 1
     fi
+  done
 }
 
+# Validates that the provided mode is accepted for the given command.
+# Arguments:
+#   $1 - mode value to validate
+#   $2 - command name
+# Returns:
+#   0 on success, exits with 1 if the mode is not accepted
 check_mode_parameter() {
-	local mode="$1"
-	local command="$2"
+  local mode="$1"
+  local command="$2"
 
-	if [[ $command == "Initialize" ]]; then
-		if [[ "$mode" != "Simple" && "$mode" != "Starfish" ]]; then
-            echo "Error: provided mode '$mode' is not accepted."
-            print_help
-            exit 1
-        fi
-	elif [[ $command == "SyntenyClustering" ]]; then
-		if [[ "$mode" != "Raw" && "$mode" != "SSP" && "$mode" != "FilterBlast" && "$mode" != "FilterMetric" ]]; then
-            echo "Error: provided mode '$mode' is not accepted."
-            print_help
-            exit 1
-        fi
-    elif [[ $command == "CaptainIdentification" ]]; then
-    	if [[ "$mode" != "FullAll" && "$mode" != "AllID"  && "$mode" != "Cluster" ]]; then
-            echo "Error: provided mode '$mode' is not accepted."
-            print_help
-            exit 1
-        fi
-    elif [[ $command == "OrthogroupsAnnotation" ]]; then
-    	if [[ "$mode" != "All" && "$mode" != "MoveAssociated" && "$mode" != "Core" && "$mode" != "Overrepresented" ]]; then
-            echo "Error: provided mode '$mode' is not accepted."
-            print_help
-            exit 1
-        fi
-    elif [[ $command == "OrthogroupsOverrepresentation" ]]; then
-        if [[ "$mode" != "Outliers" && "$mode" != "Enrichment" ]]; then
-            echo "Error: provided mode '$mode' is not accepted."
-            print_help
-            exit 1
-        fi
-    else
-    	echo "Error: command '$command' is incorrect."
-    	exit 1
-    fi
+  local valid_modes=""
+  case "$command" in
+    Initialize)
+      valid_modes="Simple Starfish"
+      ;;
+    SyntenyClustering)
+      valid_modes="Raw SSP FilterBlast FilterMetric"
+      ;;
+    CaptainIdentification)
+      valid_modes="FullAll AllID Cluster"
+      ;;
+    OrthogroupsAnnotation)
+      valid_modes="All MoveAssociated Core Overrepresented"
+      ;;
+    OrthogroupsOverrepresentation)
+      valid_modes="Outliers Enrichment"
+      ;;
+    *)
+      echo "Error: unknown command '${command}' in check_mode_parameter." >&2
+      exit 1
+      ;;
+  esac
+
+  if [[ ! " ${valid_modes} " =~ " ${mode} " ]]; then
+    echo "Error: mode '${mode}' is not accepted for command '${command}'." >&2
+    print_help
+    exit 1
+  fi
 }
 
+# Validates that all required software tools are available in PATH for the
+# given command.
+# Arguments:
+#   $1 - command name (Initialize | SyntenyClustering | CaptainIdentification |
+#        ClusterCharacterization | OrthogroupsOverrepresentation |
+#        OrthogroupsAnnotation | All)
+# Returns:
+#   0 on success, exits with 1 if any tool is missing
 check_required_software() {
-	local command="$1"
+  local command="$1"
 
-	if [[ -z "$(which seqkit)" ]]; then
-        echo "Error: Missing seqkit function."
-        exit 1
-    fi
+  if [[ -z "$(which seqkit)" ]]; then
+    echo "Error: missing required tool 'seqkit'." >&2
+    exit 1
+  fi
 
-	if [[ $command == "Initialize" ]]; then
-        function_list=("python" "metaeuk" "agat_sp_extract_sequences.pl")
-        for fun in "${function_list[@]}"; do
-            if [[ -z "$(which $fun)" ]]; then
-                echo "Error: Missing require function '${fun}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "SyntenyClustering" ]]; then
-        function_list=("python" "Rscript" "diamond" "blastn" "makeblastdb" "blastdb_aliastool" "blastdbcmd")
-        for fun in "${function_list[@]}"; do
-            if [[ -z "$(which $fun)" ]]; then
-                echo "Error: Missing require function '${fun}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "CaptainIdentification" ]]; then
-        function_list=("python" "macse" "hmmscan" "blastn" "makeblastdb" "clipkit" "iqtree3" "gotree" "mafft")
-        for fun in "${function_list[@]}"; do
-            if [[ -z "$(which $fun)" ]]; then
-                echo "Error: Missing require function '${fun}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "ClusterCharacterization" ]]; then
-        function_list=("Rscript" "blastn" "makeblastdb" "orthofinder")
-        for fun in "${function_list[@]}"; do
-            if [[ -z "$(which $fun)" ]]; then
-                echo "Error: Missing require function '${fun}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "OrthogroupsOverrepresentation" ]]; then
-        function_list=("orthofinder" "gotree" "Rscript")
-        for fun in "${function_list[@]}"; do
-            if [[ -z "$(which $fun)" ]]; then
-                echo "Error: Missing require function '${fun}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "OrthogroupsAnnotation" ]]; then
-        function_list=("mafft" "foldseek" "hhblits")
-        for fun in "${function_list[@]}"; do
-            if [[ -z "$(which $fun)" ]]; then
-                echo "Error: Missing require function '${fun}'."
-                exit 1
-            fi
-        done
-    elif [[ $command == "All" ]]; then
-        function_list=("python" "metaeuk" "agat_sp_extract_sequences.pl" "Rscript" "diamond" "blastn" "makeblastdb" "blastdb_aliastool" "blastdbcmd" "orthofinder" "gotree" "macse" "hmmscan" "clipkit" "iqtree3" "mafft" "foldseek" "hhblits")
-        for fun in "${function_list[@]}"; do
-            if [[ -z "$(which $fun)" ]]; then
-                echo "Error: Missing require function '${fun}'."
-                exit 1
-            fi
-        done
-    else
-        echo "Error: Unknown command."
-        exit 1
+  local tools=()
+  case "$command" in
+    Initialize)
+      tools=("python" "metaeuk" "agat_sp_extract_sequences.pl")
+      ;;
+    SyntenyClustering)
+      tools=(
+        "python" "Rscript" "diamond"
+        "blastn" "makeblastdb" "blastdb_aliastool" "blastdbcmd"
+      )
+      ;;
+    CaptainIdentification)
+      tools=(
+        "python" "macse" "hmmscan"
+        "blastn" "makeblastdb" "clipkit" "iqtree3" "gotree" "mafft"
+      )
+      ;;
+    ClusterCharacterization)
+      tools=("Rscript" "blastn" "makeblastdb" "orthofinder")
+      ;;
+    OrthogroupsOverrepresentation)
+      tools=("orthofinder" "gotree" "Rscript")
+      ;;
+    OrthogroupsAnnotation)
+      tools=("mafft" "foldseek" "hhblits")
+      ;;
+    All)
+      tools=(
+        "python" "metaeuk" "agat_sp_extract_sequences.pl"
+        "Rscript" "diamond"
+        "blastn" "makeblastdb" "blastdb_aliastool" "blastdbcmd"
+        "orthofinder" "gotree"
+        "macse" "hmmscan" "clipkit" "iqtree3" "mafft"
+        "foldseek" "hhblits"
+      )
+      ;;
+    *)
+      echo "Error: unknown command '${command}' in check_required_software." >&2
+      exit 1
+      ;;
+  esac
+
+  for tool in "${tools[@]}"; do
+    if [[ -z "$(which "$tool")" ]]; then
+      echo "Error: missing required tool '${tool}'." >&2
+      exit 1
     fi
+  done
 }
 
+# Validates the working directory structure, checking that Data/, Workspace/,
+# and all four data subdirectories exist with consistent filenames across them.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success, exits with 1 on any structural inconsistency
 check_directory_structure() {
-    local base_dir="$1"
+  local base_dir="$1"
 
-    mkdir -p ${base_dir}/temp
+  mkdir -p "${base_dir}/temp"
 
-    # Locate required subdirectories and file
-    local workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+  local workspace_dir data_dir
+  workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+  data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
 
-    if [[ -z "$workspace_dir" ]]; then
-        echo "Error: Workspace directory not found in '$base_dir'." >&2
-        exit 1
+  if [[ -z "$workspace_dir" ]]; then
+    echo "Error: Workspace directory not found in '${base_dir}'." >&2
+    exit 1
+  fi
+  if [[ -z "$data_dir" ]]; then
+    echo "Error: Data directory not found in '${base_dir}'." >&2
+    exit 1
+  fi
+
+  local gff_dir protein_dir nucleotide_dir cds_dir
+  gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+  protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+  nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
+  cds_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
+
+  [[ -z "$gff_dir" ]]        && { echo "Error: Gff subdirectory not found in '${data_dir}'." >&2; exit 1; }
+  [[ -z "$protein_dir" ]]    && { echo "Error: Protein subdirectory not found in '${data_dir}'." >&2; exit 1; }
+  [[ -z "$nucleotide_dir" ]] && { echo "Error: Nucleotide subdirectory not found in '${data_dir}'." >&2; exit 1; }
+  [[ -z "$cds_dir" ]]        && { echo "Error: CDS subdirectory not found in '${data_dir}'." >&2; exit 1; }
+
+  local gff_list="${base_dir}/temp/gff_files.txt"
+  local protein_list="${base_dir}/temp/protein_files.txt"
+  local nucleotide_list="${base_dir}/temp/nucleotide_files.txt"
+  local cds_list="${base_dir}/temp/cds_files.txt"
+
+  find "$gff_dir"        -maxdepth 1 -type f -name "*.gff" \
+    | xargs -n1 basename -s .gff | sort > "$gff_list"
+  find "$protein_dir"    -maxdepth 1 -type f -name "*.fa" \
+    | xargs -n1 basename -s .fa  | sort > "$protein_list"
+  find "$nucleotide_dir" -maxdepth 1 -type f -name "*.fa" \
+    | xargs -n1 basename -s .fa  | sort > "$nucleotide_list"
+  find "$cds_dir"        -maxdepth 1 -type f -name "*.fa" \
+    | xargs -n1 basename -s .fa  | sort > "$cds_list"
+
+  local mismatch=false
+  local pairs=(
+    "Gff:Protein:${gff_list}:${protein_list}"
+    "Gff:Nucleotide:${gff_list}:${nucleotide_list}"
+    "Gff:CDS:${gff_list}:${cds_list}"
+    "Protein:Nucleotide:${protein_list}:${nucleotide_list}"
+    "Protein:CDS:${protein_list}:${cds_list}"
+    "Nucleotide:CDS:${nucleotide_list}:${cds_list}"
+  )
+
+  for pair in "${pairs[@]}"; do
+    IFS=':' read -r label_a label_b file_a file_b <<< "$pair"
+    if ! diff -q "$file_a" "$file_b" > /dev/null; then
+      echo "Error: file lists do not match between ${label_a} and ${label_b}." >&2
+      diff "$file_a" "$file_b" >&2
+      mismatch=true
     fi
+  done
 
-    local data_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+  rm -r "${base_dir}/temp"
 
-    if [[ -z "$data_dir" ]]; then
-        echo "Error: Data directory not found in '$base_dir'." >&2
-        exit 1
-    fi
-    
-    local gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
-    local protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
-    local nucleotide_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Nucleotide" 2>/dev/null)
-    local CDS_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
-
-    if [[ -z "$gff_dir" ]]; then
-        echo "Error: GFF subdirectory not found in '$data_dir'." >&2
-        exit 1
-    fi
-
-    if [[ -z "$protein_dir" ]]; then
-        echo "Error: Protein subdirectory not found in '$data_dir'." >&2
-        exit 1
-    fi
-
-    if [[ -z "$nucleotide_dir" ]]; then
-        echo "Error: nucleotide subdirectory not found in '$data_dir'." >&2
-        exit 1
-    fi
-
-    if [[ -z "$CDS_dir" ]]; then
-        echo "Error: CDS subdirectory not found in '$data_dir'." >&2
-        exit 1
-    fi
-    
-    # Check for consistent filenames across subdirectories
-    local gff_files="$base_dir/temp/gff_files.txt"
-    local protein_files="$base_dir/temp/protein_files.txt"
-    local nucleotide_files="$base_dir/temp/nucleotide_files.txt"
-    local CDS_files="$base_dir/temp/b_files.txt"
-    
-    # Get sorted list of base filenames from the GFF directory
-    find "$gff_dir" -maxdepth 1 -type f -name "*.gff" | xargs -n 1 basename -s .gff | sort > "$gff_files"
-    
-    # Get sorted list of base filenames from the protein directory
-    find "$protein_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$protein_files"
-
-    # Get sorted list of base filenames from the GFF directory
-    find "$nucleotide_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$nucleotide_files"
-    
-    # Get sorted list of base filenames from the protein directory
-    find "$CDS_dir" -maxdepth 1 -type f -name "*.fa" | xargs -n 1 basename -s .fa | sort > "$CDS_files"
-
-    # Compare the lists. If diff finds a difference, it returns a non-zero exit code.
-    if ! diff -q "$gff_files" "$protein_files" >/dev/null || \
-        ! diff -q "$gff_files" "$nucleotide_files" >/dev/null || \
-        ! diff -q "$gff_files" "$CDS_files" >/dev/null || \
-        ! diff -q "$protein_files" "$nucleotide_files" >/dev/null || \
-        ! diff -q "$protein_files" "$CDS_files" >/dev/null || \
-        ! diff -q "$nucleotide_files" "$CDS_files" >/dev/null; then
-        echo "Error: File lists in subdirectories do not match." >&2
-        echo "Details:" >&2
-        echo "GFF vs. Protein:" >&2
-        diff "$gff_files" "$protein_files" >&2
-        echo "GFF vs. nucleotide:" >&2
-        diff "$gff_files" "$nucleotide_files" >&2
-        echo "GFF vs. CDS:" >&2
-        diff "$gff_files" "$CDS_files" >&2
-        echo "protein vs. nucleotide:" >&2
-        diff "$protein_files" "$nucleotide_files" >&2
-        echo "protein vs. CDS:" >&2
-        diff "$protein_files" "$CDS_files" >&2
-        echo "nucleotide vs. CDS:" >&2
-        diff "$nucleotide_files" "$CDS_files" >&2
-        rm "$gff_files" "$nucleotide_files" "$protein_files" "$CDS_files"
-        exit 1
-    fi
-
-    # Cleanup temporary files
-    rm -r "${base_dir}/temp"
+  if $mismatch; then
+    exit 1
+  fi
 }
 
+# Validates that an InterProScan installation directory exists and contains
+# a working interproscan.sh script and a valid properties file.
+# Arguments:
+#   $1 - path to the InterProScan installation directory
+# Returns:
+#   0 on success, exits with 1 if missing or misconfigured
 check_interpro_software() {
-    local Interpro_path="$1"
-    if [[ ! -d "${Interpro_path}" ]]; then
-        echo "Error: Folder of Interpro software does not exist."
-        exit 1
-    else
-        if [[ ! -f "${Interpro_path}/interproscan.sh" ]]; then
-            echo "Error: interproscan script file is not available in the '${Interpro_path}' folder."
-            exit 1
-        else
-            if [[ ! $(${Interpro_path}/interproscan.sh -version | grep -c "InterProScan") -eq 2 ]]; then
-               echo "Error: interproscan script is not properly install."
-               exit 1 
-           fi
-        fi
-        if [[ ! -f "${Interpro_path}/interproscan.properties" ]]; then
-            echo "Error: property file for interproscan is not available '$Interpro_path' folder."
-            exit 1
-        else
-            if [[ ! $(egrep -c "antifam|gene3d|hamap|ncbifam|panther|pfam-a|pirsf|pirsr|sfld|superfamily" ${Interpro_path}/interproscan.properties) -eq 10 ]]; then
-                echo "Error: property file for interproscan is corrupted."
-                exit 1
-            elif [[ ! $(egrep "antifam|gene3d|hamap|ncbifam|panther|pfam-a|pirsf|pirsr|sfld|superfamily" ${Interpro_path}/interproscan.properties | awk -F '=' '{print NF}' | sort -u) -eq 2 ]]; then
-                echo "Error: property file for interproscan is corrupted."
-                exit 1
-            fi
-        fi
-    fi
+  local interpro_path="$1"
+
+  if [[ ! -d "$interpro_path" ]]; then
+    echo "Error: InterProScan directory '${interpro_path}' does not exist." >&2
+    exit 1
+  fi
+
+  if [[ ! -f "${interpro_path}/interproscan.sh" ]]; then
+    echo "Error: 'interproscan.sh' not found in '${interpro_path}'." >&2
+    exit 1
+  fi
+
+  if [[ ! $(${interpro_path}/interproscan.sh -version \
+      | grep -c "InterProScan") -eq 2 ]]; then
+    echo "Error: InterProScan is not properly installed in '${interpro_path}'." >&2
+    exit 1
+  fi
+
+  local props="${interpro_path}/interproscan.properties"
+  if [[ ! -f "$props" ]]; then
+    echo "Error: 'interproscan.properties' not found in '${interpro_path}'." >&2
+    exit 1
+  fi
+
+  local expected_apps="antifam|gene3d|hamap|ncbifam|panther|pfam-a|pirsf|pirsr|sfld|superfamily"
+  if [[ ! $(grep -Ec "$expected_apps" "$props") -eq 10 ]]; then
+    echo "Error: 'interproscan.properties' is missing required application entries." >&2
+    exit 1
+  fi
+  if [[ ! $(grep -E "$expected_apps" "$props" \
+      | awk -F '=' '{print NF}' | sort -u) -eq 2 ]]; then
+    echo "Error: 'interproscan.properties' has malformed application entries." >&2
+    exit 1
+  fi
 }
 
+# Validates that required annotation database files exist for the given command.
+# Arguments:
+#   $1 - path to the databases directory
+#   $2 - command name (OrthogroupsAnnotation | CaptainIdentification | All)
+# Returns:
+#   0 on success, exits with 1 if any database file or directory is missing
 check_databases() {
-    local database_path="$1"
-    local command="$2"
+  local database_path="$1"
+  local command="$2"
 
-    if [[ $command == "OrthogroupsAnnotation" ]]; then
-        if [[ ! -d "$database_path" ]]; then
-            echo "Error: Directory '$database_path' does not exist."
-            exit 1
-        else
-            if [[ ! -d "${database_path}/Foldseek/" ]]; then
-                echo "Error: Directory 'Foldseek' does not exist in '$database_path'."
-                exit 1
-            else
-                foldseek_path="${database_path}/Foldseek/"
+  if [[ ! -d "$database_path" ]]; then
+    echo "Error: database directory '${database_path}' does not exist." >&2
+    exit 1
+  fi
 
-                if [[ ! -d "$foldseek_path/weights/" ]]; then
-                    echo "Error: Directory 'weights' does not exist in '${foldseek_path}'."
-                    exit 1
-                else 
-                    if [[ ! -f "$foldseek_path/weights/prostt5-f16.gguf" ]]; then
-                        echo "Error: weight file for Foldseek is not available at $foldseek_path/weights/"
-                        exit 1
-                    fi
-                fi
-            fi
+  case "$command" in
+    OrthogroupsAnnotation|All)
+      local foldseek_path="${database_path}/Foldseek"
+      local hhsuite_path="${database_path}/hhsuite"
 
-            if [[ ! -d "${database_path}/hhsuite/" ]]; then
-                echo "Error: Directory 'hhsuite' does not exist in '$database_path'."
-                exit 1
-            else
-                hhsuite_path="${database_path}/hhsuite/"
-                if [[ ! -f "$hhsuite_path/pfam.md5sum" ]]; then
-                    echo "Error: 'pfam' database does not exist in '${hhsuite_path}'."
-                    exit 1
-                fi
-
-                if [[ ! $(ls $hhsuite_path/pfam_* | wc -l) -eq 6 ]]; then
-                    echo "Error: There are missing files of hhblits pfam database."
-                    exit 1
-                fi
-            fi
-            
-        fi
-    elif [[ $command = "CaptainIdentification" ]]; then
-        if [[ ! -d "$database_path" ]]; then
-            echo "Error: directory '$database_path' does not exist."
-            exit 1
-        else
-            if [[ ! -f "${database_path}/Captains_CDS.fa" ]]; then
-                echo "Error: file '${database_path}/Captains_CDS.fa' does not exist."
-                exit 1
-            else
-                check_fasta_dna "${database_path}/Captains_CDS.fa"
-            fi
-
-            if [[ ! -f "${database_path}/Captains.fa" ]]; then
-                echo "Error: file '${database_path}/Captains.fa' does not exist."
-                exit 1
-            else
-                check_fasta_protein "${database_path}/Captains.fa"
-            fi
-        fi
-    elif [[ $command == "All" ]]; then
-        if [[ ! -d "$database_path" ]]; then
-            echo "Error: Directory '$database_path' does not exist."
-            exit 1
-        else
-            if [[ ! -d "${database_path}/Foldseek/" ]]; then
-                echo "Error: Directory 'Foldseek' does not exist in '$database_path'."
-                exit 1
-            else
-                foldseek_path="${database_path}/Foldseek/"
-
-                if [[ ! -d "$foldseek_path/weights/" ]]; then
-                    echo "Error: Directory 'weights' does not exist in '${foldseek_path}'."
-                    exit 1
-                else 
-                    if [[ ! -f "$foldseek_path/weights/prostt5-f16.gguf" ]]; then
-                        echo "Error: weight file for Foldseek is not available at $foldseek_path/weights/"
-                        exit 1
-                    fi
-                fi
-            fi
-
-            if [[ ! -d "${database_path}/hhsuite/" ]]; then
-                echo "Error: Directory 'hhsuite' does not exist in '$database_path'."
-                exit 1
-            else
-                hhsuite_path="${database_path}/hhsuite/"
-                if [[ ! -f "$hhsuite_path/pfam.md5sum" ]]; then
-                    echo "Error: 'pfam' database does not exist in '${hhsuite_path}'."
-                    exit 1
-                fi
-
-                if [[ ! $(ls $hhsuite_path/pfam_* | wc -l) -eq 6 ]]; then
-                    echo "Error: There are missing files of hhblits pfam database."
-                    exit 1
-                fi
-            fi
-            
-        fi
-    else
-        echo "Error: command '$command' is incorrect."
+      if [[ ! -d "$foldseek_path" ]]; then
+        echo "Error: 'Foldseek' directory not found in '${database_path}'." >&2
         exit 1
-    fi
+      fi
+      if [[ ! -d "${foldseek_path}/weights" ]]; then
+        echo "Error: 'weights' directory not found in '${foldseek_path}'." >&2
+        exit 1
+      fi
+      if [[ ! -f "${foldseek_path}/weights/prostt5-f16.gguf" ]]; then
+        echo "Error: Foldseek weight file 'prostt5-f16.gguf' not found." >&2
+        exit 1
+      fi
+
+      if [[ ! -d "$hhsuite_path" ]]; then
+        echo "Error: 'hhsuite' directory not found in '${database_path}'." >&2
+        exit 1
+      fi
+      if [[ ! -f "${hhsuite_path}/pfam.md5sum" ]]; then
+        echo "Error: 'pfam.md5sum' not found in '${hhsuite_path}'." >&2
+        exit 1
+      fi
+      if [[ ! $(ls "${hhsuite_path}/pfam_"* 2>/dev/null | wc -l) -eq 6 ]]; then
+        echo "Error: missing hhblits PfamA database files in '${hhsuite_path}'." >&2
+        exit 1
+      fi
+
+      if [[ "$command" == "All" ]]; then
+        if [[ ! -f "${database_path}/Captains.fa" ]]; then
+          echo "Error: 'Captains.fa' not found in '${database_path}'." >&2
+          exit 1
+        fi
+        check_fasta_protein "${database_path}/Captains.fa"
+        if [[ ! -f "${database_path}/Captains_CDS.fa" ]]; then
+          echo "Error: 'Captains_CDS.fa' not found in '${database_path}'." >&2
+          exit 1
+        fi
+        check_fasta_dna "${database_path}/Captains_CDS.fa"
+      fi
+      ;;
+
+    CaptainIdentification)
+      if [[ ! -f "${database_path}/Captains_CDS.fa" ]]; then
+        echo "Error: 'Captains_CDS.fa' not found in '${database_path}'." >&2
+        exit 1
+      fi
+      check_fasta_dna "${database_path}/Captains_CDS.fa"
+
+      if [[ ! -f "${database_path}/Captains.fa" ]]; then
+        echo "Error: 'Captains.fa' not found in '${database_path}'." >&2
+        exit 1
+      fi
+      check_fasta_protein "${database_path}/Captains.fa"
+      ;;
+
+    *)
+      echo "Error: unknown command '${command}' in check_databases." >&2
+      exit 1
+      ;;
+  esac
 }
 
+# Validates that all required files for a given Foldseek database exist.
+# Arguments:
+#   $1 - path to the Foldseek database directory
+#   $2 - database name (pdb | afdb_swissprot | All)
+# Returns:
+#   0 on success, exits with 1 if any database file is missing
 check_foldseek_databases() {
-    local foldseek_path="$1"
-    local foldseekdb="$2"
+  local foldseek_path="$1"
+  local foldseekdb="$2"
 
-    if [[ "$foldseekdb" == "pdb" ]]; then
-        if [[ ! $(ls $foldseek_path/${foldseekdb}* | wc -l) -eq 40 ]]; then
-            echo "Error: There are missing files for '${foldseekdb}' database."
-            exit 1
-        fi
-        if [[ ! -f "$foldseek_path/entries_update.idx" ]]; then
-            echo "Error: 'entries_update.idx' file does not exist in '${foldseek_path}'."
-            exit 1
-        fi
-    elif [[ "$foldseekdb" == "afdb_swissprot" ]]; then
-        if [[ ! -f "$foldseek_path/Accession_swissprot.txt" ]]; then
-            echo "Error: 'Accession_swissprot.txt' file does not exist in '${foldseek_path}'."
-            exit 1
-        fi
-        if [[ ! $(ls $foldseek_path/${foldseekdb}* | wc -l) -eq 16 ]]; then
-            echo "Error: There are missing files for '${foldseekdb}' database."
-            exit 1
-        fi
-    elif [[ "$foldseekdb" == "All" ]]; then
-        if [[ ! $(ls $foldseek_path/pdb* | wc -l) -eq 40 ]]; then
-            echo "Error: There are missing files for '$pdb' database."
-            exit 1
-        fi
-        if [[ ! -f "$foldseek_path/entries_update.idx" ]]; then
-            echo "Error: 'entries_update.idx' file does not exist in '${foldseek_path}'."
-            exit 1
-        fi
-        if [[ ! -f "$foldseek_path/Accession_swissprot.txt" ]]; then
-            echo "Error: 'Accession_swissprot.txt' file does not exist in '${foldseek_path}'."
-            exit 1
-        fi
-        if [[ ! $(ls $foldseek_path/afdb_swissprot* | wc -l) -eq 16 ]]; then
-            echo "Error: There are missing files for 'afdb_swissprot' database."
-            exit 1
-        fi
-    else
-        echo "Error: Database '$foldseekdb' is incorrect."
+  case "$foldseekdb" in
+    pdb)
+      if [[ ! $(ls "${foldseek_path}/${foldseekdb}"* 2>/dev/null | wc -l) -eq 40 ]]; then
+        echo "Error: missing files for Foldseek '${foldseekdb}' database." >&2
         exit 1
-    fi
+      fi
+      if [[ ! -f "${foldseek_path}/entries_update.idx" ]]; then
+        echo "Error: 'entries_update.idx' not found in '${foldseek_path}'." >&2
+        exit 1
+      fi
+      ;;
+    afdb_swissprot)
+      if [[ ! -f "${foldseek_path}/Accession_swissprot.txt" ]]; then
+        echo "Error: 'Accession_swissprot.txt' not found in '${foldseek_path}'." >&2
+        exit 1
+      fi
+      if [[ ! $(ls "${foldseek_path}/${foldseekdb}"* 2>/dev/null | wc -l) -eq 16 ]]; then
+        echo "Error: missing files for Foldseek '${foldseekdb}' database." >&2
+        exit 1
+      fi
+      ;;
+    All)
+      if [[ ! $(ls "${foldseek_path}/pdb"* 2>/dev/null | wc -l) -eq 40 ]]; then
+        echo "Error: missing files for Foldseek 'pdb' database." >&2
+        exit 1
+      fi
+      if [[ ! -f "${foldseek_path}/entries_update.idx" ]]; then
+        echo "Error: 'entries_update.idx' not found in '${foldseek_path}'." >&2
+        exit 1
+      fi
+      if [[ ! -f "${foldseek_path}/Accession_swissprot.txt" ]]; then
+        echo "Error: 'Accession_swissprot.txt' not found in '${foldseek_path}'." >&2
+        exit 1
+      fi
+      if [[ ! $(ls "${foldseek_path}/afdb_swissprot"* 2>/dev/null | wc -l) -eq 16 ]]; then
+        echo "Error: missing files for Foldseek 'afdb_swissprot' database." >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Error: unknown Foldseek database '${foldseekdb}'." >&2
+      exit 1
+      ;;
+  esac
+}
+
+# Validates that the InterProScan installation is working and all databases
+# are present for a full pipeline run.
+# Arguments:
+#   $1 - path to the StarCrew main installation directory
+# Returns:
+#   0 on success, exits with 1 on any missing component
+check_installation() {
+  local main_dir="$1"
+
+  log_info "Checking InterProScan installation..."
+  check_interpro_software "${main_dir}/interproscan"
+
+  log_info "Checking databases..."
+  check_databases "${main_dir}/databases" "All"
+  check_foldseek_databases "${main_dir}/databases/Foldseek" "All"
 }
