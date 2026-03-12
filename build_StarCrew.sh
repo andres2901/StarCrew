@@ -184,7 +184,11 @@ install_databases() {
   wget "${INTERPROSCAN_URL}"
   wget "${INTERPROSCAN_URL}.md5"
 
-  md5sum -c "${INTERPROSCAN_ARCHIVE}.md5"
+  if ! md5sum -c --quiet ${INTERPROSCAN_ARCHIVE}.md5; then
+    log_warning "pfam installation was unsuccessful"
+    exit 1
+  fi
+
   tar -pxvzf "${INTERPROSCAN_ARCHIVE}" -C "${MAIN_DIR}/interproscan" --strip-components=1
   rm "${INTERPROSCAN_ARCHIVE}"*
 
@@ -224,6 +228,11 @@ install_databases() {
   log_info "Downloading HH-suite pfam database..."
   wget "https://wwwuser.gwdguser.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/pfamA_35.0.tar.gz"
   tar -zxvf pfamA_35.0.tar.gz
+
+  if ! md5sum -c --quiet pfam.md5sum; then
+    log_warning "pfam installation was unsuccessful"
+    exit 1
+  fi
   rm pfamA_35.0.tar.gz
 
   cd "${MAIN_DIR}"
