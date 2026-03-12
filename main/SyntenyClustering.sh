@@ -554,10 +554,8 @@ process_collinearity() {
       log_step "Filtering false positive pairs..."
       awk '{OFS=";"} {print $1 OFS $2}' "${working_dir}/BlastnClean.out" \
         > "${working_dir}/BlastnPairs.out"
-      join -t ';' \
-        <(sed -e 's/;/-/' "${temp_prefix}_Collinearity_percentage_low.txt" | sort -k1,1) \
-        <(sed -e 's/;/-/' "${working_dir}/BlastnPairs.out" | sort -k1,1) \
-        | sed 's/-/;/g' > "${temp_prefix}_Collinearity_percentage_lowSelected.txt"
+      grep -f "${working_dir}/BlastnPairs.out" \
+        "${temp_prefix}_Collinearity_percentage_low.txt" > "${temp_prefix}_Collinearity_percentage_lowSelected.txt"
       cat "${temp_prefix}_Collinearity_percentage_high.txt" \
           "${temp_prefix}_Collinearity_percentage_lowSelected.txt" \
         | sort -u > "${temp_prefix}_Collinearity_percentage_filter.txt"
@@ -970,7 +968,7 @@ if ! $skip_syntenet; then
 else
   log_info "Skipping syntenet analysis."
   log_info "Removing previous cluster results if available..."
-  rm -r "${working_directory}/Clusters/"*
+  rm -r "${working_directory}/Clusters/"* 2> /dev/null
   if [[ -f "${working_directory}/metadata_files/metadata.csv" ]]; then
     metadata_flag=true
   fi
@@ -990,5 +988,5 @@ log_info "-> Step 5 finished. Proceeding."
 
 log_info "Step 6: Sorting elements into clusters."
 process_cluster_file "${working_directory}"
-rm -r "${working_directory}/Workspace/$(basename -s .sh "$0")/temp" > /dev/null
+rm -r "${working_directory}/Workspace/$(basename -s .sh "$0")/temp" 2> /dev/null
 log_info "Synteny and clustering analysis finished."
