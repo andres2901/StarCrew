@@ -329,7 +329,7 @@ check_auxiliary_scripts() {
   local scripts=()
   case "$command" in
     Initialize)
-      scripts=("rip_calculator.py" "gff_slicer.py" "merge.py")
+      scripts=("rip_calculator.py" "gff_slicer.py" "gff_split.py" "merge.py")
       ;;
     SyntenyClustering)
       scripts=(
@@ -352,7 +352,7 @@ check_auxiliary_scripts() {
       ;;
     All)
       scripts=(
-        "rip_calculator.py" "gff_slicer.py" "merge.py"
+        "rip_calculator.py" "gff_slicer.py" "gff_split.py" "merge.py"
         "PreCluster.py" "Blast_CleanUp.py" "Clustering.py"
         "merge_metadata.py" "FilterMetric.py"
         "syntenetAnalysis.R" "syntenetPreprocess.R"

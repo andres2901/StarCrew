@@ -429,6 +429,7 @@ organize_info() {
 process_simple() {
   local working_dir="$1"
   local gff_file="$2"
+  local fasta_file="$3"
   local cds_flag=false
 
   mkdir -p "${working_dir}/Data/Protein" "${working_dir}/Data/Gff" \
@@ -445,9 +446,13 @@ process_simple() {
   total_states=$(wc -l < "${working_dir}/temp/temp_association.tsv")
   local state=0
 
+  agat_sp_keep_longest_isoform.pl --config "${AGAT_CONFIG_PATH}" \
+      --gff "${gff_file}" \
+      -o "${working_dir}/temp/gff_longIso.gff" &> /dev/null
+
   while read -r new_id original_id; do
     state=$(( state + 1 ))
-    grep -w "^${original_id}" "$gff_file" \
+    grep -w "^${original_id}" "${working_dir}/temp/gff_longIso.gff" \
       | sed "s/${original_id}/${new_id}/" \
       >> "${working_dir}/temp/gff_file.gff"
     ProgressBar "$state" "$total_states"
@@ -457,29 +462,7 @@ process_simple() {
 
   echo ""
   log_step "Splitting GFF file per element..."
-  local unique_elements
-  unique_elements=$(grep -v "^#" "$gff_file" | awk '{print $1}' | sort | uniq)
-  total_states=$(echo "$unique_elements" | wc -l)
-  state=0
-
-  echo "$unique_elements" | while read -r element; do
-    state=$(( state + 1 ))
-    {
-      grep "^#" "$gff_file"
-      grep -w "^${element}" "$gff_file"
-    } > "${working_dir}/temp/gff/${element}.gff"
-
-    agat_sp_keep_longest_isoform.pl --config "${AGAT_CONFIG_PATH}" \
-      --gff "${working_dir}/temp/gff/${element}.gff" \
-      -o "${working_dir}/Data/Gff/${element}.gff" &> /dev/null
-
-    sed -i -e "s/ID=/ID=${element}./g" \
-           -e "s/Parent=/Parent=${element}./g" \
-      "${working_dir}/Data/Gff/${element}.gff" &> /dev/null
-
-    ProgressBar "$state" "$total_states"
-  done
-  echo ""
+  python ${AUXILIARY_DIR}/gff_split.py -g ${gff_file} -f ${fasta_file} -o ${working_dir}/temp/gff &> ${working_dir}/temp/gff_split_log.txt
 
   organize_info "$working_dir" "$cds_flag"
 }
@@ -870,7 +853,7 @@ log_info "Step 4: Processing input files in '${mode}' mode."
 if [[ "$mode" == "Starfish" ]]; then
   process_starfish "$out_directory" "$boundaries_path" "$gff_path"
 elif [[ "$mode" == "Simple" ]]; then
-  process_simple "$out_directory" "$gff_path"
+  process_simple "$out_directory" "$gff_path" "${out_directory}/temp/Sequences.fa"
 fi
 
 rm -r "${out_directory}/temp/"
