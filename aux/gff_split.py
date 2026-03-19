@@ -139,7 +139,7 @@ def main() -> None:
     """Parse command-line arguments and launch the GFF divider pipeline."""
 
     parser = argparse.ArgumentParser(
-        description="High-performance GFF divider per contig."
+        description="High-performance GFF spliter per contig."
     )
     parser.add_argument('-g', '--gff', required=True, help='Master GFF input file')
     parser.add_argument('-f', '--fasta', required=True, help='Master fasta input file')

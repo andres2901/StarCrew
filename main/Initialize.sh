@@ -413,7 +413,7 @@ organize_info() {
     seqkit translate -f 1 "${working_dir}/Data/CDS/${element}.fa" \
       > "${working_dir}/Data/Protein/${element}.fa"
 
-    rm -f "${working_dir}/Data/Nucleotide/${element}.fa.index"*
+    rm -f ${working_dir}/Data/Nucleotide/${element}.fa.index*
     ProgressBar "$state" "$total_states"
   done
   echo ""
@@ -434,7 +434,7 @@ process_simple() {
 
   mkdir -p "${working_dir}/Data/Protein" "${working_dir}/Data/Gff" \
            "${working_dir}/Data/Nucleotide" "${working_dir}/Data/CDS" \
-           "${working_dir}/temp/CDS" "${working_dir}/temp/gff"
+           "${working_dir}/temp/CDS"
 
   log_step "Preparing GFF file..."
 
@@ -462,7 +462,7 @@ process_simple() {
 
   echo ""
   log_step "Splitting GFF file per element..."
-  python ${AUXILIARY_DIR}/gff_split.py -g ${gff_file} -f ${fasta_file} -o ${working_dir}/temp/gff &> ${working_dir}/temp/gff_split_log.txt
+  python ${AUXILIARY_DIR}/gff_split.py -g ${gff_file} -f ${fasta_file} -o ${working_dir}/Data/Gff/ &> ${working_dir}/temp/gff_divider_log.txt
 
   organize_info "$working_dir" "$cds_flag"
 }
@@ -550,7 +550,7 @@ process_starfish() {
     ProgressBar "$state" "$total_states"
   done
 
-  rm "${working_dir}/temp/gff2/"*.gff
+  rm ${working_dir}/temp/gff2/*.gff
 
   # Update GFF ID/Parent prefixes
   echo ""
@@ -611,7 +611,7 @@ process_starfish() {
     | awk '{print $1}' | sort -u | wc -l)
   state=0
 
-  rm "${working_dir}/temp/gff/"*
+  rm ${working_dir}/temp/gff/*
   mkdir -p "${working_dir}/temp/modelsKeep"
 
   grep -v "#" "${working_dir}/temp/metaeuk_ORF_sup200.gff" \
@@ -853,7 +853,7 @@ log_info "Step 4: Processing input files in '${mode}' mode."
 if [[ "$mode" == "Starfish" ]]; then
   process_starfish "$out_directory" "$boundaries_path" "$gff_path"
 elif [[ "$mode" == "Simple" ]]; then
-  process_simple "$out_directory" "$gff_path" "${out_directory}/temp/Sequences.fa"
+  process_simple "$out_directory" "$gff_path" "${out_directory}/Sequences.fa"
 fi
 
 rm -r "${out_directory}/temp/"
