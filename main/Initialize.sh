@@ -6,7 +6,7 @@
 # USAGE:       StarCrew Initialize [options]
 #              StarCrew Initialize -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        19/Mar/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -165,14 +165,14 @@ filter_input() {
   fi
 }
 
-# Converts a non-negative integer to a base-62 string for unique ID generation.
+# Converts a non-negative integer to a base-36 string for unique ID generation.
 # Arguments:
 #   $1 - non-negative integer to convert
 # Returns:
-#   Prints the base-62 string to stdout
-base62() {
+#   Prints the base-36 string to stdout
+base36() {
   local n="$1"
-  local base62_chars="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  local base36_chars="0123456789abcdefghijklmnopqrstuvwxyz"
   local result=""
 
   if [[ "$n" -eq 0 ]]; then
@@ -181,15 +181,15 @@ base62() {
   fi
 
   while [[ "$n" -gt 0 ]]; do
-    local rem=$(( n % 62 ))
-    result="${base62_chars:$rem:1}${result}"
-    n=$(( n / 62 ))
+    local rem=$(( n % 36 ))
+    result="${base36_chars:$rem:1}${result}"
+    n=$(( n / 36 ))
   done
 
   printf '%s\n' "$result"
 }
 
-# Generates a unique padded base-62 ID not already present in the used-IDs file.
+# Generates a unique padded base-36 ID not already present in the used-IDs file.
 # Writes the result and updated counter to a temp file to avoid subshell issues.
 # Arguments:
 #   $1 - current counter value (integer)
@@ -204,7 +204,7 @@ generate_unique_id() {
   local padded_id
 
   while true; do
-    padded_id=$(printf "%05s" "$(base62 "$counter")" | sed 's/ /0/g')
+    padded_id=$(printf "%05s" "$(base36 "$counter")" | sed 's/ /0/g')
     if ! grep -q "^${padded_id}$" "$used_ids_file"; then
       echo "$padded_id" >> "$used_ids_file"
       counter=$(( counter + 1 ))
@@ -556,7 +556,7 @@ process_starfish() {
     python "${AUXILIARY_DIR}/gff_slicer.py" \
       -c "${working_dir}/temp/temp_coordinate_file.txt" \
       -i "${working_dir}/temp/gff/${element}.gff" \
-      -o "${working_dir}/temp/gff2/" &> /dev/null
+      -o "${working_dir}/temp/gff2/" &> ${working_dir}/temp/gff_slicer_log.txt
 
     awk '{print $1}' "${working_dir}/temp/temp_coordinate_file.txt" \
       | while read -r sub_element; do
@@ -652,7 +652,7 @@ process_starfish() {
 
       python "${AUXILIARY_DIR}/merge.py" \
         "${working_dir}/temp/gff/${element}_merge.gff" \
-        "${working_dir}/temp/modelsKeep/${element}.txt" &> /dev/null
+        "${working_dir}/temp/modelsKeep/${element}.txt" &> ${working_dir}/temp/merge_log.txt
 
       agat_sp_filter_feature_from_keep_list.pl --config "${AGAT_CONFIG_PATH}" \
         --gff "${working_dir}/temp/gff/${element}_merge.gff" \

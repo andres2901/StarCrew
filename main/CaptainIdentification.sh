@@ -266,7 +266,7 @@ captain_identification() {
     --empty "${working_dir}/EmptyElements.txt" \
     --min_common "${level}" \
     --min_length "${length}" \
-    --range_kb "${range}" > /dev/null
+    --range_kb "${range}" > ${working_dir}/hmmscan_process_log.txt
 }
 
 # Searches for captain pseudogenes at element boundaries for captainless elements.

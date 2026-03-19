@@ -247,7 +247,7 @@ process_precluster() {
   log_step "Starting pre-cluster process..."
   python "${AUXILIARY_DIR}/PreCluster.py" \
     -i "${temp_dir}/Diamond_files.txt" \
-    -o "${temp_dir}" &> /dev/null
+    -o "${temp_dir}" &> ${working_dir}/pre_cluster_log.txt
 
   local total_states
   total_states=$(wc -l < "${temp_dir}/Clusters.txt")
@@ -495,7 +495,7 @@ process_collinearity() {
       python "${AUXILIARY_DIR}/merge_metadata.py" \
         -d "${temp_dir}/Collinearity_percentage.txt" \
         -m "$metadata_file" \
-        -o "${working_dir}/Collinearity_percentage.txt" &> /dev/null
+        -o "${working_dir}/Collinearity_percentage.txt" &> ${working_dir}/merge_metadata_log.txt
     else
       sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" \
         >> "${working_dir}/Collinearity_percentage.txt"
@@ -514,7 +514,7 @@ process_collinearity() {
       python "${AUXILIARY_DIR}/merge_metadata.py" \
         -d "${temp_dir}/Collinearity_percentage.txt" \
         -m "$metadata_file" \
-        -o "${working_dir}/Collinearity_percentage.txt" &> /dev/null
+        -o "${working_dir}/Collinearity_percentage.txt" &> ${working_dir}/merge_metadata_log.txt
     else
       sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" \
         >> "${working_dir}/Collinearity_percentage.txt"
@@ -549,7 +549,7 @@ process_collinearity() {
         -f "${working_dir}/BlastnResults.out" \
         -o "${working_dir}/BlastnClean.out" \
         -fs "${fragment_size}" -i "${identity}" \
-        -ms "${merge_size}" -c "${coverage}" &> /dev/null
+        -ms "${merge_size}" -c "${coverage}" &> ${working_dir}/blast_cleanup_log.txt
 
       log_step "Filtering false positive pairs..."
       awk '{OFS=";"} {print $1 OFS $2}' "${working_dir}/BlastnClean.out" \
@@ -571,7 +571,7 @@ process_collinearity() {
       python "${AUXILIARY_DIR}/merge_metadata.py" \
         -d "${temp_dir}/Collinearity_percentage.txt" \
         -m "$metadata_file" \
-        -o "${working_dir}/Collinearity_percentage.txt" &> /dev/null
+        -o "${working_dir}/Collinearity_percentage.txt" &> ${working_dir}/merge_metadata_log.txt
     else
       sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" \
         >> "${working_dir}/Collinearity_percentage.txt"
@@ -595,13 +595,13 @@ process_collinearity() {
       --syntenet "${collinearity_path}/" \
       --diamond "${diamond_results_dir}/" \
       --threshold "${metric_threshold}" \
-      --output "${temp_dir}/Collinearity_percentage.txt" &> /dev/null
+      --output "${temp_dir}/Collinearity_percentage.txt" &> ${working_dir}/filter_metric_log.txt
 
     if $metadata_flag; then
       python "${AUXILIARY_DIR}/merge_metadata.py" \
         -d "${temp_dir}/Collinearity_percentage.txt" \
         -m "$metadata_file" \
-        -o "${working_dir}/Collinearity_percentage.txt" &> /dev/null
+        -o "${working_dir}/Collinearity_percentage.txt" &> ${working_dir}/merge_metadata_log.txt
     else
       sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" \
         >> "${working_dir}/Collinearity_percentage.txt"
@@ -983,7 +983,7 @@ log_info "Step 5: Generating element clusters."
 python "${AUXILIARY_DIR}/Clustering.py" \
   -i "${working_directory}/Workspace/$(basename -s .sh "$0")/Collinearity_percentage.txt" \
   -o "${working_directory}/Clusters/" \
-  -m "${min_size}" -n "${min_nodes}" -t "${threshold}" &> /dev/null
+  -m "${min_size}" -n "${min_nodes}" -t "${threshold}" &> ${working_directory}/Workspace/$(basename -s .sh "$0")/clustering_log.txt
 log_info "-> Step 5 finished. Proceeding."
 
 log_info "Step 6: Sorting elements into clusters."
