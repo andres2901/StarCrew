@@ -198,9 +198,9 @@ run_orthofinder() {
   local element_number
   element_number=$(ls "$protein_dir" | wc -l)
 
-  if (( $(ulimit -Sn) < element_number * 2 )); then
+  if (( $(ulimit -Sn) < element_number * 3 )); then
     log_warning "System file descriptor limit may be too low for OrthoFinder." \
-      "Consider raising it to at least '$((element_number * 2))'" \
+      "Consider raising it to at least '$((element_number * 3))'" \
       "using 'ulimit -n'."
   fi
 
