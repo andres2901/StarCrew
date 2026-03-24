@@ -686,7 +686,7 @@ process_cluster_file() {
       if $captain_info; then
         if [[ -n "$cds_file" ]]; then
           local cds_value
-          cds_value=$(grep "${value}\." "$cds_file" | awk -F '>' '{print $2}')
+          cds_value=$(grep "^${value}\." "$id_file")
           if [[ -n "$cds_value" ]]; then
             seqkit grep --quiet -p "$cds_value" \
               "${cluster_dir}/${cluster_id}/Data/CDS/${value}.fa" \

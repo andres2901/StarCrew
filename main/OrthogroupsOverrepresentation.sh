@@ -176,7 +176,7 @@ run_orthofinder() {
   element_number=$(ls "$protein_dir" | wc -l)
 
   if (( $(ulimit -Sn) < element_number * 3 )); then
-    echo "Error: system open file limit  per process ($(ulimit -Sn)) is too low." >&2
+    echo "Error: system open file limit per process ($(ulimit -Sn)) is too low." >&2
     echo "Please raise it to at least '$((element_number * 3))' using 'ulimit -n'." >&2
     exit 1
   fi

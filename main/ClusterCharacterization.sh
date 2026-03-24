@@ -199,7 +199,7 @@ run_orthofinder() {
   element_number=$(ls "$protein_dir" | wc -l)
 
   if (( $(ulimit -Sn) < element_number * 3 )); then
-    log_warning "System file descriptor limit may be too low for OrthoFinder." \
+    log_warning "System open file limit per process may be too low for OrthoFinder." \
       "Consider raising it to at least '$((element_number * 3))'" \
       "using 'ulimit -n'."
   fi
