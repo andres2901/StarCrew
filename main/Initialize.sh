@@ -62,7 +62,7 @@ readonly AGAT_CONFIG_PATH="$(realpath "${AGAT_CONFIG}")"
 # Returns:
 #   0 always
 print_help() {
-  echo "Script to organize the working directory to run the subsequent commands in the workflow."
+  echo "Command to organize the working directory to run the subsequent commands in the workflow."
   echo
   echo "Usage: StarCrew $(basename -s .sh "$0") [-help] -f <file_path> -g <file_path>"
   echo "       [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string>"

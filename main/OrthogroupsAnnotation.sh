@@ -93,9 +93,9 @@ print_help() {
   echo "                   [Available: Core, MoveAssociated, All, Overrepresented]."
   echo "  -f, --foldseekdb Foldseek database (Default: afdb_swissprot)"
   echo "                   [Available: pdb, afdb_swissprot]."
-  echo "  -t, --threads    Threads for all analyses (Default: 8)."
   echo
   echo "Optional args:"
+  echo "  -t, --threads    Threads for all analyses (Default: 8)."
   echo "  --overwrite  Overwrite a previous run (Default: off)."
   echo "  -help        Display this help message."
 }

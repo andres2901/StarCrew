@@ -72,14 +72,14 @@ print_help() {
   echo "     SSP         - Strong synteny pairs only."
   echo "     FilterBlast - Raw pairs filtered by nucleotide-level BLAST."
   echo "     FilterMetric- Pairs filtered and updated by a metric system."
-  echo "  5. Spectral clustering to define element clusters."
+  echo "  5. Spectral clustering to define element sub-clusters."
   echo "  6. Per-cluster data organization."
   echo
   echo "Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>"
   echo "       [ -m <string> -a <integer> -g <integer> -e <float> -n <integer>"
   echo "         -s <integer> -th <float> { -fs <integer> -ms <integer>"
   echo "         -i <float> -c <float> } -t <integer>"
-  echo "         --preCluster --captainInfo --overwrite --skip-syntenet ]"
+  echo "         --preCluster --captainInfo { --overwrite | --skip-syntenet } ]"
   echo
   echo "Required args:"
   echo "  -w, --workingDirectory  Working directory where all data are stored."
@@ -92,7 +92,7 @@ print_help() {
   echo "  -e, --evalue            E-value threshold for syntenet (Default: 0.00001) [range: 0.00001-0.01]."
   echo "  -n, --minNodes          Minimum nodes for spectral clustering (Default: 4)."
   echo "  -s, --minSize           Minimum final sub-cluster size (Default: 1)."
-  echo "  -th, --threshold        Minimum modularity score for sub-clusters (Default: 0) [range: -0.5-1.0]."
+  echo "  -th, --threshold        Minimum modularity score for sub-clusters (Default: 0.02) [range: -0.5-1.0]."
   echo
   echo "Required args with defaults in 'FilterBlast' mode:"
   echo "  -fs, --fragmentSize     Minimum BLAST fragment size (Default: 2000) [range: 1000-5000]."
