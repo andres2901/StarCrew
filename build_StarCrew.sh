@@ -102,15 +102,9 @@ check_libraries() {
 # Returns:
 #   0 on success, exits with 1 if any package is missing after installation
 install_r_packages() {
-  log_info "Installing gggenomes and verifying required R packages..."
+  log_info "Verifying required R packages..."
 
   Rscript -e '
-    install.packages("remotes", repos = "https://cloud.r-project.org/")
-    library(remotes)
-    install_version("gggenomes", version = "1.1.2", repos = "https://cloud.r-project.org/")
-    install_version("ggplot2", version = "3.5.2", repos = "https://cloud.r-project.org/")
-    install_version("dplyr", version = "1.1.4", repos = "https://cloud.r-project.org/")
-
     required_pkgs <- c(
       "optparse", "ggplot2", "ape", "ggtree", "reshape2",
       "viridis", "dplyr", "gggenomes", "scales", "dendextend",
