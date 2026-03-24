@@ -149,34 +149,35 @@ The wrapper is composed of six main commands. The only command that is required 
 ```
 Command to organize the working directory to run the subsequent commands in the workflow.
 
-Syntax: StarCrew Initialize [ -help ] -f <filte_path> -g <file_path> [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string> { -b <file_path> -s <character> -c <file_path> } -M <file_path> -t <integer> --overwrite ]"
+Usage: StarCrew Initialize [-help] -f <file_path> -g <file_path>
+       [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string>
+         { -b <file_path> -s <character> -c <file_path> } -M <file_path>
+         -t <integer> --overwrite ]
 
 Required args:
--f, --fasta:  multifasta file wih the elements to study.
+  -f, --fasta         Multifasta file with the elements to study.
+  -g, --gff           In 'Simple' mode: path to GFF with element-relative coordinates.
+                      In 'Starfish' mode: 2-column TSV (genome code, path to GFF).
 
-Required args with Default:
--m, --mode: Mode of the input to initialize (Defaul: Simple) [Available mode: Simple, Starfish].
--gc, --gc: Integer value of gc content to filter out elements with too low gc content (Default: 0) [range: 20 - 45].
--r, --rip: Integer value of the minimum coverage of the element to be possibly affected by RIP to be filter out (Default = 0) [range: 30 - 80].
--mg, --minGene: Minimum number of genes in an element to be include in the dataset (Default: 8) [range: 5 - 100].
--o, --outDirectory: Specify working directory  name (Default: WorkingDirectory).
+Required args with defaults:
+  -m, --mode          Input mode (Default: Simple) [Available: Simple, Starfish].
+  -gc, --gc           Minimum GC content threshold; elements below are filtered out
+                      (Default: 0) [range: 20-45].
+  -r, --rip           Maximum RIP-like signal coverage; elements above are filtered out
+                      (Default: 0) [range: 30-80].
+  -mg, --minGene      Minimum number of genes per element (Default: 8) [range: 5-100].
+  -o, --outDirectory  Working directory name (Default: WorkingDirectory).
 
 Required args in 'Starfish' mode:
--g, --gff: 2 column tsv: genome code, path to GFF. The path should be to the original gff files and not the ones formatted to run starfish.
--b, --boundaries: *.elements.feat file output of 'starfish summary' command.
--c, --captains: *_tyr.filt_intersect.fas file output of 'starfish annotate' command.
-
-Required args with Default in 'Starfish' mode:
--s, --separator: Character separating genomeID from featureID that was used for Starfish run (Default = '_').
-
-Required args in 'Simple' mode:
--g, --gff: Path to the GFF file containing gene predictions with element-relative coordinates for all elements in the fasta file.
+  -b, --boundaries    *.elements.feat file from 'starfish summary'.
+  -c, --captains      *_tyr.filt_intersect.fas file from 'starfish annotate'.
+  -s, --separator     Character separating genomeID from featureID (Default: '_').
 
 Optional args:
--M, --Metadata: csv file delimited by semicolon with the metadata information (Check wrapper documentation for more information).
--t, --threads: Threads for MetaEuk in 'Starfish' mode (Default: 24)
---overwrite: Flag to overwrite in case there is already a previous run (Default: off)
--help: Display this help message.
+  -M, --Metadata      CSV file (semicolon-delimited) with metadata information.
+  -t, --threads       Threads for MetaEuk in 'Starfish' mode (Default: 24).
+  --overwrite         Overwrite an existing previous run (Default: off).
+  -help               Display this help message.
 ```
 
 This command filters the input data based on a series of criteria and organizes the resulting database within a project directory. This directory serves as the starting point for all subsequent commands. The user should be aware that the element naming may change, with a specific, new ID designated for the Project. However, an association file will always be provided to map the original element ID to the new ID.
@@ -206,43 +207,45 @@ When using the 'Starfish' input mode, the provided data undergoes specific prepr
 ### CaptainIdentification
 
 ```
-Command to identify captain genes/pseudogenes within each element and construct a phylogenetic tree based on these sequences.
-It executes five main steps:
-1. Run hmmscan using hmm profiles of specific domains in captains against the proteome of each element.
-2. Processes the data to identify Captains based on hmm results and position. Three confidence levels can be used for captain identification:
-  2.1 Only a match with the Captain HMM profile from Starfish. WARNING: This may lead to false positive identifications and result in an unreliable phylogenetic analysis.
-  2.2 A match with the Captain HMM profile plus a match with the DUF3435 HMM profile.
-  2.3 A match with the Captain HMM profile and DUF3435 HMM profile plus a match with HMM profiles associated with the YR Recombinase Active Site.
-3. For elements lacking a confident captain gene, the script searches for a putative captain pseudogene at the beginning and end of the element.
-4. Aligns CDS and pseudogene sequences using MACSE (with amino acid output) and preprocesses the alignment with Clipkit.
-5. Runs maximum-likelihood phylogenetic tree inference, when there at least two unique captain sequences:
-  5.1 Run IQ-TREE with 1000 UFBotstrap and 1000 sh-aLRT if there at least 4 unique sequence, in other case run it without support.
-  5.2 Collapsed near-zero and low-support (when available) branches.
-  5.3 mid-root the tree.
+Command to identify captain genes/pseudogenes and build a phylogenetic tree.
+Executes five main steps:
+  1. HMM profile search against each element proteome.
+  2. Captain identification from HMM results. Three confidence levels:
+     1 - Captain HMM match only.
+         WARNING: May produce false positives and unreliable phylogenies.
+     2 - Captain HMM + DUF3435 HMM match.
+     3 - Captain HMM + DUF3435 HMM + YR Recombinase Active Site HMM match.
+  3. Pseudogene search at element boundaries for captainless elements.
+  4. MACSE alignment (AA output) trimmed with ClipKit.
+  5. IQ-TREE phylogenetic inference (>=4 unique sequences: 1000 UFBootstrap
+     + sh-aLRT; 2-3 sequences: no support; 1 sequence: skipped).
 
-There are three available mode:
--Cluster: Analyzes and performs all five steps per cluster, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
--FullAll: Analyzes and performs all five steps on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset. WARNING: For big datasets, MACSE could fail without any specific error reported.
--AllID: Analyzes and performs only the first three steps (Identification) on the whole dataset, and remove elements without a suitable Captain gene or pseudogene from the main dataset.
+Available modes:
+  Cluster  - Runs all five steps per cluster; removes captainless elements.
+  FullAll  - Runs all five steps on the full dataset; removes captainless elements.
+             WARNING: MACSE may fail silently on large datasets.
+  AllID    - Runs only steps 1-3 (identification) on the full dataset.
 
-Syntax: StarCrew CaptainIdentification [ -help ] -w <directory_path> [ -m <string> -l <integer> -c <integer> -r <integer> -ms <integer> -t <integer> --overwrite ]
+Usage: StarCrew CaptainIdentification [-help] -w <directory_path>
+       [ -m <string> -l <integer> -c <integer> -r <integer>
+         -ms <integer> -t <integer> --overwrite ]
 
 Required args:
--w, --workingDirectory: Specify the working directory where all data are stored.
+  -w, --workingDirectory  Working directory where all data are stored.
 
-Required args with Default:
--m, --mode: Specified the mode (Default: AllID) [Available mode: Cluster, FullAll, AllID].
--l, --length: Minimum length of the protein to be identify as captain (Default: 250) [range: 200 - 800].
--c, --confidenceLevel: Minimum confidence level to call a captain. Note: the script is always going to try to return the captain with the highest level of confidence (Default: 2) [range: 1 - 3].
--r, --rangeKb: Distance (as a number of kilobases) from the beginning or end of the element within which a gene must fall to be considered a captain (Default: 10) [range: 3 - 20].
+Required args with defaults:
+  -m, --mode              Run mode (Default: AllID) [Available: Cluster, FullAll, AllID].
+  -l, --length            Minimum captain protein length in aa (Default: 250) [range: 200-800].
+  -c, --confidenceLevel   Minimum confidence level for captain calling (Default: 2) [range: 1-3].
+  -r, --rangeKb           Distance in kb from element boundary for captain search (Default: 10) [range: 3-20].
 
-Required args with Default in 'Cluster' mode:
--ms, --minSize: Minimum size of a Cluster to be include in the analysis when running the 'Cluster' mode (Default: 4) [range: 4 - 10].
+Required args with defaults in 'Cluster' mode:
+  -ms, --minSize          Minimum cluster size to include in analysis (Default: 4) [range: 4-10].
 
 Optional args:
--t, --threads: Number of threads to use for hmmscan search and phylogenetic tree inference (Default: 1).
---overwrite: Flag to overwrite in case there is already a previous run of CaptainIdentification (Default: off).
--help: Display this help message.
+  -t, --threads           Threads for hmmscan and IQ-TREE (Default: 1).
+  --overwrite             Overwrite a previous run (Default: off).
+  -help                   Display this help message.
 ```
 
 The identification of the Captain gene is based on its basic description: a Tyrosine Recombinase (YR recombinase) containing a DUF3435 domain ([Gluck-Thaler et al. 2022](https://academic.oup.com/mbe/article/39/5/msac109/6588634), [Gluck-Thaler & Vogan 2024](https://academic.oup.com/nar/article/52/10/5496/7660083?login=true)). For this purpose, we construct or retrieve the following three sets of HMM profiles:
@@ -261,7 +264,7 @@ To be considered a "true" Captain, the predicted gene must pass a series of filt
 1.  **HMM Profile Count:** Must match a minimum number (defined by the user) of the HMM profiles listed above. In case the threshold is below '3', the command will always have a preference for those genes with higher number of matches.
 2.  **Minimum Length:** The protein must meet a minimum length of amino acids, which is modifiable by the user.
 3.  **Exon Count:** The exon count must be between 2 and 11. This constraint is based on the observation that Captains in the current dataset contain mostly intron-containing gene models. Also, preliminary analysis indicated that gene models with an excessive number of introns often correspond to pseudogenes, where gene predictors introduce many introns to avoid intra-frame stop codons.
-4.  **Genomic Position:** The gene must be located at the beginning of the element in the positive strand (or at the end if the element sequence is in its reverse complement). The acceptable range for this position ca be modified by the user.
+4.  **Genomic Position:** The gene must be located at the beginning of the element in the positive strand (or at the end if the element sequence is in its reverse complement). The acceptable range for this position can be modified by the user.
 
 In the scenario where no gene passes the filters to be called a 'Captain' in an element, a pseudogene will be identified if any sequence homology exists based on the CDS sequence of known Captain genes.
 
@@ -274,44 +277,53 @@ In the scenario where no gene passes the filters to be called a 'Captain' in an 
 ### SyntenyClustering
 
 ```
-Command to perform clustering of elements based on the syntenet pipeline using DIAMOND for sequence similarity search.
-It performs six main steps:
-1. Perform the initial data preprocessing step required by the syntenet pipeline.
-2. Runs DIAMOND using the preprocessed data.
-3. Runs the interspecies synteny command of syntenet to identify regions with gene collinearity between elements.
-4. Summarizes the results of syntenet on four possible modes:
- a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. WARNING: This mode may yield a high rate of false positives.
- b. SSP: Return only pairs with strong synteny (Check wrapper documentation for more information).
- c. FilterBlast: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level.
- d. FilterMetric: Filter and update collinearity percentages based on a metric system (Check wrapper documentation for more information).
-5. Defines initial clusters of elements and performs a spectral clustering process to identify subclusters.
-6. Organizes the final data output for each identified cluster.
+Command to cluster elements based on collinear regions using the syntenet pipeline.
+Executes six main steps:
+  1. Data preprocessing for syntenet.
+  2. All-vs-all DIAMOND similarity search.
+  3. Interspecies synteny detection with syntenet.
+  4. Collinearity summarization. Available modes:
+     Raw         - Pairs with >= 8% shared collinear genes.
+                   WARNING: High false positive rate.
+     SSP         - Strong synteny pairs only.
+     FilterBlast - Raw pairs filtered by nucleotide-level BLAST.
+     FilterMetric- Pairs filtered and updated by a metric system.
+  5. Spectral clustering to define element sub-clusters.
+  6. Per-cluster data organization.
 
-Syntax: StarCrew SyntenyClustering [ -help ] -w <directory_path> [ -m <string> -a <integer> -g <integer> -e <float> -n <integer> -s <integer> -th <float> { -fs <integer> -ms <integer> -i <float> -c <float> } -t <integer> --preCluster --captainInfo --overwrite ]
+Usage: StarCrew SyntenyClustering [-help] -w <directory_path>
+       [ -m <string> -a <integer> -g <integer> -e <float> -n <integer>
+          -s <integer> -th <float> { -fs <integer> -ms <integer>
+         -i <float> -c <float> } -t <integer>
+         --preCluster --captainInfo { --overwrite | --skip-syntenet } ]
 
 Required args:
--w, --workingDirectory: Specify the working directory where all data are stored.
+  -w, --workingDirectory  Working directory where all data are stored.
 
-Required args with Default:
--m, --mode: Specified the mode to run the summarizing process of synteny results (Default: FilterMetric) [Available mode: Raw, SSP, FilterBlast, FilterMetric].
--a, --anchors: Number of minimum anchor points for syntenet to call a collinear region (Default: 8) [range: 3 - 25].
--g, --gaps: Number of maximum allowed gaps between anchor points for syntenet to call a collinear region (Default: 8) [range: 5 - 25].
--e, --evalue: e-value threshold for syntenet to call a collinear region (Default: 0.00001) [range: 0.00001 - 0.01].
--n, --minNodes: Minimum number of nodes in a cluster for spectral clustering to be attempted (Default: 4).
--s, --minSize: The minimum desired size for any final sub-cluster (Default: 2).
--th, --threshold: The minimum modularity score for a set of subcluster to be accepted (Default: 0.05) [range: -0.5 - 1.0].
+Required args with defaults:
+  -m, --mode              Summarization mode (Default: FilterMetric)
+                          [Available: Raw, SSP, FilterBlast, FilterMetric].
+  -a, --anchors           Minimum anchor points for syntenet (Default: 8) [range: 3-25].
+  -g, --gaps              Maximum gaps between anchors for syntenet (Default: 8) [range: 5-25].
+  -e, --evalue            E-value threshold for syntenet (Default: 0.00001) [range: 0.00001-0.01].
+  -n, --minNodes          Minimum nodes for spectral clustering (Default: 4).
+  -s, --minSize           Minimum final sub-cluster size (Default: 1).
+  -th, --threshold        Minimum modularity score for sub-clusters (Default: 0.02) [range: -0.5-1.0].
  
- Required args with Default in 'FilterBlast' mode:
--fs, --fragmentSize: The minimum fragment size of a blast alignment to be used for blastn filter (Default: 2000) [range: 1000, 5000].
--ms, --mergeSize: The minimum merge fragment size to be used for blastn filter (Default: 5000) [range: 2000, 10000].
--i, --identity: The minimum percentage of identity of a blast alignment to be used for blastn filter (Default: 70.0) [range: 60.0, 90.0].
--c, --coverage: The minimum coverage of the filter merge fragments for a pair to pass the filter (Default: 20.0) [range: 10.0, 50.0].
+Required args with defaults in 'FilterBlast' mode:
+  -fs, --fragmentSize     Minimum BLAST fragment size (Default: 2000) [range: 1000-5000].
+  -ms, --mergeSize        Minimum merge fragment size (Default: 5000) [range: 2000-10000].
+  -i, --identity          Minimum BLAST identity % (Default: 70.0) [range: 60.0-90.0].
+  -c, --coverage          Minimum coverage of merged fragments (Default: 20.0) [range: 10.0-50.0].
 
-Optional args:
--t, --threads: Number of threads for searching software (DIAMOND and blast) (Default: 8).
---captainInfo: Flag to check and used the captain CDS/pseudogene information for the cluster. This will reduce time in downstream analysis. (Default: off).
---overwrite: Flag to overwrite in case there is already a previous run of SyntenyClustering (Default: off).
--help: Display this help message.
+Optional args:"
+  -t, --threads           Threads for DIAMOND and BLAST (Default: 8).
+  --preCluster            Pre-cluster before syntenet analysis; recommended for large datasets (Default: off).
+  --captainInfo           Include captain CDS/pseudogene info in each cluster (Default: off).
+  --overwrite             Overwrite a previous run (Default: off).
+  --skip-syntenet         Skip collinearity detection to re-run mode or clustering parameters.
+                          Not compatible with '--overwrite' (Default: off).
+  -help                   Display this help message.
 ```
 
 The clustering of elements is based on collinearity regions identified using the [syntenet](https://pubmed.ncbi.nlm.nih.gov/36539202/) pipeline. The user can define three critical parameters for collinearity analysis:
@@ -363,7 +375,7 @@ Once the final set of filtered pairs is obtained, a graph-based clustering proce
 1.  **Graph Creation:** A weighted undirected graph is created using the GCP as the edge weight. Elements without any connection are excluded from the graph.
 2.  **Cluster Definition:** A cluster is defined as a set of connected elements. **Note:** Due to the nature of connected components, not all elements inside a cluster may have a direct connection between them, and therefore might not share any sequence or cargo similarity.
 3.  **Subclustering:** For further resolution, an initial step of  spectral clustering is performed iteratively on clusters that meet a minimum size defined by the user. This process follows:
-    - **3.1. Behavior check:** The Louvain method is performed to identify the inherent cluster behavior. If cluster behavior is detected, the algorithm proceeds with an initial $k$ value (the desired number of clusters) calculated as: $k = \max(2, \text{Clusters}_{\text{louvain}} - 2)$
+    - **3.1. Behavior check:** The Louvain method is performed to identify the inherent cluster behavior. If cluster behavior is detected, the $k$ value is set to the number of clusters identified by the Louvain method, or if more than four clusters were identified, $k = \text{Clusters}_{\text{louvain}} - 2$
     - **3.2. Clustering:** Perform spectral clustering using the current $k$ value.
     - **3.3. Filtering:** Subclusters are filtered based on two criteria:
         - 1) No subcluster has a number of elements below a user-defined threshold.
@@ -375,34 +387,36 @@ Once the final set of filtered pairs is obtained, a graph-based clustering proce
 ### ClusterCharacterization
 
 ```
-Command to run the characterization of each cluster.
-It performs eight steps per cluster:
-1. Identify orthogroups through OrthoFinder.
-2. Perform all-vs-all Blastn for synteny visualization.
-3. Perform a hierarchical clustering of the elements based on Orthogroup gene count including not associated with any orthogroup.
-4. Determine the full conection of the cluster and create a cargo orthogroups heatmap and synteny figure for the cluster.
-5. Identify possible individual nesting events inside the cluster.
-6. Identify core genes in the cluster in two ways:
- 6.1. General core: Orthogroups that are present in at least 80% of the elements in the cluster.
- 6.2. Subcluster core: Orthogroups that are present in at least 80% of the elements whitin specific subclusters.
-   6.2.1. Subcluster Definition: The script first uses definitions from the graph-based approach. If no subclusters were identified, it delimits subclusters at a height above 0.8 in the hierarchical clustering.
-   6.2.2. If subslusters are present, identify core genes in each one that have at least 5 elements using the same logic of general core.
-7. If subclusters were identified in the graph-based approach, it try to identify putative cargo movement events.
-8. Determine if there are discordances at 'Clade' level between cargo hierarchical clustering and captain phylogenetic tree.
+Command to characterize each element cluster.
+Performs eight steps per cluster:
+  1. Orthogroup identification via OrthoFinder.
+  2. All-vs-all BLASTN for nucleotide synteny visualization.
+  3. Hierarchical clustering based on orthogroup gene counts.
+  4. Full cluster connectivity, cargo heatmap, and synteny figure.
+  5. Detection of individual nesting events.
+  6. Core gene identification:
+     6.1. General: orthogroups present in >= 80% of elements.
+     6.2. Specific: orthogroups present in >= 80% of elements
+          within subclusters (>= 5 elements).
+  7. Putative cargo movement event detection across subclusters.
+  8. Discordance detection between cargo clustering and captain tree.
 
-Syntax: StarCrew ClusterCharacterization [ -help ] -w <directory_path> [ -l <integer> -i <float> -t <integer> --overwrite ]
+Usage: StarCrew ClusterCharacterization [-help] -w <directory_path>
+       [ -l <integer> -i <float> -t <integer> --overwrite ]
 
 Required args:
--w, --workingDirectory: Specify the working directory where all data are stored.
+  -w, --workingDirectory  Working directory where all data are stored.
 
-Required args with Default:
--l, --length: Minimunm length of blast results to be included for the nucleotide synteny visualization (Default: 1000) [range: 200 - 5000].
--i, --identity: Minimum percentage identity of blast results to be included for the nucleotide synteny visualization (Default: 70.0) [range: 50.0 - 90.0].
+Required args with defaults:
+  -l, --length    Minimum BLAST alignment length for synteny visualization
+                  (Default: 1000) [range: 200-5000].
+  -i, --identity  Minimum BLAST identity % for synteny visualization
+                  (Default: 70.0) [range: 50.0-95.0].
 
 Optional args:
--t, --threads: Number of threads for orthofinder and blast (Default: 8).
---overwrite: Flag to overwrite in case there is already a previous run of ClusterCharacterization (Default: off).
--help: Display this help message.
+  -t, --threads   Threads for OrthoFinder and BLAST (Default: 8).
+  --overwrite     Overwrite a previous run (Default: off).
+  -help           Display this help message.
 ```
 
 This command is designed to characterize the cargo gene dynamics within each element cluster. The command initially performs a hierarchical clustering tree of the elements within the cluster to visually identify their evolutionary history using as information the Orthogroup gene count (including genes not associated with any orthogroup). It also attempts to identify any nesting events between elements inside the cluster.
@@ -440,41 +454,49 @@ Finally, the command attempts to determine discordances between the Captain phyl
 ### OrthogroupsOverrepresentation
 
 ```
-Command to identify orthogroups that are overrepresented in a specific dataset.
-It performs three main steps:
-1. Run Orthofinder with DIAMOND ultra-sensitive mode.
-2. Remove orthogroups associated with captains.
-3. Perform the analysis depending on the selected mode:
-  3.1. Outliers: Identify orthogroups that have an abnormal number of representative in the dataset using interquartile (IQR) fences [IQR = Q3 - Q1], depending on three approches for this kind of outlier identification:
-    3.1.1. Standard: Identifiy orthogroups as outliers using as fence the following value: Q3 + n * IQR.
-    3.1.2. Skew: Identify orthogroups as outliers using as fence the following value: Q3 + n*e^3MC * IQR.
-  3.2. Enrichment: Identify orthogroups enriched in a group of elements based on qualitative variables in the metadata using the one-sided Fisher's exact test.
+Command to identify overrepresented orthogroups in a dataset.
+Performs three main steps:
+  1. OrthoFinder with DIAMOND ultra-sensitive mode.
+  2. Removal of captain-associated orthogroups.
+  3. Overrepresentation analysis:
+     Outliers   - Flags orthogroups with abnormal copy numbers via
+                  skew IQR upper fence: Q3 + n*e^(4MC)*IQR).
+     Enrichment - Identifies orthogroups enriched in a metadata group
+                  using one-sided Fisher's exact test.
 
-Syntax: StarCrew OrthogroupsOverrepresentation [ -help ] -w <directory_path> [ -m <string> { -a <string> -c <integer> -cm <string> | -n <string> -v <string> } -t <integer> { --overwrite | --skip-orthofinder } ]
+Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>
+       [ -m <string> { -a <string> -c <float> -cm <string>
+         | -n <string> -v <string> -p <float> -pa <string> }
+         -t <integer> { --overwrite | --skip-orthofinder } ]
 
 Required args:
--w, --workingDirectory: Specify the working directory where all data are stored.
+  -w, --workingDirectory  Working directory where all data are stored.
 
-Required args with Default:
--m, --mode: Define the mode that will be used to flag orthogroups (Default: Outliers) [Available mode: Outliers, Enrichment].
+Required args with defaults:
+  -m, --mode         Analysis mode (Default: Outliers) [Available: Outliers, Enrichment].
+  -s, --scoreMatrix  DIAMOND score matrix for OrthoFinder (Default: BLOSUM62)
+                     [Available: BLOSUM45, BLOSUM50, BLOSUM62, BLOSUM80,
+                      BLOSUM90, PAM250, PAM70, PAM30].
 
-Required args with Default in 'Outliers' mode:
--a, --approximation: Define the IQR approximation that is going to be used to defined outliers (Default: Standard) [Available mode: Standard, Skew].
--c,--coefficient: In the case of 'IQR' rule, determine the coefficient for the fence definition (Default: 1.5) [range: 1 - 3].
--cm, --countMode: Counts to be used for outliers (Default: Gene) [Available mode: Gene, Ship].
+Required args with defaults in 'Outliers' mode:
+  -c, --coefficient    Fence coefficient (Default: 1.5) [range: 1.5-3.0].
+  -cm, --countMode     Count type for outliers (Default: Gene) [Available: Gene, Ship].
 
 Required args in 'Enrichment' mode:
--n, --name: column name of the variable in the metadata file to be used.
--v, --value: value from the variable to be compare against the rest.
+  -n, --name   Metadata column name to use for grouping.
+  -v, --value  Target value within the column to compare against the rest.
 
-Required args with Default in 'Enrichment' mode:
--p, --pValue: p-value to determined if an orthogroup is significantly enriched (Default: 0.05) [range: 0.001 - 0.1].
+Required args with defaults in 'Enrichment' mode:
+  -p, --pValue  Significance threshold (Default: 0.05) [range: 0.001-0.1].
+  -pa, --pAdj   Multiple testing correction (Default: bonferroni)
+                [Available: BH, BY, bonferroni, fdr, hochberg, holm, hommel].
 
 Optional args:
--t, --threads: Number of threads (Default: 8)
---overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsOverrepresentation. Not compatible wit '--skip-orthofinder' flag (Default: off)
---skip-orthofinder: Flag to skip orthofinder in case a previous run was done and only want to change the mode or other value of the analysis (This will remove any other result from previous runs). Not compatible with '--overwrite' flag (Default: off)
--help: Display this help message.
+  -t, --threads          Threads (Default: 8).
+  --overwrite            Overwrite a previous run. Not compatible with '--skip-orthofinder'.
+  --skip-orthofinder     Skip OrthoFinder and re-run only the analysis step.
+                         Not compatible with '--overwrite'.
+  -help                  Display this help message.
 ```
 
 This command is designed to identify orthogroups that migth be enrich in a given dataset. All othogroups will be used to perform the statistical analysis base on the mode selected by the user:
@@ -487,39 +509,43 @@ This command is designed to identify orthogroups that migth be enrich in a given
 ### OrthogroupsAnnotation
 
 ```
-Command to run a functional annotation for orthogroups.
-It performs three steps:
-1. Organize the Orthogroups that are selected base on the mode.
- 1.1 Core: Orthogoups that were identify as core by the ClusterCharacteriation command.
- 1.2 MoveAssociated: Orthogoups that were identify as part of a putative movement event between subclusters by the ClusterCharacterization command.
- 2.3 All: All orthogroups identify by the ClusterCharacterization command.
- 2.4 Overrepresented: Orthogroups that were identified as Overrepresented by the OrthogroupsOverrepresentation command.
-2. Perform the characterization of the Orthogroup proteins with three approaches:
- 2.1 InterProScan: Using all default applications except COILS and MOBIDB.
- 2.2 Foldseek: Search for homologs proteins against a database based on the 3D structure.
- 2.3 hhblits: Search domains against the PfamA database.
-3. Summarize the results of the previous step:
- 3.1 Internal summary: For each Orthogroups summarize the results per protein in a csv
- 3.2 General summary: Return a summary for the Orthogroup under the assumption that all proteins in each Orthogroups have the same function. It return only those 'chracteristics' that are shared for at least 50% of the proteins in the Orthogroup.
+Command to run functional annotation for orthogroups.
+Performs four steps:
+  1. Orthogroup selection by mode:
+     Core           - Core orthogroups from ClusterCharacterization.
+     MoveAssociated - Orthogroups linked to cargo movement events.
+     All            - All orthogroups from ClusterCharacterization.
+     Overrepresented- Orthogroups from OrthogroupsOverrepresentation.
+  2. Protein characterization:
+     2.1. InterProScan (CDD, Gene3D, HAMAP, PANTHER, Pfam, PIRSF,
+          PRINTS, PROSITEPATTERNS, PROSITEPROFILES, SFLD, SMART,
+          SUPERFAMILY, TIGRFAM).
+     2.2. Foldseek (3D-structure-based homology search).
+     2.3. hhblits (PfamA domain search).
+  3. Per-orthogroup internal summary CSV.
+  4. General summary retaining annotations shared by >= 50% of proteins.
 
-Syntax: StarCrew OrthogroupsAnnotation [ -help ] -w <directory_path> [ -m <string> -f <string> -t <integer> --overwrite ]
+Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>
+       [ -m <string> -f <string> -t <integer> --overwrite ]
 
 Required args:
--w, --workingDirectory: Specify the working directory where all data are stored.
+  -w, --workingDirectory  Working directory where all data are stored.
 
-Required args with Default:
--m, --mode: Define the orthogroups to be analyzed (Default: Core) [Available mode: MoveAssociated, Core, All, Overrepresented].
--f, --foldseekdb: Name of the Foldseek database to use (Default: afdb_swissprot) [Available databases: pdb, afdb_swissprot].
+Required args with defaults:
+  -m, --mode       Orthogroups to annotate (Default: All)
+                   [Available: Core, MoveAssociated, All, Overrepresented].
+  -f, --foldseekdb Foldseek database (Default: afdb_swissprot)
+                   [Available: pdb, afdb_swissprot].
 
 Optional args:
--t, --threads: Number of threads for all analysis (Default: 8).
---overwrite: Flag to overwrite in case there is already a previous run of OrthogroupsAnnotation (Default: off).
--help: Display this help message.
+  -t, --threads    Threads for all analyses (Default: 8).
+  --overwrite  Overwrite a previous run (Default: off).
+  -help        Display this help message.
 ```
 
-The goal of this command is not to perform a deep analysis into the functional annotation of genes in orthogroups of interest. Instead, it is designed for exploratory analysis on the putative function of these genes, allowing users to quickly gain ideas about possible functions and select specific genes/orthogroups to conduct more in-depth analyses using their preferred approaches.
+The goal of this command is not to perform a deep analysis into the functional annotation of genes in orthogroups of interest. Instead, it is designed for exploratory analysis on the putative function of these genes, allowing users to gain ideas about possible functions and select specific genes/orthogroups to conduct more in-depth analyses using their preferred approaches.
 
-The main logic behind this command is the assumption that all proteins within the same orthogroup share the same function. Therefore, a general summary of annotations is generated for any function or domain present in at least 50% of the elements within an orthogroup.
+The main logic behind this command is the assumption that all proteins within the same orthogroup share the same function. Therefore, a general summary of annotations is generated for any domain present in at least 50% of the elements within an orthogroup.
 
 This command employs three distinct annotation approaches:
 
