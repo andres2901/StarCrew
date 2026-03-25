@@ -307,7 +307,7 @@ Required args with defaults:
   -g, --gaps              Maximum gaps between anchors for syntenet (Default: 8) [range: 5-25].
   -e, --evalue            E-value threshold for syntenet (Default: 0.00001) [range: 0.00001-0.01].
   -n, --minNodes          Minimum nodes for spectral clustering (Default: 4).
-  -s, --minSize           Minimum final sub-cluster size (Default: 1).
+  -s, --minSize           Minimum final sub-cluster size (Default: 2).
   -th, --threshold        Minimum modularity score for sub-clusters (Default: 0.02) [range: -0.5-1.0].
  
 Required args with defaults in 'FilterBlast' mode:
@@ -351,7 +351,7 @@ A preliminary filter is performed by removing any pair with a GCP below 8%, as i
     - **Note:** These values were calculated during preliminary testing. They correspond to a threshold where no 'false positive' pairs were found, and a clear 'good' diagonal was visualized in a nucleotide dot-plot.
 3.  **Blastn Filter (FilterBlast):**
     - This was the initial filtering approach design for the command, inspired by the BLAST result cleaning process described in [Westerberg et al. 2021](https://pubmed.ncbi.nlm.nih.gov/38218923/) before LTR network construction.
-    - All pairs not considered SSP are further analyzed using an all-versus-all blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/index.php).
+    - All pairs not considered SSP are further analyzed using an pairwise blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/index.php).
     - The raw BLAST results are processed through the following steps to define the final maintained pairs:
         - Remove hits below user-defined thresholds for fragment size and identity percentage.
         - Merge overlapping hits.

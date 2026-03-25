@@ -91,7 +91,7 @@ print_help() {
   echo "  -g, --gaps              Maximum gaps between anchors for syntenet (Default: 8) [range: 5-25]."
   echo "  -e, --evalue            E-value threshold for syntenet (Default: 0.00001) [range: 0.00001-0.01]."
   echo "  -n, --minNodes          Minimum nodes for spectral clustering (Default: 4)."
-  echo "  -s, --minSize           Minimum final sub-cluster size (Default: 1)."
+  echo "  -s, --minSize           Minimum final sub-cluster size (Default: 2)."
   echo "  -th, --threshold        Minimum modularity score for sub-clusters (Default: 0.02) [range: -0.5-1.0]."
   echo
   echo "Required args with defaults in 'FilterBlast' mode:"
