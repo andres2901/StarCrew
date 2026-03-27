@@ -966,6 +966,8 @@ else
   log_info "Skipping syntenet analysis."
   log_info "Removing previous cluster results if available..."
   rm -r "${working_directory}/Clusters/"* 2> /dev/null
+  rm ${working_directory}/Workspace/$(basename -s .sh "$0")/Collinearity_percentage.txt 2> /dev/null
+  rm -r "${working_directory}/Workspace/$(basename -s .sh "$0")/temp" 2> /dev/null
   if [[ -f "${working_directory}/metadata_files/metadata.csv" ]]; then
     metadata_flag=true
   fi
