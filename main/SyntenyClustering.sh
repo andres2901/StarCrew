@@ -487,7 +487,6 @@ process_collinearity() {
         "${temp_prefix}_percentage_general_filter.txt" \
         "${temp_prefix}_percentage_pairwise.txt" \
       | awk "$format_awk" \
-      | awk '{if($3 >= 8) print}' \
       | sed -e 's/ /;/g' | sort -t ';' \
       >> "${temp_dir}/Collinearity_percentage.txt"
 
@@ -525,7 +524,6 @@ process_collinearity() {
         "${temp_prefix}_percentage_general_filter.txt" \
         "${temp_prefix}_percentage_pairwise.txt" \
       | awk "$format_awk" \
-      | awk '{if($3 >= 8) print}' \
       | sed -e 's/ /;/g' | sort -t ';' \
       >> "${temp_prefix}_Collinearity_percentage.txt"
 
@@ -585,7 +583,6 @@ process_collinearity() {
         "${temp_prefix}_percentage_general_filter.txt" \
         "${temp_prefix}_percentage_pairwise.txt" \
       | awk "$format_awk" \
-      | awk '{if($3 >= 8) print}' \
       | sed -e 's/ /;/g' | sort -t ';' \
       >> "${temp_prefix}_Collinearity_percentage.txt"
 
