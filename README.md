@@ -41,7 +41,7 @@ This wrapper was specifically written for Linux and requires the following softw
 - gotree v0.5.1.
 - hhsuite v3.3.0.
 - hmmer v3.4.
-- interproscan.
+- interproscan v5.77-108.
 - iqtree3 3.0.1.
 - macse v2.07.
 - metaeuk v7.bba0d80.
@@ -180,7 +180,7 @@ Optional args:
   -help               Display this help message.
 ```
 
-This command filters the input data based on a series of criteria and organizes the resulting database within a project directory. This directory serves as the starting point for all subsequent commands. The user should be aware that the element naming may change, with a specific, new ID designated for the Project. However, an association file will always be provided to map the original element ID to the new ID.
+This command filters the input data based on a series of criteria and organizes the resulting database within a project directory. This directory serves as the starting point for all subsequent commands. The user should be aware that the element name may change to a new ID designated for the Project. However, an association file will always be provided to map the original element ID to the new ID.
 
 The command provides three main filtering approaches you can utilize:
 
@@ -263,7 +263,7 @@ To be considered a "true" Captain, the predicted gene must pass a series of filt
 
 1.  **HMM Profile Count:** Must match a minimum number (defined by the user) of the HMM profiles listed above. In case the threshold is below '3', the command will always have a preference for those genes with higher number of matches.
 2.  **Minimum Length:** The protein must meet a minimum length of amino acids, which is modifiable by the user.
-3.  **Exon Count:** The exon count must be between 2 and 11. This constraint is based on the observation that Captains in the current dataset contain mostly intron-containing gene models. Also, preliminary analysis indicated that gene models with an excessive number of introns often correspond to pseudogenes, where gene predictors introduce many introns to avoid intra-frame stop codons.
+3.  **Exon Count:** The exon count must be between 2 and 11.
 4.  **Genomic Position:** The gene must be located at the beginning of the element in the positive strand (or at the end if the element sequence is in its reverse complement). The acceptable range for this position can be modified by the user.
 
 In the scenario where no gene passes the filters to be called a 'Captain' in an element, a pseudogene will be identified if any sequence homology exists based on the CDS sequence of known Captain genes.
@@ -340,18 +340,18 @@ For the purpose of clustering, we use two specific collinearity metrics:
     - This value is calculated by the command using the syntenet output and the gene prediction annotation for both elements. Two ECP values are calculated, one for each element in the pair.
     - ECP is calculated by the following formula: $ECP_x= \frac{\sum CG_x}{\sum TG_x} \times 100$, where $CG_x$ equals the total number of non-duplicate collinear genes in element $x$, and $TG_x$ represents the total number of genes in element $x$.
 
-A preliminary filter is performed by removing any pair with a GCP below 8%, as initial testing indicated these pairs consistently represented false positives. After this basic filtering, the final pairs can be returned using one of four criteria-based modes:
+The final pairs can be returned using one of four criteria-based modes:
 
 1.  **Raw Mode:**
-    - Returns all pairs remaining after the basic GCP < 8% filtering.
-    - **WARNING:** This mode may yield a high rate of false positives and requires significant manual effort to confirm the results.
+    - Returns all pairs.
+    - **WARNING:** This mode may yield a high rate of false positives and requires manual effort to confirm the results.
 2.  **Strong Syntenic Pairs (SSP):**
     - Returns all pairs with a $GCP \ge 41$%.
     - For pairs with a relatively large difference in length and/or gene content, this mode also accepts pairs where $ECP_x \ge 45$% and the ratio between the ECPs is at least $1.8$, meaning $\frac{ECP_x}{ECP_y} \ge 1.8$.
     - **Note:** These values were calculated during preliminary testing. They correspond to a threshold where no 'false positive' pairs were found, and a clear 'good' diagonal was visualized in a nucleotide dot-plot.
 3.  **Blastn Filter (FilterBlast):**
     - This was the initial filtering approach design for the command, inspired by the BLAST result cleaning process described in [Westerberg et al. 2021](https://pubmed.ncbi.nlm.nih.gov/38218923/) before LTR network construction.
-    - All pairs not considered SSP are further analyzed using an pairwise blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/index.php).
+    - All pairs not considered SSP are further analyzed using a pairwise blastn search, employing parameters similar to those of the [YASS web server](https://bioinfo.univ-lille.fr/yass/index.php).
     - The raw BLAST results are processed through the following steps to define the final maintained pairs:
         - Remove hits below user-defined thresholds for fragment size and identity percentage.
         - Merge overlapping hits.
@@ -368,7 +368,7 @@ A preliminary filter is performed by removing any pair with a GCP below 8%, as i
         - Each remaining hit contributes 1 point. Reciprocal hits for a single anchor pair thus return 2 points.
         - Bonus Points: Hits with identity percentage $\ge 95$% receive $0.1$ extra point per $200 \text{aa}$ of alignment length. **Example:** A hit with 98% identity and $350 \text{aa}$ alignment length gives $0.175$ extra points.
         - **Acceptance Criteria:** A pair is accepted if the obtained points are equal to or higher than the number of anchor points defined by the user. If the user-defined anchor point parameter is less than 6, the threshold will be 6 to prevent 'false positive' results from using a low metric threshold.
-        - **GCP/ECP Update:** A ratio is defined as $\frac{Obtain\_points}{Expected\_points}$. The GCP and ECP of the pair are then updated by multiplying them by this ratio. **Note:** If a pair's ratio is higher than 1 (due to bonus points), the ratio is capped at 1 to prevent GCP or ECP from exceeding 100%.
+        - **GCP/ECP Update:** A ratio is defined as $\frac{Obtain\_{points}}{Expected\_{points}}$. The GCP and ECP of the pair are then updated by multiplying them by this ratio. **Note:** If a pair's ratio is higher than 1 (due to bonus points), the ratio is capped at 1 to prevent GCP or ECP from exceeding 100%.
 
 Once the final set of filtered pairs is obtained, a graph-based clustering process is performed:
 
@@ -424,8 +424,7 @@ This command is designed to characterize the cargo gene dynamics within each ele
 The main goal of this command is to identify two relevant groups of genes within each cluster:
 
 - **Core Genes:**
-    - We use a loose definition of "core gene" in this context. While core genes are generally defined as genes present in all genomes of a dataset, or in a less strict definition (often called soft core) as genes present in at least 95%-98% of genomes, this strict threshold is inappropriate here. This is due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this wrapper.
-    - Therefore, "core genes" here are defined as those present in at least 80% of the elements in a cluster or subcluster.
+    - We use a loose definition of "core gene" in this context. While core genes are generally defined as genes present in all genomes of a dataset, or in a less strict definition (often called soft core) as genes present in at least 95%-98% of genomes, this strict threshold is inappropriate here. This is due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this wrapper. Therefore, "core genes" here are defined as those present in at least 80% of the elements in a cluster or subcluster.
     - Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster/subcluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in the element over time.
 - **Movement Genes:**
     - This set of genes is identified based on presence/absence patterns that suggest their introduction into a different element was caused by horizontal gene movement from one element to another.
@@ -501,10 +500,8 @@ Optional args:
 
 This command is designed to identify orthogroups that migth be enrich in a given dataset. All othogroups will be used to perform the statistical analysis base on the mode selected by the user:
 
-- **Outliers:** In this case a general comparison of orthogroup count will be taken. In general, the idea is to identified outliers using two different approximations of the Interquartile range (IQR) fence. The IQR is calculated as follows: $\text{IQR} = \text{Q3} - \text{Q1}$, where $Q1$ and $Q3$ represent the first and third quartile of the data, respectively. The two available approximations are:
-    - **Standard:** In this case the standard upper IQR fence is used to define outliers. This fence is calculated as: $\text{Fence} = \text{Q3} + n * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation.
-    - **Skew:** In general, orthogroup size distribution of cargo genes in Starships elements tend to have a right-skewed behaviour. In this cases, it is ideal to use an approach that take into accoun this type of behaviour. For IQR, there's a version that use the medcouple that is a metric for skewness. In this case, the upper fence is calculated as: $\text{Fence} = \text{Q3} + ne^{3\text{MC}} * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation and $MC$ is the medcople metric for the dataset.
-- **Enrichment:** It identified orthogroups enriched in an specific group of elements based on a qualitative variable available in the metadata file of the elements using the one-sided Fisher's exact test and False discovery rate using the Benjamini-Hochberg approach for p-value adjust for multiple comparison.
+- **Outliers:** In this case a general comparison of orthogroup count will be taken. In general, the idea is to identified outliers using two different approximations of the Interquartile range (IQR) fence. The IQR is calculated as follows: $\text{IQR} = \text{Q3} - \text{Q1}$, where $Q1$ and $Q3$ represent the first and third quartile of the data, respectively. In general, orthogroup size distribution of cargo genes in Starships elements tend to have a right-skewed behaviour. In this cases, it is ideal to use an approach that take into account this type of behaviour. For IQR, there's a version that use the medcouple that is a metric for skewness. In this case, the upper fence is calculated as: $\text{Fence} = \text{Q3} + ne^{3\text{MC}} * \text{IQR}$, where $n$ is a positive float coefficient used for the fence calculation and $MC$ is the medcople metric for the dataset.
+- **Enrichment:** It identified orthogroups enriched in an specific group of elements based on a qualitative variable available in the metadata file of the elements using the one-sided Fisher's exact test.
 
 ### OrthogroupsAnnotation
 
@@ -557,8 +554,7 @@ This command employs three distinct annotation approaches:
     - Two databases are supported for this command: PDB and AlphaFold. We recommend using the AlphaFold database due to its larger size, which provides a higher probability of finding a match.
 3.  **HHblits:**
     - The result from this approach is returned for the whole orthogroup, as this software compares a multiple sequence alignment against a database of HMM profiles. 
-    - For this command, we use the Pfam-A database designed for HHblits.
-    - **Note:** Users should be aware that the distributed Pfam-A database for this specific software is outdated.
+    - For this command, we use the Pfam-A database designed for HHblits. **Note:** Users should be aware that the distributed Pfam-A database for this specific software is outdated.
 
 ## Project directory organization
 

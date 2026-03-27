@@ -21,7 +21,7 @@ readonly MAIN_DIR="$(realpath "${SCRIPT_DIR}")"
 readonly LIB_DIR="${MAIN_DIR}/lib"
 readonly DATABASES_DIR="${MAIN_DIR}/databases"
 
-readonly INTERPROSCAN_VERSION="5.76-107.0"
+readonly INTERPROSCAN_VERSION="5.77-108.0"
 readonly INTERPROSCAN_ARCHIVE="interproscan-${INTERPROSCAN_VERSION}-64-bit.tar.gz"
 readonly INTERPROSCAN_URL="https://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/${INTERPROSCAN_VERSION}/${INTERPROSCAN_ARCHIVE}"
 
