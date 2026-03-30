@@ -136,13 +136,17 @@ print_help() {
 #   0 always; sets previous_captain_run=true if prior data exists
 check_previous_information() {
   local base_dir="$1"
-  local captain_dir="${base_dir}/$(basename -s .sh "$0")"
 
-  if [[ ! -f "${captain_dir}/Captains_CDS.fa" ]]; then
+  captain_dir=$(find "$base_dir" -maxdepth 1 -type d -name "$(basename -s .sh "$0")" 2>/dev/null)
+
+  if [[ ! -d "$captain_dir" ]]; then
+    previous_captain_run=false
     return 0
   fi
 
-  check_fasta_dna "${captain_dir}/Captains_CDS.fa"
+  if [[ -f "${captain_dir}/Captains_CDS.fa" ]]; then
+    check_fasta_dna "${captain_dir}/Captains_CDS.fa"
+  fi
 
   if [[ -f "${captain_dir}/Captains_pseudo.fa" ]]; then
     check_fasta_dna "${captain_dir}/Captains_pseudo.fa"
@@ -457,6 +461,34 @@ run_alignment() {
       "${DATABASE_PATH}/Captains_CDS.fa" \
       -o "${temp_dir}/Selected_captain_CDSs.fa"
 
+      if [[ ! -s "${temp_dir}/Selected_captain_CDSs.fa" ]]; then
+        rm -r ${temp_dir}/blast ${temp_dir}/Selected_captain_CDSs*
+        if [[ $mode == "Cluster" ]]; then
+          captain_dir=$(find "${base_dir}/../../" -maxdepth 1 -type d -name "$(basename -s .sh "$0")" 2>/dev/null)
+          if [[ ! -z $captain_dir ]]; then
+            makeblastdb -in "${captain_dir}/Captains_CDS.fa" \
+              -dbtype nucl -out "${temp_dir}/blast/Captains_CDS_database" > /dev/null
+            blastn -query "${pseudo_exons}" \
+              -db "${temp_dir}/blast/Captains_CDS_database" \
+              -task blastn -perc_identity 60 -qcov_hsp_perc 60 \
+              -evalue 1e-5 -max_hsps 1 -outfmt "6 sseqid" \
+              | sort -u > "${temp_dir}/Selected_captain_CDSs.txt"
+            seqkit grep --quiet \
+              -f "${temp_dir}/Selected_captain_CDSs.txt" \
+              "${captain_dir}/Captains_CDS.fa" \
+              -o "${temp_dir}/Selected_captain_CDSs.fa"
+          else
+            log_warning "No captain gene available for this dataset alignment." >&2
+            captainless_flag=true
+            return 1     
+          fi
+        else
+          echo "Error: no captain gene or pseudogene identified in this dataset." >&2
+          captainless_flag=true
+          return 1
+        fi
+      fi
+
     macse -prog alignSequences \
       -seq "${temp_dir}/Selected_captain_CDSs.fa" \
       -seq_lr "${pseudo_exons}" \
@@ -469,14 +501,14 @@ run_alignment() {
       -o "${working_dir}/Captain_proteins_aligned.fa"
 
   else
-    echo "Error: no captain gene or pseudogene identified in this dataset." >&2
+    log_warning "No captain gene available for this dataset alignment." >&2
     captainless_flag=true
     return 1
   fi
 
   if [[ ! -f "${working_dir}/Captain_proteins_aligned.fa" ]]; then
-    echo "Error: MACSE produced no output file." >&2
-    alignmentless_flag=true
+    echo "Error: no captain gene or pseudogene identified in this dataset." >&2
+    captainless_flag=true
     return 1
   fi
 
