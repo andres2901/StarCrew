@@ -172,7 +172,12 @@ check_gff_file() {
 
   local col_check
   col_check=$(grep -v "^#" "$gff_path" | awk -F '\t' '{print NF}' | sort -u)
-  if [[ "$col_check" -ne 9 ]]; then
+
+  if declare -p col_check 2>/dev/null | grep -q '\n'; then
+    echo "Error: '${gff_path}' has inconsistent column numbers:" >&2
+    printf '%s\n' "${col_check[@]}"
+    exit 1
+  elif [[ "$col_check" -ne 9 ]]; then
     echo "Error: '${gff_path}' has inconsistent column count (expected 9)." >&2
     exit 1
   fi
@@ -193,34 +198,6 @@ check_gff_file() {
   fi
 }
 
-# Validates a two-column file mapping element IDs to GFF file paths, and checks
-# that all referenced GFF files exist on disk.
-# Arguments:
-#   $1 - path to the ome2gff mapping file
-# Returns:
-#   0 on success, exits with 1 if missing, malformed, or files not found
-check_gff_paths() {
-  local gff_path="$1"
-  if [[ ! -f "$gff_path" ]]; then
-    echo "Error: file '${gff_path}' does not exist." >&2
-    exit 1
-  fi
-
-  local col_check
-  col_check=$(awk -F '\t' '{print NF}' "$gff_path" | sort -u)
-  if [[ "$col_check" -ne 2 ]]; then
-    echo "Error: '${gff_path}' does not have exactly 2 columns." >&2
-    exit 1
-  fi
-
-  while read -r element gff_file; do
-    if [[ ! -f "$gff_file" ]]; then
-      echo "Error: GFF file '${gff_file}' for element '${element}' not found." >&2
-      exit 1
-    fi
-  done < "$gff_path"
-}
-
 # Validates that a boundaries file exists and has 21 columns with valid strand
 # and coordinate values.
 # Arguments:
@@ -237,7 +214,12 @@ check_boundaries_file() {
   local col_check
   col_check=$(grep -v "^#" "$boundaries_path" \
     | awk -F '\t' '{print NF}' | sort -u)
-  if [[ "$col_check" -ne 21 ]]; then
+
+  if declare -p col_check 2>/dev/null | grep -q '\n'; then
+    echo "Error: '${boundaries_path}' has inconsistent column numbers:" >&2
+    printf '%s\n' "${col_check[@]}"
+    exit 1
+  elif [[ "$col_check" -ne 21 ]]; then
     echo "Error: '${boundaries_path}' does not have 21 columns." >&2
     exit 1
   fi
@@ -254,6 +236,55 @@ check_boundaries_file() {
     echo "Error: '${boundaries_path}' has inconsistent column values." >&2
     exit 1
   fi
+}
+
+# Validates a two-column file mapping element IDs to GFF file paths, and checks
+# that all referenced GFF files exist on disk.
+# Arguments:
+#   $1 - path to the ome2gff mapping file
+#   $2 - path to the boundaries file
+#   $3 - separator of genome code with ID feature use in Starfish
+# Returns:
+#   0 on success, exits with 1 if missing, malformed, or files not found
+check_gff_paths() {
+  local gff_path="$1"
+  local boundaries_path="$2"
+  local separator="$3"
+
+  check_boundaries_file "${boundaries_path}"
+
+  if [[ ! -f "$gff_path" ]]; then
+    echo "Error: file '${gff_path}' does not exist." >&2
+    exit 1
+  fi
+
+  local col_check
+  col_check=$(awk -F '\t' '{print NF}' "$gff_path" | sort -u)
+  if declare -p col_check 2>/dev/null | grep -q '\n'; then
+    echo "Error: '${gff_path}' has inconsistent column numbers:" >&2
+    printf '%s\n' "${col_check[@]}"
+    exit 1
+  elif [[ "$col_check" -ne 2 ]]; then
+    echo "Error: '${gff_path}' does not have 2 columns." >&2
+    exit 1
+  fi
+  
+  local genome_check
+  genome_check=$(grep -vFf <(cut -f1 $gff_path) <(awk -v s="$separator" 'BEGIN{FS="\t"}NR>1{
+    split($1,array,s); print array[1]}' "$boundaries_path" | sort -u))
+  
+  if [[ ! -z "${genome_check}" ]]; then
+    echo "Error: The following genomes are missing in the gff path file:"
+    printf '%s\n' "${genome_check[@]}"
+    exit 1
+  fi
+
+  while read -r element gff_file; do
+    if [[ ! -f "$gff_file" ]]; then
+      echo "Error: GFF file '${gff_file}' for element '${element}' not found." >&2
+      exit 1
+    fi
+  done < "$gff_path"
 }
 
 # Validates a metadata CSV file: checks existence, column consistency, unique

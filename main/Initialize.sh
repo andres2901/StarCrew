@@ -62,7 +62,7 @@ readonly AGAT_CONFIG_PATH="$(realpath "${AGAT_CONFIG}")"
 # Returns:
 #   0 always
 print_help() {
-  echo "Command to organize the working directory to run the subsequent commands in the workflow."
+  echo "Script to organize the working directory to run the subsequent commands in the workflow."
   echo
   echo "Usage: StarCrew $(basename -s .sh "$0") [-help] -f <file_path> -g <file_path>"
   echo "       [ -m <string> -gc <integer> -r <integer> -mg <integer> -o <string>"
@@ -751,14 +751,6 @@ elif [[ "$mode" == "Starfish" ]]; then
     print_help
     exit 1
   fi
-  check_fasta_dna "$fasta_path"
-  fasta_path=$(realpath "$fasta_path")
-  check_gff_paths "$gff_path"
-  gff_path=$(realpath "$gff_path")
-  check_boundaries_file "$boundaries_path"
-  boundaries_path=$(realpath "$boundaries_path")
-  check_fasta_protein "$captains_path"
-  captains_path=$(realpath "$captains_path")
 
   impossible_separator=":;|"
   impossible_separator_pattern="[${impossible_separator}]"
@@ -766,6 +758,14 @@ elif [[ "$mode" == "Starfish" ]]; then
     echo "Error: separator '${separator}' is not accepted." >&2
     exit 1
   fi
+
+  check_fasta_dna "$fasta_path"
+  fasta_path=$(realpath "$fasta_path")
+  check_fasta_protein "$captains_path"
+  captains_path=$(realpath "$captains_path")  
+  check_gff_paths "$gff_path" "$boundaries_path" "$separator"
+  boundaries_path=$(realpath "$boundaries_path")
+  gff_path=$(realpath "$gff_path")
 fi
 
 if [[ -z "$metadata_path" ]]; then
