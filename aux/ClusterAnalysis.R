@@ -1081,6 +1081,7 @@ plot_subcluster_synteny <- function(
       elements_cluster    <- movement_result$elements_in
       elements_other      <- movement_result$elements_out
       nb_clust_result     <- movement_result$k_analysis
+      orthogroups_movement <- movement_result$orthogroups
     }
 
     # --- Plot movement synteny ------------------------------------------------
@@ -1120,7 +1121,8 @@ plot_subcluster_synteny <- function(
           sub_cl  <- subset(ortho_counts, select = cl_seqs)  %>% filter(!if_all(everything(), ~ .x == 0))
           sub_oth <- subset(ortho_counts, select = oth_seqs) %>% filter(!if_all(everything(), ~ .x == 0))
 
-          moved_orthos <- intersect(rownames(sub_cl), rownames(sub_oth))
+          moved_orthos <- intersect(rownames(sub_cl), rownames(sub_oth)) 
+          moved_orthos <- moved_orthos[moved_orthos %in% orthogroups_movement]
 
           sub_cl  <- as.data.frame(sub_cl[moved_orthos,  , drop = FALSE])
           sub_oth <- as.data.frame(sub_oth[moved_orthos, , drop = FALSE])
@@ -1181,6 +1183,7 @@ get_discordant <- function(tree1, tree2) {
   # Build a contingency table and map each label in tree1 to the most frequent
   # corresponding label in tree2 (greedy label alignment)
   ct  <- table(tree1, tree2)
+  print(ct)
   best_match <- apply(ct, 1, which.max)
 
   aligned_tree1 <- tree1
@@ -1431,7 +1434,10 @@ if (clustering_data$individual_clusters == 1) {
     }
 
     fit_tree  <- cutree(hclust_tree, k = k_num)
+    fit_tree <- fit_tree[sort(names(fit_tree))]
+
     fit_cargo <- cutree(clustering_data$hierar_cl, k = k_num)
+    fit_cargo <- fit_cargo[sort(names(fit_cargo))]
 
     discordant <- unique(c(
       get_discordant(fit_tree,  fit_cargo),
