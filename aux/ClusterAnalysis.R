@@ -3,11 +3,11 @@
 # ==============================================================================
 # Description : Performs comparative analysis of starships elements,
 #               including hierarchical clustering of orthogroups, synteny
-#               visualization, nesting detection, gene movement analysis,
+#               visualization, nesting detection, pangenome analysis,
 #               and Captain vs Cargo discordance analysis.
 # Usage       : Rscript ClusterAnalysis.R [options]
 # Author      : Andres F. Lizcano Salas
-# Date        : 11/Mar/2026
+# Date        : 24/Apr/2026
 # ==============================================================================
 
 
@@ -266,10 +266,78 @@ perform_initial_clustering <- function(orthogroups_file = "Orthogroups.GeneCount
 }
 
 
-#' Identify core genes shared across elements
+#' Identify shared accessory genes
 #'
-#' Defines general core genes (present in >= 80% of all elements) and
-#' subcluster-specific core genes (present in >= 80% of elements within
+#' Defines shared accesory genes (genes shared between subclusters) and subcluster accesory 
+#' genes (only present in one subcluster). Results are written to disk as both .txt and .csv files.
+#'
+#' @param accessory        Numeric matrix. Orthogroup counts (orthogroups x elements).
+#' @param accessory_matrix List of the Numeric matrix of accessory genes in each subcluster.
+#' @param orthocounts      Numeric matrix. Orthogroup counts (orthogroups x elements).
+#' @param cluster_number   Character. Suffix appended to output filenames. Use ""
+#'                         for the top-level (non-clustered) analysis.
+#'
+#' @return A named list with elements:
+#'   \item{shared_acc}{Character vector of share accessory orthogroup IDs}
+#'   \item{subcluster_acc}{Character vector of subcluster accesory orthogroup IDs}
+Shared_accessory_analysis <- function(accessory, accessory_matrix, orthocounts, cluster_number = "") {
+  
+  shared_acc <- character()
+  sub_acc <- character()
+  for (sub_id in names(accessory)) {
+    subcluster_acc <- accessory[[paste(sub_id)]]
+    subcluster_acc <- subcluster_acc[! subcluster_acc %in% shared_acc]
+    matrix <- accessory_matrix[[paste(sub_id)]]
+    elements_cluster <- colnames(matrix)
+    for(orthogroupID in subcluster_acc) {
+      Orthogroup <- as.data.frame(orthocounts[orthogroupID, ! colnames(orthocounts) %in% elements_cluster])
+      Orthogroup <- Orthogroup[,colSums(Orthogroup) >= 1]
+      if(is.null(ncol(Orthogroup))){ next }
+      if(ncol(Orthogroup) >= 1) {
+        shared_acc <- c(shared_acc, orthogroupID)
+        subcluster_acc <- subcluster_acc[ ! subcluster_acc %in% orthogroupID]
+      }
+    }
+
+    if(length(subcluster_acc) >= 1) {
+      sub_acc <- c(sub_acc, subcluster_acc)
+      subcluster_acc_matrix <- orthocounts[subcluster_acc, elements_cluster]
+      write.table(
+        subcluster_acc,
+        file      = paste0("SubCluster", sub_id, cluster_number, "-Accessory", ".txt"),
+        sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
+      )
+      write.csv(
+        subcluster_acc_matrix,
+        file      = paste0("SubCluster", sub_id, cluster_number, "-Accessory",".csv"),
+        row.names = TRUE, quote = FALSE
+      )
+    }
+  }
+
+  if( length(shared_acc) >= 1){
+    share_acc_matrix <- orthocounts[shared_acc,]
+    share_acc_matrix <- share_acc_matrix[rowSums(share_acc_matrix) >= 1,]
+    write.table(
+      shared_acc,
+      file      = "Shared-Accessory.txt",
+      sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
+    )
+    write.csv(
+      share_acc_matrix,
+      file      = paste0("Shared-Accessory", ".csv"),
+      row.names = TRUE, quote = FALSE
+    )
+  }
+
+  return(list(shared_acc = shared_acc, subcluster_acc = sub_acc))
+}
+
+
+#' Identify core and accessory genes
+#'
+#' Defines core genes (present in >= 80% of all elements), shared accesory genes (genes shared 
+#' between subclusters) and subcluster accesory genes (present in >= 80% of elements within
 #' each subcluster). Results are written to disk as both .txt and .csv files.
 #'
 #' @param ortho_counts   Numeric matrix. Orthogroup counts (orthogroups x elements).
@@ -280,28 +348,30 @@ perform_initial_clustering <- function(orthogroups_file = "Orthogroups.GeneCount
 #'                       load_and_preprocess_data()$subclusters.
 #'
 #' @return A named list with elements:
-#'   \item{general_core}{Character vector of general core orthogroup IDs}
-#'   \item{specific_core}{Character vector of subcluster-specific core orthogroup IDs}
-core_genes_analysis <- function(ortho_counts, cluster, cluster_number = "", subcluster) {
+#'   \item{core}{Character vector of general core orthogroup IDs}
+#'   \item{shared_acc}{Character vector of share accessory orthogroup IDs}
+#'   \item{subcluster_acc}{Character vector of subcluster accesory orthogroup IDs}
+pangenome_analysis <- function(ortho_counts, cluster, cluster_number = "", subcluster) {
 
   # --- General core genes (present in >= 80% of all elements) ----------------
-  general_core_mat <- ortho_counts[rowSums(ortho_counts < 1) <= ncol(ortho_counts) * 0.2, ]
-  general_core     <- rownames(general_core_mat)
+  core_mat <- ortho_counts[rowSums(ortho_counts < 1) <= ncol(ortho_counts) * 0.2, ]
+  core     <- rownames(core_mat)
 
-  if (length(general_core) > 0) {
+  if (length(core) > 0) {
     write.table(
-      general_core,
-      file      = paste0("Core_genes-General", cluster_number, ".txt"),
+      core,
+      file      = paste0("Core_genes", cluster_number, ".txt"),
       sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
     )
     write.csv(
-      general_core_mat,
-      file      = paste0("Core_genes-General", cluster_number, ".csv"),
+      core_mat,
+      file      = paste0("Core_genes", cluster_number, ".csv"),
       row.names = TRUE, quote = FALSE
     )
   }
 
-  specific_core <- character()
+  subcluster_acc <- list()
+  subcluster_acc_mat <- list()
 
   # --- Subcluster-specific core genes -----------------------------------------
   # Branch A: clustering is performed internally (cutree at h = 0.8)
@@ -314,24 +384,24 @@ core_genes_analysis <- function(ortho_counts, cluster, cluster_number = "", subc
         sub_counts <- subset(ortho_counts, select = names(fit[fit == sub_id]))
 
         if (ncol(sub_counts) > 4) {
-          sub_core_mat <- sub_counts[rowSums(sub_counts < 1) <= ncol(sub_counts) * 0.2, ]
+          sub_acc_mat <- sub_counts[rowSums(sub_counts < 1) <= ncol(sub_counts) * 0.2, ]
 
-          if (nrow(sub_core_mat) > 0) {
-            core         <- rownames(sub_core_mat)
-            specific_core <- c(specific_core, core)
-            write.table(
-              core,
-              file      = paste0("Core_genes-Specific", sub_id, cluster_number, ".txt"),
-              sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
-            )
-            write.csv(
-              sub_core_mat,
-              file      = paste0("Core_genes-Specific", sub_id, cluster_number, ".csv"),
-              row.names = TRUE, quote = FALSE
-            )
+          if (nrow(sub_acc_mat) > 0) {
+            accesory         <- rownames(sub_acc_mat)
+            subcluster_acc[[paste(sub_id)]] <- accesory
+            subcluster_acc_mat[[paste(sub_id)]] <- sub_acc_mat
           }
         }
       }
+    }
+
+    if(length(subcluster_acc) >= 1) {
+      accesory_definition <- Shared_accessory_analysis(subcluster_acc,subcluster_acc_mat, ortho_counts)
+      shared_acc <- accesory_definition$shared_acc
+      subcluster_acc <- accesory_definition$subcluster_acc
+    } else {
+      shared_acc <- character()
+      subcluster_acc <- character()
     }
 
   # Branch B: subcluster definitions supplied externally via MCL file
@@ -342,27 +412,27 @@ core_genes_analysis <- function(ortho_counts, cluster, cluster_number = "", subc
       sub_counts   <- subset(ortho_counts, select = sub_elements)
 
       if (ncol(sub_counts) > 4) {
-        sub_core_mat <- sub_counts[rowSums(sub_counts < 1) <= ncol(sub_counts) * 0.2, ]
+        sub_acc_mat <- sub_counts[rowSums(sub_counts < 1) <= ncol(sub_counts) * 0.2, ]
 
-        if (nrow(sub_core_mat) > 0) {
-          core          <- rownames(sub_core_mat)
-          specific_core <- c(specific_core, core)
-          write.table(
-            core,
-            file      = paste0("Core_genes-SubCluster", sub_id, cluster_number, ".txt"),
-            sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
-          )
-          write.csv(
-            sub_core_mat,
-            file      = paste0("Core_genes-SubCluster", sub_id, cluster_number, ".csv"),
-            row.names = TRUE, quote = FALSE
-          )
+        if (nrow(sub_acc_mat) > 0) {
+          accesory          <- rownames(sub_acc_mat)
+          subcluster_acc[[paste(sub_id)]] <- accesory
+          subcluster_acc_mat[[paste(sub_id)]] <- sub_acc_mat
         }
       }
     }
+
+    if(length(subcluster_acc) >= 1) {
+      accesory_definition <- Shared_accessory_analysis(subcluster_acc,subcluster_acc_mat, ortho_counts)
+      shared_acc <- accesory_definition$shared_acc
+      subcluster_acc <- accesory_definition$subcluster_acc
+    } else {
+      shared_acc <- character()
+      subcluster_acc <- character()
+    }
   }
 
-  return(list(general_core = general_core, specific_core = specific_core))
+  return(list(core = core, shared_acc = shared_acc, subcluster_acc = subcluster_acc))
 }
 
 
@@ -456,6 +526,44 @@ analyze_individual_clusters <- function(
   return(selected_clusters)
 }
 
+#' Annotate a gene data.frame with pangenome gene categories
+#'
+#' Helper used by plot_subcluster_synteny() to avoid repeating the same
+#' three-step annotation logic in multiple code paths.
+#'
+#' @param genes_df         data.frame. Gene coordinates with an 'attribute' column.
+#' @param orthogroup_table data.frame. Columns: Orthogroup, genes (space-delimited).
+#' @param pangenome       Named list. Output of pangenome_analysis().
+#'
+#' @return data.frame. The input genes_df with the 'attribute' column updated.
+annotate_gene_categories <- function(genes_df, orthogroup_table, pangenome) {
+
+  extract_gene_ids <- function(ortho_ids) {
+    tbl <- orthogroup_table[orthogroup_table$Orthogroup %in% ortho_ids, ]
+    ids <- unlist(strsplit(tbl[, 2], split = " "))
+    ids[ids != ""]
+  }
+
+  if (length(pangenome$shared_acc) > 0) {
+    shared_genes <- extract_gene_ids(pangenome$shared_acc)
+    genes_df   <- genes_df %>%
+      mutate(attribute = ifelse(ID %in% shared_genes, "Shared Accessory", attribute))
+  }
+
+  if (length(pangenome$core) > 0) {
+    core_genes <- extract_gene_ids(pangenome$core)
+    genes_df  <- genes_df %>%
+      mutate(attribute = ifelse(ID %in% core_genes, "Core", attribute))
+  }
+
+  if (length(pangenome$subcluster_acc) > 0) {
+    sub_genes <- extract_gene_ids(pangenome$subcluster_acc)
+    genes_df  <- genes_df %>%
+      mutate(attribute = ifelse(ID %in% sub_genes, "Subcluster Accessory", attribute))
+  }
+
+  return(genes_df)
+}
 
 #' Annotate gene features and plot a synteny map for a set of elements
 #'
@@ -466,8 +574,7 @@ analyze_individual_clusters <- function(
 #'
 #' @param cluster_matrix    Numeric matrix. Orthogroup presence/absence with elements as rows.
 #' @param orthogroup_table  data.frame. Columns: Orthogroup, genes (space-delimited gene IDs).
-#' @param core_genes        Named list. Output of core_genes_analysis() with elements
-#'                          general_core and specific_core.
+#' @param pangenome        Named list. Output of pangenome_analysis()
 #' @param seq_data          data.frame. Sequence lengths (seq_id, length).
 #' @param gene_data         data.frame. Gene coordinates (seq_id, start, end, strand, type, attribute, ID).
 #' @param blast_links       data.frame. BLAST links reformatted for gggenomes (seq_id, start, end,
@@ -481,7 +588,7 @@ analyze_individual_clusters <- function(
 plot_cluster_synteny <- function(
   cluster_matrix,
   orthogroup_table,
-  core_genes,
+  pangenome,
   seq_data,
   gene_data,
   blast_links,
@@ -498,25 +605,11 @@ plot_cluster_synteny <- function(
   seqs_filtered <- seq_data  %>% filter(seq_id %in% selected_seqs)
   genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs)
 
-  # --- Annotate genes by core category ----------------------------------------
-  if (length(core_genes$specific_core) > 0) {
-    spec_table  <- orthogroup_table[orthogroup_table$Orthogroup %in% core_genes$specific_core, ]
-    spec_genes  <- unlist(strsplit(spec_table[, 2], split = " "))
-    spec_genes  <- spec_genes[spec_genes != ""]
-    genes_filtered <- genes_filtered %>%
-      mutate(attribute = ifelse(ID %in% spec_genes, "specific", attribute))
-  }
-
-  if (length(core_genes$general_core) > 0) {
-    gen_table  <- orthogroup_table[orthogroup_table$Orthogroup %in% core_genes$general_core, ]
-    gen_genes  <- unlist(strsplit(gen_table[, 2], split = " "))
-    gen_genes  <- gen_genes[gen_genes != ""]
-    genes_filtered <- genes_filtered %>%
-      mutate(attribute = ifelse(ID %in% gen_genes, "general", attribute))
-  }
+  genes_filtered <- annotate_gene_categories(genes_filtered, orthogroup_table, pangenome)
 
   links_filtered <- blast_links %>%
     filter(seq_id %in% selected_seqs | seq_id2 %in% selected_seqs)
+
 
   # --- Order sequences to match tree tip order --------------------------------
   tree_base    <- ggtree::ggtree(my_tree, layout = "rectangular")
@@ -547,10 +640,10 @@ plot_cluster_synteny <- function(
       geom_seq(aes(y = y)) +
       geom_gene(aes(y = y, fill = attribute), show.legend = TRUE) +
       scale_fill_manual(
-        name   = "Core genes",
-        values = c("general" = "red4", "specific" = "green4"),
+        name   = "Gene category",
+        values = c("Core" = "red4", "Shared Accessory" = "green4", "Subcluster Accessory" = "darkorchid"),
         na.value = "cornsilk3",
-        limits = c("general", "specific")
+        limits = c("Core", "Shared Accessory", "Subcluster Accessory")
       ) +
       new_scale_fill() +
       geom_link(aes(y = y, fill = pident), colour = NA) +
@@ -573,7 +666,11 @@ plot_cluster_synteny <- function(
   plot_height <- min(49, n_elements)
 
   if (cluster_number != "") {
-    filename <- paste0("CargoSynteny_Cluster", cluster_number, ".svg")
+    if(subcluster_number != "") {
+      filename <- paste0("CargoSynteny_Cluster", cluster_number, "-SubCluster", subcluster_number, ".svg")
+    } else {
+      filename <- paste0("CargoSynteny_Cluster", cluster_number, ".svg")
+    }
   } else if (subcluster_number != "") {
     filename <- paste0("CargoSynteny_SubCluster", subcluster_number, ".svg")
   } else {
@@ -640,8 +737,7 @@ check_nesting <- function(ortho_counts, seq_data, gene_data, blast_links) {
         select(
           seq_id = qseqid, start = qstart, end = qend,
           seq_id2 = sseqid, start2 = sstart, end2 = send, pident
-        ) %>%
-        filter(pident >= 90)
+        )
 
       if (nrow(high_id_links) == 0) next
 
@@ -653,7 +749,7 @@ check_nesting <- function(ortho_counts, seq_data, gene_data, blast_links) {
       #   - Subject (comp) alignments do NOT start near its left boundary
       is_nested     <- any(high_id_links$start  < elem_len * 0.2) &&
                        any(high_id_links$end    > elem_len * 0.8)
-      starts_inside <- any(high_id_links$start2 < comp_len * 0.2)
+      starts_inside <- any(high_id_links$start2 < comp_len * 0.2) | any(high_id_links$start2 > comp_len * 0.8)
 
       if (!is_nested || starts_inside) next
 
@@ -694,270 +790,17 @@ check_nesting <- function(ortho_counts, seq_data, gene_data, blast_links) {
   }
 }
 
-#' Detect and characterize gene movement between a subcluster and flanking elements
+
+#' Visualize synteny per subcluster
 #'
-#' Identifies orthogroups shared between a focal subcluster and one or more
-#' external elements. Depending on the extent of sharing, flags the event as
-#' nesting (>= 80% overlap) or gene movement. For large movement sets,
-#' runs NbClust to determine optimal sub-partitioning of the movement.
-#'
-#' @param subcluster_number Integer. Subcluster ID used for output file naming.
-#' @param matrix            Numeric matrix. Reduced orthogroup distance matrix;
-#'                          rows are focal elements, columns include external elements.
-#' @param ortho_counts      Numeric matrix. Full orthogroup count matrix.
-#' @param core_genes        Named list. Output of core_genes_analysis().
-#' @param big               Logical. If TRUE, treat as a multi-element movement
-#'                          event and run NbClust partitioning.
-#' @param cluster_number    Character. Prefix for output file names.
-#'
-#' @return A named list with elements:
-#'   \item{movement}{Logical. TRUE if a movement event was detected}
-#'   \item{multiple}{Logical. TRUE if multiple movement sub-events were found}
-#'   \item{orthogroups}{Character vector of moved orthogroup IDs}
-#'   \item{elements_in}{Character vector. Elements belonging to the focal subcluster}
-#'   \item{elements_out}{Character vector. External elements involved in the movement}
-#'   \item{k_analysis}{NbClust result object, or empty vector if not run}
-gene_movement_analysis <- function(
-  subcluster_number,
-  matrix,
-  ortho_counts,
-  core_genes,
-  big            = FALSE,
-  cluster_number = ""
-) {
-
-  nb_clust_result <- vector()
-
-  if (big) {
-    elements_cluster <- rownames(matrix)
-    elements_other   <- colnames(matrix)
-  } else {
-    elements_cluster <- rownames(matrix)
-    elements_other   <- tail(colnames(matrix), n = 1)
-  }
-
-  selected_seqs <- c(elements_cluster, elements_other)
-
-  sub_cluster <- subset(ortho_counts, select = elements_cluster) %>%
-    filter(!if_all(everything(), ~ .x == 0))
-  sub_other   <- subset(ortho_counts, select = elements_other) %>%
-    filter(!if_all(everything(), ~ .x == 0))
-
-  shared_orthogroups <- intersect(rownames(sub_cluster), rownames(sub_other))
-
-  # Remove general core genes from the movement candidate list
-  # (core genes are expected to be shared and do not represent movement events)
-  movement_candidates <- shared_orthogroups[!shared_orthogroups %in% core_genes$general_core]
-
-  # --- Nesting check ----------------------------------------------------------
-  # If >= 80% of either element's orthogroups are shared, flag as nesting rather
-  # than gene movement
-  nesting_threshold <- length(shared_orthogroups) >= nrow(sub_cluster) * 0.8 ||
-                       length(shared_orthogroups) >= nrow(sub_other)   * 0.8
-
-  if (nesting_threshold) {
-    single_movements   <- TRUE
-    multiple_movements <- FALSE
-    write.table(
-      selected_seqs,
-      file      = paste0(cluster_number, "SubCluster", subcluster_number, "_nestingEvent.txt"),
-      sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
-    )
-
-  } else if (length(movement_candidates) > 0 && big) {
-
-    # Large movement: run NbClust to find optimal sub-partitioning
-    single_movements   <- TRUE
-    sub_counts         <- ortho_counts[movement_candidates, selected_seqs]
-    sub_counts         <- sub_counts[, colSums(sub_counts) > 0]
-    elements_cluster   <- elements_cluster[elements_cluster %in% colnames(sub_counts)]
-    elements_other     <- elements_other[elements_other   %in% colnames(sub_counts)]
-    trans_sub          <- t(sub_counts)
-
-    if (nrow(trans_sub) > 3 && ncol(trans_sub) > 3) {
-      dist_sub        <- dist(trans_sub, method = "binary")
-      nb_clust_result <- NbClust(
-        dist_sub,
-        method  = "average",
-        min.nc  = 1,
-        max.nc  = min(6, nrow(trans_sub) - 1),
-        index   = "ball"
-      )
-      multiple_movements <- TRUE
-    } else {
-      elements_cluster   <- elements_cluster[elements_cluster %in% colnames(sub_counts)]
-      elements_other     <- elements_other[elements_other   %in% colnames(sub_counts)]
-      multiple_movements <- FALSE
-    }
-
-    write.table(
-      movement_candidates,
-      file      = paste0(cluster_number, "SubCluster", subcluster_number, "_moveOrthologs.txt"),
-      sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
-    )
-    write.csv(
-      sub_counts,
-      file      = paste0(cluster_number, "SubCluster", subcluster_number, "_moveOrthologsTable.csv"),
-      row.names = TRUE, quote = FALSE
-    )
-
-  } else if (length(movement_candidates) > 0) {
-
-    # Small movement: no NbClust partitioning needed
-    sub_counts       <- ortho_counts[movement_candidates, selected_seqs]
-    elements_cluster <- elements_cluster[elements_cluster %in% colnames(sub_counts)]
-    elements_other   <- elements_other[elements_other   %in% colnames(sub_counts)]
-    single_movements   <- TRUE
-    multiple_movements <- FALSE
-
-    write.table(
-      movement_candidates,
-      file      = paste0(cluster_number, "SubCluster", subcluster_number, "_moveOrthologs.txt"),
-      sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
-    )
-    write.csv(
-      sub_counts,
-      file      = paste0(cluster_number, "SubCluster", subcluster_number, "_moveOrthologsTable.csv"),
-      row.names = TRUE, quote = FALSE
-    )
-
-  } else {
-    single_movements   <- FALSE
-    multiple_movements <- FALSE
-  }
-
-  return(list(
-    movement    = single_movements,
-    multiple    = multiple_movements,
-    orthogroups = movement_candidates,
-    elements_in  = elements_cluster,
-    elements_out = elements_other,
-    k_analysis   = nb_clust_result
-  ))
-}
-
-
-#' Annotate a gene data.frame with core and movement gene categories
-#'
-#' Helper used by plot_subcluster_synteny() to avoid repeating the same
-#' three-step annotation logic in multiple code paths.
-#'
-#' @param genes_df         data.frame. Gene coordinates with an 'attribute' column.
-#' @param orthogroup_table data.frame. Columns: Orthogroup, genes (space-delimited).
-#' @param core_genes       Named list. Output of core_genes_analysis().
-#' @param movement_orthos  Character vector. Orthogroup IDs of movement-associated genes.
-#'                         Pass character(0) to skip movement annotation.
-#'
-#' @return data.frame. The input genes_df with the 'attribute' column updated.
-annotate_gene_categories <- function(genes_df, orthogroup_table, core_genes, movement_orthos = character(0)) {
-
-  extract_gene_ids <- function(ortho_ids) {
-    tbl <- orthogroup_table[orthogroup_table$Orthogroup %in% ortho_ids, ]
-    ids <- unlist(strsplit(tbl[, 2], split = " "))
-    ids[ids != ""]
-  }
-
-  if (length(core_genes$specific_core) > 0) {
-    spec_genes <- extract_gene_ids(core_genes$specific_core)
-    genes_df   <- genes_df %>%
-      mutate(attribute = ifelse(ID %in% spec_genes, "specific", attribute))
-  }
-
-  if (length(core_genes$general_core) > 0) {
-    gen_genes <- extract_gene_ids(core_genes$general_core)
-    genes_df  <- genes_df %>%
-      mutate(attribute = ifelse(ID %in% gen_genes, "general", attribute))
-  }
-
-  if (length(movement_orthos) > 0) {
-    mov_genes <- extract_gene_ids(movement_orthos)
-    genes_df  <- genes_df %>%
-      mutate(attribute = ifelse(ID %in% mov_genes, "Movement associated", attribute))
-  }
-
-  return(genes_df)
-}
-
-
-#' Build and save a movement synteny plot for a given set of sequences
-#'
-#' Helper used by plot_subcluster_synteny() to avoid duplicating the full
-#' gggenomes pipeline in both the single-movement and multi-movement branches.
-#'
-#' @param selected_seqs    Character vector. Sequence IDs to include in the plot.
-#' @param seq_data         data.frame. Sequence lengths.
-#' @param gene_data        data.frame. Gene coordinates.
-#' @param blast_links      data.frame. Full BLAST results.
-#' @param orthogroup_table data.frame. Orthogroup gene-list table.
-#' @param core_genes       Named list. Output of core_genes_analysis().
-#' @param movement_orthos  Character vector. Orthogroup IDs of movement-associated genes.
-#' @param filename         Character. Output SVG filename.
-#'
-#' @return NULL
-save_movement_synteny_plot <- function(
-  selected_seqs,
-  seq_data,
-  gene_data,
-  blast_links,
-  orthogroup_table,
-  core_genes,
-  movement_orthos,
-  filename
-) {
-
-  seqs_filtered  <- seq_data  %>% filter(seq_id %in% selected_seqs)
-  genes_filtered <- gene_data %>% filter(seq_id %in% selected_seqs)
-  genes_filtered <- annotate_gene_categories(genes_filtered, orthogroup_table, core_genes, movement_orthos)
-
-  links_filtered <- blast_links %>%
-    filter(qseqid %in% selected_seqs | sseqid %in% selected_seqs) %>%
-    select(
-      seq_id = qseqid, start = qstart, end = qend,
-      seq_id2 = sseqid, start2 = sstart, end2 = send, pident
-    )
-
-  ordered_seqs <- seqs_filtered %>% arrange(match(seq_id, selected_seqs))
-  max_len      <- max(ordered_seqs$length)
-
-  p <- gggenomes(seqs = ordered_seqs, links = links_filtered, genes = genes_filtered) +
-    geom_seq(aes(y = y)) +
-    geom_gene(aes(y = y, fill = attribute), show.legend = TRUE) +
-    scale_fill_manual(
-      name   = "Gene group",
-      values = c("general" = "red4", "specific" = "green4", "Movement associated" = "darkorchid"),
-      na.value = "cornsilk3",
-      limits = c("general", "specific", "Movement associated")
-    ) +
-    new_scale_fill() +
-    geom_link(aes(y = y, fill = pident), colour = NA) +
-    scale_fill_continuous(name = "Alignment Identity (%)") +
-    geom_bin_label(aes(y = y), x = -10) +
-    scale_x_continuous(labels = label_number(accuracy = 1), limits = c(0, max_len)) +
-    theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0), "cm"))
-
-  ggsave(
-    p,
-    filename  = filename,
-    width     = min(49, max(16, round(max_len * 0.0001) / 2)),
-    height    = min(49, length(selected_seqs)),
-    limitsize = FALSE
-  )
-}
-
-
-#' Analyze and visualize gene movement for each subcluster
-#'
-#' For each subcluster, plots the main synteny view, then identifies putative
-#' gene movement events by comparing subcluster elements to flanking/external
-#' elements. When multiple movement sub-events are detected via NbClust,
-#' each pair of sub-partitions is plotted separately.
+#' For each subcluster, plots the main synteny view.
 #'
 #' @param subcluster_number Integer. Total number of subclusters to iterate over.
 #' @param orthogroup_table  data.frame. Orthogroup gene-list table.
 #' @param dist_matrix       Numeric matrix. Full binary distance matrix (elements x orthogroups).
 #' @param cluster_fit       Named integer vector. Subcluster assignments per element.
 #' @param ortho_counts      Numeric matrix. Full orthogroup count matrix.
-#' @param core_genes        Named list. Output of core_genes_analysis().
+#' @param pangenome        Named list. Output of pangenome_analysis().
 #' @param seq_data          data.frame. Sequence lengths.
 #' @param gene_data         data.frame. Gene coordinates.
 #' @param blast_links       data.frame. Full BLAST results.
@@ -972,7 +815,7 @@ plot_subcluster_synteny <- function(
   dist_matrix,
   cluster_fit,
   ortho_counts,
-  core_genes,
+  pangenome,
   seq_data,
   gene_data,
   blast_links,
@@ -1000,9 +843,6 @@ plot_subcluster_synteny <- function(
       sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
     )
 
-    selected_seqs_defined <- FALSE
-    multiple_movements    <- FALSE
-
     if (!is.matrix(matrix)) {
       log_message(paste0("Subcluster ", sub_id, " cannot be analyzed automatically (single element or malformed matrix)."))
       next
@@ -1020,152 +860,12 @@ plot_subcluster_synteny <- function(
     plot_cluster_synteny(
       cluster_matrix    = sub_cluster_matrix,
       orthogroup_table  = orthogroup_table,
-      core_genes        = core_genes,
+      pangenome        = pangenome,
       seq_data          = seq_data,
       gene_data         = gene_data,
       blast_links       = links_reformatted,
       subcluster_number = sub_id
     )
-
-    # --- Identify putative gene movement events --------------------------------
-    # Strategy: progressively reduce the distance matrix by removing columns
-    # where all elements share the orthogroup (i.e. not informative for movement).
-    # Two thresholds are tried (0.98, then 0.99) to maximize sensitivity.
-
-    run_movement_analysis <- function(reduce_mat, threshold) {
-      reduced <- reduce_mat[, colSums(reduce_mat) < nrow(reduce_mat) * threshold]
-
-      if (ncol(reduced) >= nrow(reduced) + 2) {
-        reduced   <- reduced[, names(sort(colSums(reduced)))]
-        outer_mat <- reduced[, (nrow(reduced) + 1):ncol(reduced)]
-        outer_mat <- outer_mat[rowSums(outer_mat) < ncol(outer_mat) * threshold, ]
-
-        if (is.matrix(outer_mat)) {
-          outer_mat <- outer_mat[, colSums(outer_mat < 1) > 1]
-          outer_mat <- outer_mat[, names(sort(colSums(outer_mat)))]
-          return(gene_movement_analysis(
-            subcluster_number = sub_id,
-            matrix            = outer_mat,
-            ortho_counts      = ortho_counts,
-            core_genes        = core_genes,
-            big               = TRUE,
-            cluster_number    = cluster_number
-          ))
-        }
-
-      } else if (ncol(reduced) > nrow(reduced)) {
-        reduced <- reduced[, names(sort(colSums(reduced)))]
-        reduced <- reduced[order(reduced[, ncol(reduced)], decreasing = TRUE), ]
-        return(gene_movement_analysis(
-          subcluster_number = sub_id,
-          matrix            = reduced,
-          ortho_counts      = ortho_counts,
-          core_genes        = core_genes,
-          cluster_number    = cluster_number
-        ))
-      }
-
-      return(NULL)
-    }
-
-    movement_result <- run_movement_analysis(matrix, 0.98)
-
-    if (is.null(movement_result)) {
-      movement_result <- run_movement_analysis(matrix, 0.99)
-    }
-
-    if (!is.null(movement_result)) {
-      selected_seqs       <- c(movement_result$elements_in, movement_result$elements_out)
-      selected_seqs_defined <- movement_result$movement
-      multiple_movements  <- movement_result$multiple
-      elements_cluster    <- movement_result$elements_in
-      elements_other      <- movement_result$elements_out
-      nb_clust_result     <- movement_result$k_analysis
-      orthogroups_movement <- movement_result$orthogroups
-    }
-
-    # --- Plot movement synteny ------------------------------------------------
-    if (selected_seqs_defined && !multiple_movements) {
-
-      save_movement_synteny_plot(
-        selected_seqs    = selected_seqs,
-        seq_data         = seq_data,
-        gene_data        = gene_data,
-        blast_links      = blast_links,
-        orthogroup_table = orthogroup_table,
-        core_genes       = core_genes,
-        movement_orthos  = movement_result$orthogroups,
-        filename         = paste0(cluster_number, "MovementSynteny_SubCluster", sub_id, ".svg")
-      )
-
-    } else if (selected_seqs_defined && multiple_movements) {
-
-      # Multiple movement sub-events: iterate over all pairwise combinations
-      # of NbClust-derived partitions
-      k_in  <- unique(nb_clust_result$Best.partition[elements_cluster])
-      k_out <- unique(nb_clust_result$Best.partition[elements_other])
-
-      for (i in k_in) {
-        for (j in k_out) {
-
-          cl_seqs  <- names(nb_clust_result$Best.partition[
-            nb_clust_result$Best.partition == i & names(nb_clust_result$Best.partition) %in% elements_cluster
-          ])
-          oth_seqs <- names(nb_clust_result$Best.partition[
-            nb_clust_result$Best.partition == j & names(nb_clust_result$Best.partition) %in% elements_other
-          ])
-
-          cl_seqs  <- cl_seqs[!is.na(cl_seqs)]
-          oth_seqs <- oth_seqs[!is.na(oth_seqs)]
-
-          sub_cl  <- subset(ortho_counts, select = cl_seqs)  %>% filter(!if_all(everything(), ~ .x == 0))
-          sub_oth <- subset(ortho_counts, select = oth_seqs) %>% filter(!if_all(everything(), ~ .x == 0))
-
-          moved_orthos <- intersect(rownames(sub_cl), rownames(sub_oth)) 
-          moved_orthos <- moved_orthos[moved_orthos %in% orthogroups_movement]
-
-          sub_cl  <- as.data.frame(sub_cl[moved_orthos,  , drop = FALSE])
-          sub_oth <- as.data.frame(sub_oth[moved_orthos, , drop = FALSE])
-          sub_cl  <- sub_cl[,  colSums(abs(sub_cl))  > 0, drop = FALSE]
-          sub_oth <- sub_oth[, colSums(abs(sub_oth)) > 0, drop = FALSE]
-
-          sel_seqs2 <- na.omit(c(colnames(sub_cl), colnames(sub_oth)))
-
-          if (length(sel_seqs2) < 2) next
-
-          # Only plot if there are BLAST links connecting these specific elements
-          links_pair <- blast_links %>%
-            filter(qseqid %in% sel_seqs2, sseqid %in% sel_seqs2) %>%
-            select(
-              seq_id = qseqid, start = qstart, end = qend,
-              seq_id2 = sseqid, start2 = sstart, end2 = send, pident
-            )
-
-          if (nrow(links_pair) == 0) next
-
-          save_movement_synteny_plot(
-            selected_seqs    = sel_seqs2,
-            seq_data         = seq_data,
-            gene_data        = gene_data,
-            blast_links      = blast_links,
-            orthogroup_table = orthogroup_table,
-            core_genes       = core_genes,
-            movement_orthos  = moved_orthos,
-            filename         = paste0(cluster_number, "MovementSynteny_SubCluster",
-                                      sub_id, "-", i, "vs", j, ".svg")
-          )
-
-          write.csv(
-            ortho_counts[moved_orthos, sel_seqs2],
-            file      = paste0(cluster_number, "SubCluster", sub_id, "-", i, "vs", j, "_moveOrthologsMatrix.csv"),
-            row.names = TRUE, quote = FALSE
-          )
-        }
-      }
-
-    } else {
-      log_message(paste0("Subcluster ", sub_id, ": no identifiable putative movement event detected."))
-    }
   }
 }
 
@@ -1183,7 +883,6 @@ get_discordant <- function(tree1, tree2) {
   # Build a contingency table and map each label in tree1 to the most frequent
   # corresponding label in tree2 (greedy label alignment)
   ct  <- table(tree1, tree2)
-  print(ct)
   best_match <- apply(ct, 1, which.max)
 
   aligned_tree1 <- tree1
@@ -1233,8 +932,8 @@ if (clustering_data$individual_clusters == 1) {
 
   if (arguments$subclusters >= 2) {
 
-    log_message("Identifying core genes...")
-    core_genes <- core_genes_analysis(
+    log_message("Analyzing pangenome...")
+    pangenome <- pangenome_analysis(
       ortho_counts   = clustering_data$orthofinder_counts,
       cluster        = clustering_data$hierar_cl,
       subcluster     = data_list$subclusters
@@ -1244,7 +943,7 @@ if (clustering_data$individual_clusters == 1) {
     plot_cluster_synteny(
       cluster_matrix    = clustering_data$transposed_counts,
       orthogroup_table  = data_list$orthogroups_table,
-      core_genes        = core_genes,
+      pangenome        = pangenome,
       seq_data          = data_list$seqs,
       gene_data         = data_list$genes,
       blast_links       = data_list$links
@@ -1278,7 +977,7 @@ if (clustering_data$individual_clusters == 1) {
       dist_matrix       = as.matrix(clustering_data$distance_mat),
       cluster_fit       = fit,
       ortho_counts      = clustering_data$orthofinder_counts,
-      core_genes        = core_genes,
+      pangenome        = pangenome,
       seq_data          = data_list$seqs,
       gene_data         = data_list$genes,
       blast_links       = data_list$blast_results,
@@ -1289,7 +988,7 @@ if (clustering_data$individual_clusters == 1) {
   } else {
 
     log_message("Generating single-cluster synteny plot...")
-    core_genes <- core_genes_analysis(
+    pangenome <- pangenome_analysis(
       ortho_counts = clustering_data$orthofinder_counts,
       cluster      = clustering_data$hierar_cl,
       subcluster   = vector()
@@ -1297,7 +996,7 @@ if (clustering_data$individual_clusters == 1) {
     plot_cluster_synteny(
       cluster_matrix    = clustering_data$transposed_counts,
       orthogroup_table  = data_list$orthogroups_table,
-      core_genes        = core_genes,
+      pangenome        = pangenome,
       seq_data          = data_list$seqs,
       gene_data         = data_list$genes,
       blast_links       = data_list$links
@@ -1343,7 +1042,7 @@ if (clustering_data$individual_clusters == 1) {
       cluster_hier <- hclust(cluster_dist, method = "average")
 
       cluster_suffix <- paste0("_Cluster", main_cluster_id)
-      core_genes     <- core_genes_analysis(
+      pangenome     <- pangenome_analysis(
         ortho_counts   = new_ortho_counts,
         cluster        = cluster_hier,
         cluster_number = cluster_suffix,
@@ -1353,7 +1052,7 @@ if (clustering_data$individual_clusters == 1) {
       plot_cluster_synteny(
         cluster_matrix    = cluster_matrix,
         orthogroup_table  = data_list$orthogroups_table,
-        core_genes        = core_genes,
+        pangenome        = pangenome,
         seq_data          = data_list$seqs,
         gene_data         = data_list$genes,
         blast_links       = data_list$links,
@@ -1379,7 +1078,7 @@ if (clustering_data$individual_clusters == 1) {
         dist_matrix       = as.matrix(cluster_dist),
         cluster_fit       = fit,
         ortho_counts      = clustering_data$orthofinder_counts,
-        core_genes        = core_genes,
+        pangenome        = pangenome,
         seq_data          = data_list$seqs,
         gene_data         = data_list$genes,
         blast_links       = data_list$blast_results,
@@ -1439,10 +1138,11 @@ if (clustering_data$individual_clusters == 1) {
     fit_cargo <- cutree(clustering_data$hierar_cl, k = k_num)
     fit_cargo <- fit_cargo[sort(names(fit_cargo))]
 
-    discordant <- unique(c(
+    discordant <- c(
       get_discordant(fit_tree,  fit_cargo),
       get_discordant(fit_cargo, fit_tree)
-    ))
+    )
+    discordant <- discordant[ave(discordant, discordant, FUN = length) == 1]
 
     if (length(discordant) >= 1) {
       log_message(paste0(length(discordant), " discordant element(s) identified."))

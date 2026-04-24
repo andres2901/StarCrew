@@ -321,7 +321,7 @@ Optional args:"
   --preCluster            Pre-cluster before syntenet analysis; recommended for large datasets (Default: off).
   --captainInfo           Include captain CDS/pseudogene info in each cluster (Default: off).
   --overwrite             Overwrite a previous run (Default: off).
-  --skip-syntenet         Skip collinearity detection to re-run mode or clustering parameters.
+  --skip-syntenet         Skip collinearity detection to re-run with different mode or clustering parameters.
                           Not compatible with '--overwrite' (Default: off).
   -help                   Display this help message.
 ```
@@ -421,14 +421,15 @@ Optional args:
 
 This command is designed to characterize the cargo gene dynamics within each element cluster. The command initially performs a hierarchical clustering tree of the elements within the cluster to visually identify their evolutionary history using as information the Orthogroup gene count (including genes not associated with any orthogroup). It also attempts to identify any nesting events between elements inside the cluster.
 
-The main goal of this command is to identify two relevant groups of genes within each cluster:
+The main goal of this command is to classify the 'pan-cargo' (pangenome) of each cluster:
 
 - **Core Genes:**
-    - We use a loose definition of "core gene" in this context. While core genes are generally defined as genes present in all genomes of a dataset, or in a less strict definition (often called soft core) as genes present in at least 95%-98% of genomes, this strict threshold is inappropriate here. This is due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this wrapper. Therefore, "core genes" here are defined as those present in at least 80% of the elements in a cluster or subcluster.
-    - Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster/subcluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in the element over time.
-- **Movement Genes:**
-    - This set of genes is identified based on presence/absence patterns that suggest their introduction into a different element was caused by horizontal gene movement from one element to another.
-    - This analysis is performed only between subclusters (as defined by the [SyntenyClustering](#SyntenyClustering) command), meaning comparisons are not conducted on a pairwise, element-by-element basis.
+    - We use a loose definition of "core gene" in this context. While core genes are generally defined as genes present in all genomes of a dataset, or in a less strict definition (often called soft core) as genes present in at least 95%-98% of genomes, this strict threshold is inappropriate here. This is due to the inherent variability of cargo genes across different element haplotypes and the nature of the cluster definition in this wrapper. Therefore, "core genes" here are defined as those present in at least 80% of the elements in a cluster.
+    - Though technically these are accessory genes based on the used threshold, we maintain the "core" name to signify that these genes are quite common within a given cluster compared to the highly variable remainder. The primary idea is to identify genes that tend to be maintained in elements over time.
+- **Subcluster accessory Genes:**
+    - Defined as those present in at least 80% of the elements in a subcluster.
+- **Share accessory:** 
+    - Defined as those subcluster accesory genes that are present also in elements outside the specified subcluster.
 
 Finally, the command attempts to determine discordances between the Captain phylogenetic tree and the cargo hierarchical clustering. The comparison is deliberately made at the 'clade' level (instead of comparing individual elements) due to the inherent uncertainty of bifurcations and polytomies in both the Captain phylogenetic tree and the cargo hierarchical tree. This process occurs as follows:
 
@@ -509,10 +510,10 @@ This command is designed to identify orthogroups that migth be enrich in a given
 Command to run functional annotation for orthogroups.
 Performs four steps:
   1. Orthogroup selection by mode:
-     Core           - Core orthogroups from ClusterCharacterization.
-     MoveAssociated - Orthogroups linked to cargo movement events.
-     All            - All orthogroups from ClusterCharacterization.
-     Overrepresented- Orthogroups from OrthogroupsOverrepresentation.
+     Core            - Core orthogroups from ClusterCharacterization.
+     ShareAccessory  - Share accesory orthogroups from ClusterCharacterization.
+     SubAccessory    - Subcluster accesory orthogroups from ClusterCharacterization.
+     Overrepresented - Orthogroups from OrthogroupsOverrepresentation.
   2. Protein characterization:
      2.1. InterProScan (CDD, Gene3D, HAMAP, PANTHER, Pfam, PIRSF,
           PRINTS, PROSITEPATTERNS, PROSITEPROFILES, SFLD, SMART,
@@ -529,8 +530,8 @@ Required args:
   -w, --workingDirectory  Working directory where all data are stored.
 
 Required args with defaults:
-  -m, --mode       Orthogroups to annotate (Default: All)
-                   [Available: Core, MoveAssociated, All, Overrepresented].
+  -m, --mode       Orthogroups to annotate (Default: Core)
+                   [Available: Core, ShareAccessory, SubAccessory, Overrepresented].
   -f, --foldseekdb Foldseek database (Default: afdb_swissprot)
                    [Available: pdb, afdb_swissprot].
 

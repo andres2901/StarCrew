@@ -14,7 +14,7 @@
 # USAGE:       StarCrew SyntenyClustering [options]
 #              StarCrew SyntenyClustering -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        24/Apr/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -105,7 +105,7 @@ print_help() {
   echo "  --preCluster            Pre-cluster before syntenet analysis; recommended for large datasets (Default: off)."
   echo "  --captainInfo           Include captain CDS/pseudogene info in each cluster (Default: off)."
   echo "  --overwrite             Overwrite a previous run (Default: off)."
-  echo "  --skip-syntenet         Skip collinearity detection to re-run mode or clustering parameters."
+  echo "  --skip-syntenet         Skip collinearity detection to re-run with different mode or clustering parameters."
   echo "                          Not compatible with '--overwrite' (Default: off)."
   echo "  -help                   Display this help message."
 }

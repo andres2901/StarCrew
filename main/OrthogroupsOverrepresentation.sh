@@ -13,7 +13,7 @@
 # USAGE:       StarCrew OrthogroupsOverrepresentation [options]
 #              StarCrew OrthogroupsOverrepresentation -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        24/Apr/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -175,9 +175,9 @@ run_orthofinder() {
   local element_number
   element_number=$(ls "$protein_dir" | wc -l)
 
-  if (( $(ulimit -Sn) < element_number * 3 )); then
-    echo "Error: system open file limit per process ($(ulimit -Sn)) is too low." >&2
-    echo "Please raise it to at least '$((element_number * 3))' using 'ulimit -n'." >&2
+  if (( $(ulimit -Sn) < element_number * 2 )); then
+    echo "Error: system file descriptor limit ($(ulimit -Sn)) is too low." >&2
+    echo "Please raise it to at least '$((element_number * 2))' using 'ulimit -n'." >&2
     exit 1
   fi
 

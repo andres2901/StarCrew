@@ -15,7 +15,7 @@
 # USAGE:       StarCrew OrthogroupsAnnotation [options]
 #              StarCrew OrthogroupsAnnotation -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        24/Apr/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -69,10 +69,10 @@ print_help() {
   echo "Command to run functional annotation for orthogroups."
   echo "Performs four steps:"
   echo "  1. Orthogroup selection by mode:"
-  echo "     Core           - Core orthogroups from ClusterCharacterization."
-  echo "     MoveAssociated - Orthogroups linked to cargo movement events."
-  echo "     All            - All orthogroups from ClusterCharacterization."
-  echo "     Overrepresented- Orthogroups from OrthogroupsOverrepresentation."
+  echo "     Core            - Core orthogroups from ClusterCharacterization."
+  echo "     ShareAccessory  - Share accesory orthogroups from ClusterCharacterization."
+  echo "     SubAccessory    - Subcluster accesory orthogroups from ClusterCharacterization."
+  echo "     Overrepresented - Orthogroups from OrthogroupsOverrepresentation."
   echo "  2. Protein characterization:"
   echo "     2.1. InterProScan (CDD, Gene3D, HAMAP, PANTHER, Pfam, PIRSF,"
   echo "          PRINTS, PROSITEPATTERNS, PROSITEPROFILES, SFLD, SMART,"
@@ -89,13 +89,13 @@ print_help() {
   echo "  -w, --workingDirectory  Working directory where all data are stored."
   echo
   echo "Required args with defaults:"
-  echo "  -m, --mode       Orthogroups to annotate (Default: All)"
-  echo "                   [Available: Core, MoveAssociated, All, Overrepresented]."
+  echo "  -m, --mode       Orthogroups to annotate (Default: Core)"
+  echo "                   [Available: Core, ShareAccessory, SubAccessory, Overrepresented]."
   echo "  -f, --foldseekdb Foldseek database (Default: afdb_swissprot)"
   echo "                   [Available: pdb, afdb_swissprot]."
+  echo "  -t, --threads    Threads for all analyses (Default: 8)."
   echo
   echo "Optional args:"
-  echo "  -t, --threads    Threads for all analyses (Default: 8)."
   echo "  --overwrite  Overwrite a previous run (Default: off)."
   echo "  -help        Display this help message."
 }
@@ -112,11 +112,11 @@ check_clusters() {
   cluster_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Clusters" 2>/dev/null)
 
   case "$mode" in
-    All)
-      clusters_file="${cluster_dir}/ClusterOrthogroups.txt"
+    SubAccessory)
+      clusters_file="${cluster_dir}/ClusterSubAcc.txt"
       ;;
-    MoveAssociated)
-      clusters_file="${cluster_dir}/ClusterMovement.txt"
+    ShareAccessory)
+      clusters_file="${cluster_dir}/ClusterSubAcc.txt"
       ;;
     Core)
       clusters_file="${cluster_dir}/ClusterCore.txt"
@@ -166,9 +166,9 @@ check_internal_directory_structure() {
   local base_dir="$1"
 
   local workspace_dir
-  workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "Workspace" 2>/dev/null)
+  workspace_dir=$(find "$base_dir" -maxdepth 1 -type d -name "ClusterCharacterization" 2>/dev/null)
   if [[ -z "$workspace_dir" ]]; then
-    echo "Error: Workspace directory not found in '${base_dir}'." >&2
+    echo "Error: ClusterCharacterization directory not found in '${base_dir}'." >&2
     exit 1
   fi
 
@@ -176,7 +176,7 @@ check_internal_directory_structure() {
   annotation_dir=$(find "$workspace_dir" -maxdepth 1 \
     -type d -name "ClusterCharacterization" 2>/dev/null)
   if [[ -z "$annotation_dir" ]]; then
-    echo "Error: ClusterCharacterization directory not found in '${workspace_dir}'." >&2
+    echo "Error: 'ClusterCharacterization' directory not found in '${workspace_dir}'." >&2
     echo "Run 'ClusterCharacterization' before this command." >&2
     exit 1
   fi
@@ -184,30 +184,30 @@ check_internal_directory_structure() {
   directory_flag=true
 
   case "$mode" in
-    All)
-      local orthogroups_dir
-      orthogroups_dir=$(find "$annotation_dir" -maxdepth 3 \
-        -type d -name "Orthogroup_Sequences" 2>/dev/null)
-      if [[ -z "$orthogroups_dir" ]]; then
-        echo "Error: Orthogroup_Sequences not found in '${annotation_dir}'." >&2
+    SubAccesory)
+      local move_dir
+      subacc_dir=$(find "$annotation_dir" -maxdepth 1 \
+        -type d -name "Subcluster_accessory" 2>/dev/null)
+      if [[ -z "$move_dir" ]]; then
+        echo "WARNING: No Subcluster accessory orthogroup directory found in '${annotation_dir}'." >&2
         directory_flag=false
       fi
       ;;
-    MoveAssociated)
+    ShareAccessory)
       local move_dir
-      move_dir=$(find "$annotation_dir" -maxdepth 1 \
-        -type d -name "*_moveOrthologs" 2>/dev/null)
+      shareacc_dir=$(find "$annotation_dir" -maxdepth 1 \
+        -type d -name "Shared_accessory" 2>/dev/null)
       if [[ -z "$move_dir" ]]; then
-        echo "Warning: No movement orthogroup directories found in '${annotation_dir}'." >&2
+        echo "WARNING: No Shared accessory orthogroup directory found in '${annotation_dir}'." >&2
         directory_flag=false
       fi
       ;;
     Core)
       local core_dir
       core_dir=$(find "$annotation_dir" -maxdepth 1 \
-        -type d -name "Core_genes" 2>/dev/null)
+        -type d -name "Core" 2>/dev/null)
       if [[ -z "$core_dir" ]]; then
-        echo "Error: Core_genes directory not found in '${annotation_dir}'." >&2
+        echo "WARNING: No Core orthogroup directory not found in '${annotation_dir}'." >&2
         directory_flag=false
       fi
       ;;
@@ -223,7 +223,7 @@ check_internal_directory_structure() {
 organize_working_directory() {
   local base_dir="$1"
   local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")-${mode}"
-  local annotation_dir="${base_dir}/Workspace/ClusterCharacterization"
+  local annotation_dir="${base_dir}/ClusterCharacterization"
   local orthogroups_dir="${working_dir}/Orthogroups"
   local temp_dir="${working_dir}/temp"
 
@@ -236,23 +236,25 @@ organize_working_directory() {
   mkdir -p "$orthogroups_dir" "$temp_dir"
 
   case "$mode" in
-    All)
+    SubAccessory)
       local data_dir
       data_dir=$(find "$annotation_dir" -maxdepth 3 \
-        -type d -name "Orthogroup_Sequences" 2>/dev/null)
-      cp "${data_dir}"/* "$orthogroups_dir/"
+        -type d -name "Subcluster_accessory" 2>/dev/null)
+      ls ${data_dir} | while read line; 
+      do
+        cp "${data_dir}/${line}/Orthogroups"/* "$orthogroups_dir/"
+      done
       ;;
-    MoveAssociated)
-      find "$annotation_dir" -maxdepth 1 -type d -name "*_moveOrthologs" \
-        | while read -r move_dir; do
-            cp "${move_dir}"/* "$orthogroups_dir/"
-          done
+    ShareAccessory)
+      data_dir=$(find "$annotation_dir" -maxdepth 3 \
+        -type d -name "Shared_accessory" 2>/dev/null)
+      cp "${data_dir}/Orthogroups"/* "$orthogroups_dir/"
       ;;
     Core)
       local core_dir
-      core_dir=$(find "$annotation_dir" -maxdepth 1 \
-        -type d -name "Core_genes" 2>/dev/null)
-      cp "${core_dir}"/* "$orthogroups_dir/"
+      data_dir=$(find "$annotation_dir" -maxdepth 1 \
+        -type d -name "Core" 2>/dev/null)
+      cp "${data_dir}/Orthogroups"/* "$orthogroups_dir/"
       ;;
   esac
 
@@ -600,7 +602,7 @@ organize_information() {
 # ==============================================================================
 
 working_directory=""
-mode="All"
+mode="Core"
 foldseekdb="afdb_swissprot"
 threads="8"
 overwrite=false
@@ -699,7 +701,7 @@ run_annotation_steps() {
   log_info "-> Step 4 finished. Proceeding."
 }
 
-if [[ "$mode" == "All" || "$mode" == "MoveAssociated" || "$mode" == "Core" ]]; then
+if [[ "$mode" == "SubAccessory" || "$mode" == "ShareAccessory" || "$mode" == "Core" ]]; then
   check_clusters "${working_directory}"
 
   while read -r cluster_id; do

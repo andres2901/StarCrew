@@ -13,7 +13,7 @@
 # USAGE:       StarCrew ClusterCharacterization [options]
 #              StarCrew ClusterCharacterization -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        24/Apr/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -86,10 +86,13 @@ print_help() {
   echo "Optional args:"
   echo "  -t, --threads   Threads for OrthoFinder and BLAST (Default: 8)."
   echo "  --overwrite     Overwrite a previous run (Default: off)."
+  echo "  --skip-orthofinder     Skip OrthoFinder and re-run from blastn step."
+  echo "                         Not compatible with '--overwrite'."
   echo "  -help           Display this help message."
 }
 
-# Validates that the ClustersAnalyzed.txt file exists and reports cluster count.
+# Validates that the file that contain the cluster information exists and 
+# reports cluster count.
 # Sets global: cluster_number
 # Arguments:
 #   $1 - base working directory path
@@ -97,11 +100,20 @@ print_help() {
 #   0 on success, exits with 1 if the file is missing
 check_clusters() {
   local base_dir="$1"
-  local cluster_information="${base_dir}/Clusters/ClustersAnalyzed.txt"
 
-  if [[ ! -f "$cluster_information" ]]; then
-    echo "Error: 'ClustersAnalyzed.txt' not found in '${base_dir}/Clusters/'." >&2
-    exit 1
+  local cluster_information
+  if $skip_orthofinder; then
+    cluster_information="${base_dir}/Clusters/ClusterOrthogroups.txt"
+    if [[ ! -f "$cluster_information" ]]; then
+      echo "Error: 'ClusterOrthogroups.txt' not found in '${base_dir}/Clusters/'." >&2
+      exit 1
+    fi
+  else
+    cluster_information="${base_dir}/Clusters/ClustersAnalyzed.txt"
+    if [[ ! -f "$cluster_information" ]]; then
+      echo "Error: 'ClustersAnalyzed.txt' not found in '${base_dir}/Clusters/'." >&2
+      exit 1
+    fi
   fi
 
   cluster_number=$(wc -l < "$cluster_information")
@@ -198,9 +210,9 @@ run_orthofinder() {
   local element_number
   element_number=$(ls "$protein_dir" | wc -l)
 
-  if (( $(ulimit -Sn) < element_number * 3 )); then
-    log_warning "System open file limit per process may be too low for OrthoFinder." \
-      "Consider raising it to at least '$((element_number * 3))'" \
+  if (( $(ulimit -Sn) < element_number * 2 )); then
+    log_warning "System file descriptor limit may be too low for OrthoFinder." \
+      "Consider raising it to at least '$((element_number * 2))'" \
       "using 'ulimit -n'."
   fi
 
@@ -288,24 +300,17 @@ check_core() {
   local orthogroups_dir="${working_dir}/Orthofinder/Results_characterization/Orthogroup_Sequences"
   local temp_dir="${working_dir}/temp"
 
-  ls "${working_dir}/Core_genes"*.txt > "${temp_dir}/core_files.txt" 2>/dev/null
-
-  local file_number
-  file_number=$(wc -l < "${temp_dir}/core_files.txt")
-
-  if (( file_number > 0 )); then
+  if [[ -f "${working_dir}/Core_genes.txt" ]]; then
     log_step "Core genes identified. Processing..."
-
     grep -w "${cluster_id}" "${base_dir}/../ClustersAnalyzed.txt" \
       >> "${base_dir}/../ClusterCore.txt"
 
     mkdir -p "${working_dir}/Core_genes"
-    cat "${working_dir}/Core_genes"*.txt | sort -u > "${temp_dir}/Full_core.txt"
-
     while read -r orthogroup; do
       cp "${orthogroups_dir}/${orthogroup}.fa" "${working_dir}/Core_genes/"
-    done < "${temp_dir}/Full_core.txt"
+    done < "${working_dir}/Core_genes.txt"
   fi
+
 }
 
 # Checks for cargo movement files and copies orthogroup sequences per subcluster.
@@ -314,25 +319,38 @@ check_core() {
 #   $1 - cluster base directory path
 # Returns:
 #   0 always
-check_movement() {
+check_accessory() {
   local base_dir="$1"
   local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
   local orthogroups_dir="${working_dir}/Orthofinder/Results_characterization/Orthogroup_Sequences"
   local temp_dir="${working_dir}/temp"
 
-  ls "${working_dir}/"*_moveOrthologs.txt \
-    > "${temp_dir}/movement_files.txt" 2>/dev/null
-
-  local file_number
-  file_number=$(wc -l < "${temp_dir}/movement_files.txt")
-
-  if (( file_number > 0 )); then
-    log_step "Cargo movement genes identified. Processing..."
+  if [[ -f "${working_dir}/Shared-Accessory.txt" ]]; then
+    log_step "Shared accesory genes identified. Processing..."
 
     grep -w "${cluster_id}" "${base_dir}/../ClustersAnalyzed.txt" \
-      >> "${base_dir}/../ClusterMovement.txt"
+      >> "${base_dir}/../ClusterSharedAcc.txt"
 
-    xargs -n1 basename -s .txt < "${temp_dir}/movement_files.txt" \
+    mkdir -p "${working_dir}/Shared_accessory/"
+    while read -r orthogroup; do
+      cp "${orthogroups_dir}/${orthogroup}.fa" \
+         "${working_dir}/Shared_accessory/"
+    done < "${working_dir}/Shared-Accessory.txt"
+  fi
+
+  ls "${working_dir}/"SubCluster*-Accessory.txt \
+    > "${temp_dir}/Subcluster-accessory_files.txt" 2>/dev/null
+
+  local file_number
+  file_number=$(wc -l < "${temp_dir}/Subcluster-accessory_files.txt")
+
+  if (( file_number > 0 )); then
+    log_step "Subcluster accesory genes identified. Processing..."
+
+    grep -w "${cluster_id}" "${base_dir}/../ClustersAnalyzed.txt" \
+      >> "${base_dir}/../ClusterSubAcc.txt"
+
+    xargs -n1 basename -s .txt < "${temp_dir}/Subcluster-accessory_files.txt" \
       | while read -r subcluster; do
           mkdir -p "${working_dir}/${subcluster}"
           while read -r orthogroup; do
@@ -377,33 +395,60 @@ organize_information() {
   if [[ -d "${working_dir}/Core_genes" ]]; then
     mkdir -p "${output_dir}/Core"
     cp -r "${working_dir}/Core_genes" "${output_dir}/Core/Orthogroups"
-    cp "${working_dir}/Core_genes-"* "${output_dir}/Core/"
+    cp "${working_dir}/Core_genes."* "${output_dir}/Core/"
   fi
 
-  local movement_count
-  movement_count=$(ls "${working_dir}/"*_moveOrthologs.txt 2>/dev/null | wc -l)
+  if [[ -d "${working_dir}/Shared_accessory" ]]; then
+    mkdir -p "${output_dir}/Shared_accessory"
+    cp -r "${working_dir}/Shared_accessory" "${output_dir}/Shared_accessory/Orthogroups"
+    cp "${working_dir}/Shared-Accessory."* "${output_dir}/Shared_accessory/"
+  fi
 
-  if (( movement_count >= 1 )); then
-    mkdir -p "${output_dir}/Movement_genes"
-    ls "${working_dir}/"*_moveOrthologs.txt \
+  local sub_acc_count
+  sub_acc_count=$(ls "${working_dir}/"SubCluster*-Accessory.txt 2>/dev/null | wc -l)
+
+  if (( sub_acc_count >= 1 )); then
+    mkdir -p "${output_dir}/Subcluster_accessory"
+    ls "${working_dir}/"SubCluster*-Accessory.txt \
       | xargs -n1 basename -s .txt \
       | while read -r line; do
           local subcluster
-          subcluster=$(echo "$line" | awk -F '_' '{print $1}')
-          mkdir -p "${output_dir}/Movement_genes/${subcluster}"
-          cp -r "${working_dir}/${subcluster}_moveOrthologs" \
-                "${output_dir}/Movement_genes/${subcluster}/Orthogroups"
-          cp "${working_dir}/${subcluster}_moveOrthologs.txt" \
-             "${output_dir}/Movement_genes/${subcluster}/OrthogroupsID.txt"
-          cp "${working_dir}/${subcluster}_moveOrthologsTable.csv" \
-             "${output_dir}/Movement_genes/${subcluster}/Matrix.txt"
-          cp "${working_dir}/${subcluster}"*_moveOrthologsMatrix.csv \
-             "${output_dir}/Movement_genes/${subcluster}/" 2>/dev/null || true
+          subcluster=$(echo "$line" | awk -F '-' '{print $1}')
+          mkdir -p "${output_dir}/Subcluster_accessory/${subcluster}"
+          cp -r "${working_dir}/${subcluster}-Accessory" \
+                "${output_dir}/Subcluster_accessory/${subcluster}/Orthogroups"
+          cp "${working_dir}/${subcluster}-Accessory.txt" \
+             "${output_dir}/Subcluster_accessory/${subcluster}/OrthogroupsID.txt"
+          cp "${working_dir}/${subcluster}-Accessory.csv" \
+             "${output_dir}/Subcluster_accessory/${subcluster}/Matrix.txt"
         done
   fi
 
   [[ -f "${working_dir}/Discordant_elements.txt" ]] && \
     cp "${working_dir}/Discordant_elements.txt" "${output_dir}/"
+}
+
+# Removes previous analysis outputs while preserving the OrthoFinder workspace.
+# Used by --skip-orthofinder to allow re-running after the first step.
+# Arguments:
+#   $1 - base working directory path
+# Returns:
+#   0 on success
+clean_previous_run() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local output_dir="${base_dir}/$(basename -s .sh "$0")"
+
+  rm -rf "$output_dir" "${working_dir}/SubCluster"*-* \
+         "${working_dir}/Core_genes"* "${working_dir}/Shared_accessory" \
+         "${working_dir}/Figures"
+  rm -f "${working_dir}/"*.svg "${working_dir}/Shared-Accessory"*\
+        "${working_dir}/CargoHierarchicalTree.nwk" \
+        "${working_dir}/Enrichment_results.txt" \
+        "${working_dir}/Discordant_elements.txt" \
+        "${working_dir}/Blast_CleanResults.txt"
+
+  mkdir -p "${working_dir}/temp"
 }
 
 # ==============================================================================
@@ -415,6 +460,7 @@ threads="8"
 blast_length="1000"
 identity="70"
 overwrite=false
+skip_orthofinder=false
 
 # ==============================================================================
 # ARGUMENT PARSING
@@ -427,6 +473,7 @@ while [[ $# -gt 0 ]]; do
     -l|--length)            shift; blast_length="$1" ;;
     -i|--identity)          shift; identity="$1" ;;
     --overwrite)            overwrite=true ;;
+    --skip-orthofinder)     skip_orthofinder=true ;;
     -help)
       print_help
       exit 0
@@ -450,6 +497,7 @@ echo "  Minimum alignment length:        ${blast_length}"
 echo "  Minimum identity (%):            ${identity}"
 echo "  Threads:                         ${threads}"
 echo "  Overwrite previous run:          ${overwrite}"
+echo "  Skip OrthoFinder:                ${skip_orthofinder}"
 echo ""
 
 # ==============================================================================
@@ -491,20 +539,30 @@ else
   print_help; exit 1
 fi
 
+if $overwrite && $skip_orthofinder; then
+  echo "Error: '--overwrite' and '--skip-orthofinder' are mutually exclusive." >&2
+  exit 1
+fi
+
 check_threads "$threads"
 
 # ==============================================================================
 # MAIN WORKFLOW
 # ==============================================================================
 
-check_clusters "${working_directory}"
-
 # Remove per-run control files when overwriting
 if $overwrite; then
   rm -f "${working_directory}/Clusters/ClusterOrthogroups.txt" \
-        "${working_directory}/Clusters/ClusterCore.txt" \
-        "${working_directory}/Clusters/ClusterMovement.txt"
+        "${working_directory}/Clusters/ClusterSharedAcc.txt" \
+        "${working_directory}/Clusters/ClusterSubAcc.txt" \
+        "${working_directory}/Clusters/ClusterCore.txt"
+elif $skip_orthofinder; then
+  rm -f "${working_directory}/Clusters/ClusterSharedAcc.txt" \
+        "${working_directory}/Clusters/ClusterSubAcc.txt" \
+        "${working_directory}/Clusters/ClusterCore.txt"
 fi
+
+check_clusters "${working_directory}"
 
 # Iterate over each cluster
 while read -r cluster_id; do
@@ -525,23 +583,28 @@ while read -r cluster_id; do
     overwrite "${internal_dir}" "$(basename -s .sh "$0")"
   fi
 
-  log_info "Organizing workspace..."
-  organize_working_directory \
-    "${internal_dir}" \
-    "${working_directory}/Clusters/sub_clusters.txt" \
-    "${cluster_id}"
+  if ! $skip_orthofinder; then
+    log_info "Organizing workspace..."
+    organize_working_directory \
+      "${internal_dir}" \
+      "${working_directory}/Clusters/sub_clusters.txt" \
+      "${cluster_id}"
 
-  log_info "Step 1: Running OrthoFinder..."
-  run_orthofinder "${internal_dir}"
-  log_step "Checking OrthoFinder results..."
-  if ! $orthofinder_flag; then
-    log_warning "OrthoFinder failed for cluster '${cluster_id}'. Skipping."
-    continue
+    log_info "Step 1: Running OrthoFinder..."
+    run_orthofinder "${internal_dir}"
+    log_step "Checking OrthoFinder results..."
+    if ! $orthofinder_flag; then
+      log_warning "OrthoFinder failed for cluster '${cluster_id}'. Skipping."
+      continue
+    fi
+    grep -w "${cluster_id}" \
+      "${working_directory}/Clusters/ClustersAnalyzed.txt" \
+      >> "${working_directory}/Clusters/ClusterOrthogroups.txt"
+    log_info "-> Step 1 finished. Proceeding."
+  else
+    log_info "Skipping workspace organization and OrthoFinder run."
+    clean_previous_run "${internal_dir}"
   fi
-  grep -w "${cluster_id}" \
-    "${working_directory}/Clusters/ClustersAnalyzed.txt" \
-    >> "${working_directory}/Clusters/ClusterOrthogroups.txt"
-  log_info "-> Step 1 finished. Proceeding."
 
   log_info "Step 2: Running BLASTN for nucleotide synteny..."
   run_blast "${internal_dir}"
@@ -561,8 +624,8 @@ while read -r cluster_id; do
   log_step "Checking for core genes..."
   check_core "${internal_dir}"
 
-  log_step "Checking for cargo movement genes..."
-  check_movement "${internal_dir}"
+  log_step "Checking for accessory genes..."
+  check_accessory "${internal_dir}"
   log_info "-> Step 3 finished. Proceeding."
 
   log_info "Organizing output for cluster '${cluster_id}'..."

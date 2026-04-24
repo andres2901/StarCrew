@@ -97,7 +97,8 @@ _starcrew_complete() {
     ClusterCharacterization)
       flags="${common_flags}
              -l --length
-             -i --identity"
+             -i --identity
+             --skip-orthofinder"
       ;;
 
     OrthogroupsOverrepresentation)
@@ -177,7 +178,18 @@ _starcrew_complete() {
       ;;
 
     # --- OrthogroupsAnnotation ---
-    -f|--foldseekdb)
+    -f)
+      case "$subcmd" in
+        OrthogroupsAnnotation)
+          COMPREPLY=( $(compgen -W "pdb afdb_swissprot" -- "$cur") )
+          ;;
+        Initialize)
+          COMPREPLY=( $(compgen -f -- "$cur") )
+          ;;
+      esac
+      return
+      ;;
+    --foldseekdb)
       COMPREPLY=( $(compgen -W "pdb afdb_swissprot" -- "$cur") )
       return
       ;;

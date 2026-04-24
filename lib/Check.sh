@@ -6,7 +6,7 @@
 #              structure, file integrity, and database completeness.
 # USAGE:       source Check.sh
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        24/Apr/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -427,7 +427,7 @@ check_mode_parameter() {
       valid_modes="FullAll AllID Cluster"
       ;;
     OrthogroupsAnnotation)
-      valid_modes="All MoveAssociated Core Overrepresented"
+      valid_modes="Core ShareAccessory SubAccessory Overrepresented"
       ;;
     OrthogroupsOverrepresentation)
       valid_modes="Outliers Enrichment"
