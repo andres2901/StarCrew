@@ -14,7 +14,7 @@
 # USAGE:       StarCrew SyntenyClustering [options]
 #              StarCrew SyntenyClustering -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        24/Apr/2026
+# DATE:        04/May/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -67,10 +67,9 @@ print_help() {
   echo "  2. All-vs-all DIAMOND similarity search."
   echo "  3. Interspecies synteny detection with syntenet."
   echo "  4. Collinearity summarization. Available modes:"
-  echo "     Raw         - Pairs with >= 8% shared collinear genes."
-  echo "                   WARNING: High false positive rate."
+  echo "     Raw         - All pairs."
   echo "     SSP         - Strong synteny pairs only."
-  echo "     FilterBlast - Raw pairs filtered by nucleotide-level BLAST."
+  echo "     FilterBlast - Pairs filtered by nucleotide-level BLAST."
   echo "     FilterMetric- Pairs filtered and updated by a metric system."
   echo "  5. Spectral clustering to define element sub-clusters."
   echo "  6. Per-cluster data organization."

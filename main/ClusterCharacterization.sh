@@ -7,13 +7,13 @@
 #              3. Hierarchical clustering based on orthogroup gene counts.
 #              4. Full cluster connectivity, cargo heatmap, and synteny figure.
 #              5. Detection of individual nesting events within the cluster.
-#              6. Core gene identification (general and subcluster-specific).
-#              7. Putative cargo movement event detection across subclusters.
+#              6. Core gene identification.
+#              7. Accessory gene identification.
 #              8. Discordance detection between cargo clustering and captain tree.
 # USAGE:       StarCrew ClusterCharacterization [options]
 #              StarCrew ClusterCharacterization -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        24/Apr/2026
+# DATE:        04/May/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -64,11 +64,12 @@ print_help() {
   echo "  3. Hierarchical clustering based on orthogroup gene counts."
   echo "  4. Full cluster connectivity, cargo heatmap, and synteny figure."
   echo "  5. Detection of individual nesting events."
-  echo "  6. Core gene identification:"
-  echo "     6.1. General: orthogroups present in >= 80% of elements."
-  echo "     6.2. Specific: orthogroups present in >= 80% of elements"
+  echo "  6. Core gene identification: orthogroups present in >= 80% of elements."
+  echo "  7. Accessory gene identification: "
+  echo "     7.1. Subcluster accessory: orthogroups present in >= 80% of elements"
   echo "          within subclusters (>= 5 elements)."
-  echo "  7. Putative cargo movement event detection across subclusters."
+  echo "     7.2. Share accessory: subcluster accesory genes that are present also"
+  echo "          in elements outside the specified subcluster."
   echo "  8. Discordance detection between cargo clustering and captain tree."
   echo
   echo "Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>"

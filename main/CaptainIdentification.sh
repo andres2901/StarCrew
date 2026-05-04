@@ -12,7 +12,7 @@
 # USAGE:       StarCrew CaptainIdentification [options]
 #              StarCrew CaptainIdentification -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        04/May/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -99,7 +99,7 @@ print_help() {
   echo "  3. Pseudogene search at element boundaries for captainless elements."
   echo "  4. MACSE alignment (AA output) trimmed with ClipKit."
   echo "  5. IQ-TREE phylogenetic inference (>=4 unique sequences: 1000 UFBootstrap"
-  echo "     + sh-aLRT; 2-3 sequences: no support; 1 sequence: skipped)."
+  echo "     + sh-aLRT; 2-3 unique sequences: no support; 1 sequence: skipped)."
   echo
   echo "Available modes:"
   echo "  Cluster  - Runs all five steps per cluster; removes captainless elements."

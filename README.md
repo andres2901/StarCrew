@@ -2,7 +2,7 @@
 
 ## Overview
 
-**StarCrew** is a bash wrapper specifically designed to systematically analyze the cargo genes of Starship elements. The wrapper is composed of six distinct commands and creates a well-organized project directory to facilitate downstream analysis. StarCrew provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this wrapper is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of Starship cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
+**StarCrew** is a bash wrapper specifically designed to systematically analyze the cargo genes of *Starship* elements. The wrapper is composed of six distinct commands and creates a well-organized project directory to facilitate downstream analysis. **StarCrew** provides an initial analysis workflow, ranging from captain identification (to confirm upstream analysis) to the functional annotation of orthogroups within the cargo genes. The primary goal of this wrapper is to offer researchers a simple, integrated workflow for an initial exploratory analysis and comparison of *Starship* cargo genes. This process is expected to help identify biological patterns or generate hypotheses that can be further tested either by bioinformatic or wet-lab experimental approaches.
 
 In addition to the main commands, StarCrew is distributed with a diverse set of auxiliary scripts. Although most of these scripts are primarily used for specific tasks within the main workflow, users can utilize them independently for their own purposes in other bioinformatics settings. These auxiliary scripts cover a diverse range of tasks often encountered in a genomic analysis workflow, including: 1) a modified RIP-like signal calculator, 2) filtering genes or isoforms from a GFF file based on intron density, 3) extracting gene information in batch from multiple genomic regions within a GFF3 file, 4) and other specific tasks.
 
@@ -67,7 +67,7 @@ Due to the size of the functional annotation databases, I recommended checking y
 
 ## Installation
 
-Before installation, ensure you have `Anaconda3` and `git` installed and accessible in your system path, as they are required for the full wrapper installation and set-up. After cloning, execute the `build_StarCrew.sh` script to properly configure a conda environment, install all necessary software dependencies and download the databases required by the wrapper's commands, as shown below:
+Before installation, ensure you have `Anaconda3` and `git` installed, as they are required for the full wrapper installation and set-up. After cloning, execute the `build_StarCrew.sh` script to properly configure a conda environment, install all necessary software dependencies and download the databases required by the wrapper's commands, as shown below:
 
 ```
 # clone the repository
@@ -89,7 +89,7 @@ StarCrew currently supports two distinct types of input data. Generally, both mo
 
 An optional metadata file can also be supplied, containing as much information as the user requires. However, the user must adhere to the following specifications:
 
-- **Format:** It must be a `.csv` file using a semi-colon (`;`) as the separator. There should be no tab characters within the file.
+- **Format:** It must be a `.csv` file using a semi-colon (;) as the separator. There should be no tab characters within the file.
 - **Header:** The first row must represent the header, containing the name of each column.
 - **Identifier Column:** The first column must represent the name/ID of the element, and its header must be `ElementID`.
 
@@ -134,11 +134,7 @@ To use StarCrew, you must have the results from both the `geneFinder` and `eleme
     - **Crucial Points:**
         - The `genome code` must be identical to the code used in the Starfish analysis.
         - The GFF path must point to the original GFF file, and not the files returned by the `starfish format` or `starfish format-ncbi` commands. This wrapper requires the gene and CDS information, and needs the original contig `seqID` to be maintained. The files returned by the `starfish format` or `starfish format-ncbi` commands only retain mRNA information and alter the IDs to suit the Starfish workflow.
-    - **Acquisition:** The user can obtain the necessary TSV file using a similar one-line code as detailed in the Starfish [step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial):
-
-```
-realpath gff3/* | perl -pe 's/^(.+?([^\/]+?).gff3)$/\2\t\1/' > ome2gff.txt
-```
+    - **Acquisition:** The user can obtain the necessary TSV file using a similar one-line code as detailed in the Starfish [step-by-step tutorial](https://github.com/egluckthaler/starfish/wiki/Step-by-step-tutorial): `realpath gff3/* | perl -pe 's/^(.+?([^\/]+?).gff3)$/\2\t\1/' > ome2gff.txt`
 
 ## Main commands
 
@@ -218,7 +214,7 @@ Executes five main steps:
   3. Pseudogene search at element boundaries for captainless elements.
   4. MACSE alignment (AA output) trimmed with ClipKit.
   5. IQ-TREE phylogenetic inference (>=4 unique sequences: 1000 UFBootstrap
-     + sh-aLRT; 2-3 sequences: no support; 1 sequence: skipped).
+     + sh-aLRT; 2-3 unique sequences: no support; 1 sequence: skipped).
 
 Available modes:
   Cluster  - Runs all five steps per cluster; removes captainless elements.
@@ -248,7 +244,7 @@ Optional args:
   -help                   Display this help message.
 ```
 
-The identification of the Captain gene is based on its basic description: a Tyrosine Recombinase (YR recombinase) containing a DUF3435 domain ([Gluck-Thaler et al. 2022](https://academic.oup.com/mbe/article/39/5/msac109/6588634), [Gluck-Thaler & Vogan 2024](https://academic.oup.com/nar/article/52/10/5496/7660083?login=true)). For this purpose, we construct or retrieve the following three sets of HMM profiles:
+The identification of the Captain gene is based on its basic description: a Tyrosine Recombinase (YR recombinase) containing a DUF3435 domain at the beginning of the element ([Gluck-Thaler et al. 2022](https://academic.oup.com/mbe/article/39/5/msac109/6588634), [Gluck-Thaler & Vogan 2024](https://academic.oup.com/nar/article/52/10/5496/7660083?login=true)). For this purpose, we construct or retrieve the following three sets of HMM profiles:
 
 1.  **Starfish Captain HMM:** The HMM profile for Captain proteins distributed with the [Starfish toolkit](https://github.com/egluckthaler/starfish).
 2.  **DUF3435 HMM:** The HMM profile for the DUF3435 domain (Pfam accession: PF11917.13).
@@ -283,10 +279,9 @@ Executes six main steps:
   2. All-vs-all DIAMOND similarity search.
   3. Interspecies synteny detection with syntenet.
   4. Collinearity summarization. Available modes:
-     Raw         - Pairs with >= 8% shared collinear genes.
-                   WARNING: High false positive rate.
+     Raw         - All pairs.
      SSP         - Strong synteny pairs only.
-     FilterBlast - Raw pairs filtered by nucleotide-level BLAST.
+     FilterBlast - Pairs filtered by nucleotide-level BLAST.
      FilterMetric- Pairs filtered and updated by a metric system.
   5. Spectral clustering to define element sub-clusters.
   6. Per-cluster data organization.
@@ -344,7 +339,6 @@ The final pairs can be returned using one of four criteria-based modes:
 
 1.  **Raw Mode:**
     - Returns all pairs.
-    - **WARNING:** This mode may yield a high rate of false positives and requires manual effort to confirm the results.
 2.  **Strong Syntenic Pairs (SSP):**
     - Returns all pairs with a $GCP \ge 41$%.
     - For pairs with a relatively large difference in length and/or gene content, this mode also accepts pairs where $ECP_x \ge 45$% and the ratio between the ECPs is at least $1.8$, meaning $\frac{ECP_x}{ECP_y} \ge 1.8$.
@@ -394,11 +388,12 @@ Performs eight steps per cluster:
   3. Hierarchical clustering based on orthogroup gene counts.
   4. Full cluster connectivity, cargo heatmap, and synteny figure.
   5. Detection of individual nesting events.
-  6. Core gene identification:
-     6.1. General: orthogroups present in >= 80% of elements.
-     6.2. Specific: orthogroups present in >= 80% of elements
+  6. Core gene identification: orthogroups present in >= 80% of elements.
+  7. Accessory gene identification: 
+     7.1. Subcluster accessory: orthogroups present in >= 80% of elements
           within subclusters (>= 5 elements).
-  7. Putative cargo movement event detection across subclusters.
+     7.2. Share accessory: subcluster accesory genes that are present also 
+          in elements outside the specified subcluster.
   8. Discordance detection between cargo clustering and captain tree.
 
 Usage: StarCrew ClusterCharacterization [-help] -w <directory_path>
@@ -523,7 +518,7 @@ Performs four steps:
   3. Per-orthogroup internal summary CSV.
   4. General summary retaining annotations shared by >= 50% of proteins.
 
-Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>
+Usage: StarCrew OrthogroupsAnnotation [-help] -w <directory_path>
        [ -m <string> -f <string> -t <integer> --overwrite ]
 
 Required args:
@@ -599,7 +594,7 @@ In addition to the three main directories, five files can be found in the root p
 - `Gene_stats.txt`: A file containing statistics of the gene prediction within the elements. It stores three main statistics: gene number, average gene length (nucleotide), and average intergenic length.
 - `Sequences.fa`: A multifasta file of the elements with the updated headers.
 
-After a succesfull run of each command, a new directory containing the main output information will appear in the project root directory, named after the specific command, as detailed in the documentation for that command. The only exception to this naming is the `StarCrew SyntenyClustering` command, which creates a dedicated `Cluster/` directory.
+After a succesfull run of each command, a new directory containing the main output information will appear in the project root directory, named after the specific command, as detailed in the documentation for that command. The only exception to this naming is the `StarCrew SyntenyClustering` command, which creates a dedicated `Clusters/` directory.
 
 ## Pipeline modes
 
@@ -609,7 +604,7 @@ As previously mentioned, this wrapper is composed of a series of sequential comm
 
 In the workflow diagram, the purple stars indicate the specific commands where data filtering is performed: `Initialize` and `CaptainIdentification`. Also, the `CaptainIdentification` is the only command that must be used twice during the cargo gene dynamic analysis, where the first time is using the 'AllID' mode and the second time the 'Cluster' mode. Finally, both analysis can be performed in parallel within a single project directory without any interference between them.
 
-To get a better sense of each mode, you can run the tutorial as described in the [wiki page](https://github.com/andres2901/StarCrew/wiki/Tutorial).
+To get a better sense of how to run each mode, you can follow the tutorial as described in the [wiki page](https://github.com/andres2901/StarCrew/wiki/Tutorial).
 
 ## Citing StarCrew and software called by StarCrew
 

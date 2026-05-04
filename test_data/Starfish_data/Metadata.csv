@@ -1,0 +1,58 @@
+ElementID;Family;navis;haplotype;Length;GenomeID;Source;Country
+47-4_s00005;Phoenix;Janus;Janus-h2;324239;47-4;Environmental;United Kingdom
+47-4_s00007;Galactica;Lamia;Lamia-h3;301176;47-4;Environmental;United Kingdom
+47-4_s00010;Tardis;Tardis;Tardis-h1;83113;47-4;Environmental;United Kingdom
+08-19-02-30_s00025;Enterprise;Osiris;Osiris-h4;49345;08-19-02-30;Environmental;Netherlands
+08-19-02-30_s00027;Tardis;Tardis;Tardis-h1;83118;08-19-02-30;Environmental;Netherlands
+08-19-02-30_s00028;Galactica;Lamia;Lamia-h1;125937;08-19-02-30;Environmental;Netherlands
+08-19-02-30_s00033;Enterprise;Osiris;Osiris-h3;81413;08-19-02-30;Environmental;Netherlands
+08-19-02-30_e00035;Phoenix;Janus;Janus-h4;21800;08-19-02-30;Environmental;Netherlands
+47-10_s00011;Phoenix;Janus;Janus-h5;21448;47-10;Environmental;New Zealand
+47-10_s00012;Enterprise;Osiris;Osiris-h3;81686;47-10;Environmental;New Zealand
+47-10_s00014;Enterprise;Osiris;Osiris-h1;39469;47-10;Environmental;New Zealand
+47-10_s00017;Enterprise;Osiris;Osiris-h4;47524;47-10;Environmental;New Zealand
+47-10_s00024;Tardis;Tardis;Tardis-h1;83370;47-10;Environmental;New Zealand
+47-10_e00027;Enterprise;Osiris;Osiris-h2;139685;47-10;Environmental;New Zealand
+47-10_e00028;Prometheus;Gnosis;Gnosis-h1;76017;47-10;Environmental;New Zealand
+AF293_e00029;Galactica;Lamia;Lamia-h4;331760;AF293;Clinical;United Kingdom
+AF293_e00030;Galactica;Lamia;Lamia-h2;65425;AF293;Clinical;United Kingdom
+AF293_s00031;Hephaestus;Nebuchadnezzar;Nebuchadnezzar-h2;57353;AF293;Clinical;United Kingdom
+AF293_s00032;Enterprise;Osiris;Osiris-h4;49407;AF293;Clinical;United Kingdom
+AF293_s00037;Hephaestus;Nebuchadnezzar;Nebuchadnezzar-h1;53120;AF293;Clinical;United Kingdom
+AF293_e00039;Prometheus;Gnosis;Gnosis-h1;75879;AF293;Clinical;United Kingdom
+AF293_s00042;Tardis;Tardis;Tardis-h1;89046;AF293;Clinical;United Kingdom
+ATCC13073_s00050;Galactica;Lamia;Lamia-h2;65669;ATCC13073;Clinical;USA
+ATCC42202_s00053;Enterprise;Osiris;Osiris-h4;49588;ATCC42202;Clinical;USA
+ATCC42202_s00060;Galactica;Lamia;Lamia-h2;78614;ATCC42202;Clinical;USA
+ATCC42202_s00061;Tardis;Tardis;Tardis-h1;83166;ATCC42202;Clinical;USA
+ATCC-46645-lr_s00065;Hephaestus;Nebuchadnezzar;Nebuchadnezzar-h2;57281;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_s00069;Enterprise;Osiris;Osiris-h4;47538;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_e00071;Phoenix;Janus;Janus-h2;112500;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_s00070;Galactica;Lamia;Lamia-h2;65072;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_e00072;Enterprise;Osiris;Osiris-h2;26164;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_s00078;Enterprise;Osiris;Osiris-h3;29111;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_e00080;Prometheus;Gnosis;Gnosis-h1;75807;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_e00081;Phoenix;Janus;Janus-h1;34889;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_e00083;Phoenix;Janus;Janus-h4;18826;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_s00084;Hephaestus;Nebuchadnezzar;Nebuchadnezzar-h1;53021;ATCC-46645-lr;Clinical;United Kingdom
+ATCC-46645-lr_e00086;Prometheus;Logos;Logos-h1;64631;ATCC-46645-lr;Clinical;United Kingdom
+B5233_s00093;Galactica;Lamia;Lamia-h2;65669;B5233;missing;missing
+CEA10_e00018;Tardis;Tardis;Tardis-h1;17384;CEA10;Clinical;France
+CEA10_s00022;Enterprise;Osiris;Osiris-h3;81736;CEA10;Clinical;France
+CEA10_s00024;Prometheus;Logos;Logos-h1;64603;CEA10;Clinical;France
+CEA10_s00026;Prometheus;Gnosis;Gnosis-h2;92365;CEA10;Clinical;France
+CEA10_s00031;Prometheus;Logos;Logos-h2;69562;CEA10;Clinical;France
+CEA10_s00033;Hephaestus;Nebuchadnezzar;Nebuchadnezzar-h1;53055;CEA10;Clinical;France
+CEA10_s00034;Prometheus;Gnosis;Gnosis-h1;77882;CEA10;Clinical;France
+CEA10_e00035;Phoenix;Janus;Janus-h2;188463;CEA10;Clinical;France
+H237_s00131;Tardis;Tardis;Tardis-h1;83125;H237;Clinical;United Kingdom
+H237_s00136;Prometheus;Gnosis;Gnosis-h1;76007;H237;Clinical;United Kingdom
+H237_e00138;Phoenix;Janus;Janus-h1;36130;H237;Clinical;United Kingdom
+S02-30_s00142;Enterprise;Osiris;Osiris-h4;49342;S02-30;Clinical;USA
+S02-30_s00148;Galactica;Lamia;Lamia-h1;75334;S02-30;Clinical;USA
+S02-30_s00150;Enterprise;Osiris;Osiris-h3;81849;S02-30;Clinical;USA
+S02-30_e00152;Phoenix;Janus;Janus-h4;21965;S02-30;Clinical;USA
+S02-30_s00153;Tardis;Tardis;Tardis-h1;83114;S02-30;Clinical;USA
+W72310-lr_e00163;Phoenix;Janus;Janus-h4;21964;W72310-lr;Clinical;USA
+W72310-lr_s00161;Tardis;Tardis;Tardis-h1;83097;W72310-lr;Clinical;USA
+W72310-lr_s00162;Hephaestus;Nebuchadnezzar;Nebuchadnezzar-h1;53144;W72310-lr;Clinical;USA
