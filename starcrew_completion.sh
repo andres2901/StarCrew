@@ -4,16 +4,6 @@
 # DESCRIPTION: Bash completion for the StarCrew command-line interface.
 #              Provides Tab-completion for subcommands and their flags,
 #              including value suggestions for enumerated arguments.
-#
-# INSTALL (conda environment):
-#   mkdir -p "${CONDA_PREFIX}/etc/conda/activate.d"
-#   mkdir -p "${CONDA_PREFIX}/etc/conda/deactivate.d"
-#   cp starcrew_completion.sh "${CONDA_PREFIX}/etc/conda/activate.d/"
-#   echo 'complete -r StarCrew 2>/dev/null; unset _starcrew_complete' \
-#     > "${CONDA_PREFIX}/etc/conda/deactivate.d/starcrew_completion.sh"
-#
-# MANUAL LOAD (current session only):
-#   source starcrew_completion.sh
 # ==============================================================================
 
 _starcrew_complete() {
