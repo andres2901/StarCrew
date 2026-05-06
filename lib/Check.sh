@@ -304,11 +304,13 @@ check_metadata_file() {
   fi
 
   if [[ ! -s "$metadata_path" ]]; then
-    return 0
+    echo "Error: file '${metadata_path}' is empty."
+    exit 1
   fi
 
-  if [[ $(head -n1 "$metadata_path" | grep -c "ElementID") -ne 1 ]]; then
-    return 0
+  if [[ $(head -n1 $metadata_path | grep -c "ElementID") -ne 1 ]]; then
+    echo "Error: Header 'ElementID' is not found in '${metadata_path}' file."
+    exit 1
   fi
 
   local col_counts col_unique
