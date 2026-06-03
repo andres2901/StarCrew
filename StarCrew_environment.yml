@@ -31,7 +31,6 @@ dependencies:
   - r-dplyr=1.1.4
   - r-essentials=4.4
   - r-future=1.68.0
-  - r-gggenomes=1.1.2
   - r-ggnewscale=0.5.2
   - r-ggplot2=3.5.2
   - r-mrfdepth=1.0.17
