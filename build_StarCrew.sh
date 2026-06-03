@@ -105,6 +105,9 @@ install_r_packages() {
   log_info "Verifying required R packages..."
 
   Rscript -e '
+    # Install packages
+    install.packages("gggenomes", repos = "https://cloud.r-project.org/")
+      
     required_pkgs <- c(
       "optparse", "ggplot2", "ape", "ggtree", "reshape2",
       "viridis", "dplyr", "gggenomes", "scales", "dendextend",
