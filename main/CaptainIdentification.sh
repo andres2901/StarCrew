@@ -268,6 +268,7 @@ captain_identification() {
     --fasta "${nucleotide_dir}" \
     --output "${working_dir}/CaptainsID.txt" \
     --empty "${working_dir}/EmptyElements.txt" \
+    --not_passed "${working_dir}/EmptyElements-reason.txt" \
     --min_common "${level}" \
     --min_length "${length}" \
     --range_kb "${range}" > ${working_dir}/hmmscan_process_log.txt

@@ -236,13 +236,13 @@ def check_filters(
         pos_range = seq_length / 2
 
     if not (exon_range[0] <= gene_info['Exon_Count'] <= exon_range[1]):
-        return False, f"ID '{gene_id}' has {gene_info['Exon_Count']} exons, not in the required range {exon_range}."
+        return False, (f"ID '{gene_id}' has {gene_info['Exon_Count']} exons, not in the required range {exon_range}.", f"Exon_count")
 
     is_start = (gene_info['Strand'] == '+' and (gene_info['Start_Pos'] - gene_info['Element_Start']) <= pos_range)
     is_end = (gene_info['Strand'] == '-' and (gene_info['Element_End'] - gene_info['End_Pos']) <= pos_range)
 
     if not (is_start or is_end):
-        return False, f"ID '{gene_id}' is not at the beginning (for + strand) or end (for - strand)."
+        return False, (f"ID '{gene_id}' is not at the beginning (for + strand) or end (for - strand).", f"Boundary")
     
     return True, "All filters passed."
 
@@ -272,7 +272,7 @@ def run_gff_analysis(
 
     common_ids = set(hmm_ids).intersection(set(gff_df['ID'].values))
     if not common_ids:
-        return None, "No common IDs found between HMM and GFF files."
+        return None, (f"No common IDs found between HMM and GFF files.", f"File")
 
     candidates = gff_df[gff_df['ID'].isin(common_ids)].copy()
     pos_range = pos_range_kb * 1000
@@ -289,12 +289,151 @@ def run_gff_analysis(
     
     all_candidates = candidates[cond_plus | cond_minus].copy()
     if all_candidates.empty:
-        return None, "No genes passed location and strand filters."
+        return None, (f"No genes passed location and strand filters.", f"Boundary")
 
     all_candidates['is_plus'] = all_candidates['Strand'] == '+'
     all_candidates.sort_values(by=['is_plus', 'Relative_Pos', 'Exon_Count'], ascending=[False, True, True], inplace=True)
     
     return all_candidates.iloc[0]['ID'], "Success"
+
+
+def _effective_pos_range(gene_info: pd.Series, pos_range_kb: int) -> float:
+    """Compute the position-range threshold (bp), shrunk for short elements.
+
+    Mirrors the logic in check_filters()/run_gff_analysis(): if the element
+    is shorter than twice the requested kb range, the range is capped at
+    half the element length so the two boundary windows never overlap.
+    """
+    pos_range = pos_range_kb * 1000
+    seq_length = gene_info['Element_End'] - gene_info['Element_Start']
+    if seq_length < (2 * pos_range):
+        pos_range = seq_length / 2
+    return pos_range
+
+
+def _gene_failure_distance(
+    gene_info: pd.Series,
+    exon_range: tuple[int, int],
+    pos_range_kb: int,
+    hit_length: float | None = None,
+    min_length: int | None = None
+) -> tuple[float, str]:
+    """Score how far a single gene is from passing the acceptance filters.
+ 
+    A distance of 0 means the gene would pass the exon-count, position, and
+    (when applicable) length filters. Larger values mean further from
+    passing. The exon distance is in exon-count units; the position
+    distance is converted to kb; the length distance is normalized by /100
+    so all three terms sit on roughly comparable scales and can be summed.
+ 
+    Args:
+        gene_info: A single row (Series) from gff_df.
+        exon_range: Tuple (min, max) accepted exon count.
+        pos_range_kb: Distance threshold in kb from element boundary.
+        hit_length: The HMM target length recorded for this gene's ID in
+                    the primary (length-filtering) HMM run. None if the ID
+                    never appeared there (length unknown / not applicable).
+        min_length: The minimum required hit length (--min_length). If
+                    None, the length filter is skipped entirely.
+ 
+    Returns:
+        Tuple (distance, reason) where distance is a non-negative float
+        (0 = would pass) and reason is a short code (or combination of
+        codes joined with " + ") describing which filter(s) the gene
+        fails: "Exon_count", "Boundary", "Length", or "Confident_level"
+        if none of those apply.
+    """
+ 
+    exon_count = gene_info['Exon_Count']
+    if exon_count < exon_range[0]:
+        exon_dist = exon_range[0] - exon_count
+    elif exon_count > exon_range[1]:
+        exon_dist = exon_count - exon_range[1]
+    else:
+        exon_dist = 0
+ 
+    pos_range = _effective_pos_range(gene_info, pos_range_kb)
+    if gene_info['Strand'] == '+':
+        actual_dist = gene_info['Start_Pos'] - gene_info['Element_Start']
+    else:
+        actual_dist = gene_info['Element_End'] - gene_info['End_Pos']
+    pos_dist_bp = max(0.0, actual_dist - pos_range)
+    pos_dist_kb = pos_dist_bp / 1000.0
+ 
+    length_dist = 0.0
+    if min_length is not None and hit_length is not None and hit_length < min_length:
+        length_dist = (min_length - hit_length) / 100.0
+ 
+    total = float(exon_dist) + pos_dist_kb + length_dist
+ 
+    reasons = []
+    if exon_dist > 0:
+        reasons.append("Exon_count")
+    if pos_dist_kb > 0:
+        reasons.append("Boundary")
+    if length_dist > 0:
+        reasons.append("Length")
+ 
+    reason = "+".join(reasons) if reasons else "Confident_level"
+ 
+    return total, reason
+
+
+def find_closest_candidate(
+    candidate_ids: set,
+    gff_df: pd.DataFrame,
+    exon_range: tuple[int, int],
+    pos_range_kb: int,
+    length_map: dict | None = None,
+    min_length: int | None = None
+) -> tuple[str | None, str]:
+    """Find the candidate gene closest to passing the acceptance filters.
+ 
+    Among all candidate IDs that have a matching entry in gff_df, returns
+    the one with the smallest combined exon/position/length "distance to
+    passing" score, along with a short code for why it still fails.
+ 
+    Args:
+        candidate_ids: Set of gene IDs to evaluate (e.g. union of every
+                        HMM hit at any consensus level for this element,
+                        INCLUDING ones dropped by the length filter).
+        gff_df: DataFrame as returned by get_gff_data().
+        exon_range: Tuple (min, max) accepted exon count.
+        pos_range_kb: Distance threshold in kb from element boundary.
+        length_map: Optional dict mapping gene ID -> HMM hit length, built
+                    from the primary HMM run's raw output. Used to score
+                    and report the "Length" failure reason.
+        min_length: The minimum required hit length (--min_length).
+ 
+    Returns:
+        Tuple (closest_id, reason). closest_id is None if no candidate ID
+        has a matching entry in gff_df, in which case reason explains that.
+    """
+ 
+    if gff_df.empty or not candidate_ids:
+        return None, "No candidate genes available for comparison."
+ 
+    matches = gff_df[gff_df['ID'].isin(candidate_ids)].copy()
+    if matches.empty:
+        return None, "None of the identified IDs were found in the GFF."
+ 
+    length_map = length_map or {}
+ 
+    best_id = None
+    best_reason = ""
+    best_dist = None
+ 
+    for _, row in matches.iterrows():
+        hit_length = length_map.get(row['ID'])
+        dist, reason = _gene_failure_distance(
+            row, exon_range, pos_range_kb, hit_length, min_length
+        )
+        if best_dist is None or dist < best_dist:
+            best_dist = dist
+            best_id = row['ID']
+            best_reason = reason
+ 
+    return best_id, best_reason
 
 
 def process_hmm_files(
@@ -305,6 +444,7 @@ def process_hmm_files(
     fasta_folder: str,
     output_file: str,
     empty_output_file: str,
+    not_passed_file: str,
     min_common: int,
     min_length: int,
     range_kb: int
@@ -314,7 +454,9 @@ def process_hmm_files(
     Iterates over all HMM files in the first folder, resolves consensus
     IDs across three HMMER runs at decreasing stringency levels, validates
     each candidate against GFF filters, and writes accepted IDs to the
-    output file.
+    output file. Elements that did not yield an accepted gene are logged
+    to empty_output_file (basenames only) and to not_passed_file with the
+    rejection reason and the closest-passing candidate gene.
 
     Args:
         hmm_folder1: Path to the first HMMER results folder.
@@ -324,6 +466,8 @@ def process_hmm_files(
         fasta_folder: Path to the folder containing FASTA files.
         output_file: Path to the output file for accepted gene IDs.
         empty_output_file: Path to the log file for elements with no result.
+        not_passed_file: Path to the tab-separated log of rejected elements,
+                          one line per element: "<Name>\\t<Reason>\\t<Closest gene>".
         min_common: Minimum consensus level required (1, 2, or 3 HMM runs).
         min_length: Minimum hit length to consider from the first HMM run.
         range_kb: Distance threshold in kb from element boundary.
@@ -336,7 +480,9 @@ def process_hmm_files(
     hmm_files1 = glob.glob(os.path.join(hmm_folder1, '*.txt'))
     all_results = []
     
-    with open(empty_output_file, 'w') as empty_f:
+    with open(empty_output_file, 'w') as empty_f, \
+         open(not_passed_file, 'w') as not_passed_f:
+
         for hmm_path1 in hmm_files1:
             base_name = os.path.basename(hmm_path1).split('.')[0]
             print(f"Processing {base_name}...")
@@ -344,23 +490,35 @@ def process_hmm_files(
             final_selected_id = None
             final_reason = ""
 
+            # ── helper to log a rejection consistently ───────────────────────
+            def log_rejection(reason: str, closest_gene: str = "NA") -> None:
+                empty_f.write(f"{base_name}\n")
+                not_passed_f.write(f"{base_name}\t{reason}\t{closest_gene}\n")
+
             fasta_path = find_fasta_path(fasta_folder, base_name)
             if not fasta_path:
                 final_reason = f"No FASTA file found for {base_name}."
                 print(f"No ID selected for {base_name}. Reason: {final_reason}")
-                empty_f.write(f"{base_name}\n")
+                log_rejection("File")
                 continue
 
             gff_df, gff_reason = get_gff_data(os.path.join(gff_folder, f'{base_name}.gff'), fasta_path)
             if gff_df.empty:
                 print(f"No ID selected for {base_name}. Reason: {gff_reason}")
-                empty_f.write(f"{base_name}\n")
+                log_rejection("File")
                 continue
             
             ids1_full, df1_raw = parse_hmm_file(hmm_path1)
             ids1 = set(df1_raw[df1_raw['Length'] >= min_length]['ID'].values) if not df1_raw.empty else set()
             ids2, _ = parse_hmm_file(os.path.join(hmm_folder2, f'{base_name}.txt'))
             ids3, _ = parse_hmm_file(os.path.join(hmm_folder3, f'{base_name}.txt'))
+
+            id_length_map = {}
+            if not df1_raw.empty:
+                id_length_map = df1_raw.groupby('ID')['Length'].max().to_dict()
+ 
+            # Pool of every ID identified at any consensus level
+            all_seen_ids = ids1_full | ids2 | ids3
 
             common_ids_123 = ids1.intersection(ids2).intersection(ids3)
             common_ids_12 = ids1.intersection(ids2)
@@ -373,7 +531,7 @@ def process_hmm_files(
                 if final_selected_id:
                     final_reason = f"Selected via GFF tie-breaker at level 3. ({g_res})"
                 else:
-                    final_reason = f"{g_res}"
+                    final_reason = g_res
             elif len(common_ids_12) == 1 and min_common <= 2:
                 final_selected_id = list(common_ids_12)[0]
                 final_reason = "Finalized with unique ID at level 2."
@@ -382,7 +540,7 @@ def process_hmm_files(
                 if final_selected_id:
                     final_reason = f"Selected via GFF tie-breaker at level 2. ({g_res})"
                 else:
-                    final_reason = f"{g_res}"
+                    final_reason = g_res
             elif len(ids1) == 1 and min_common == 1:
                 final_selected_id = list(ids1)[0]
                 final_reason = "Finalized with unique ID at level 1."
@@ -391,7 +549,7 @@ def process_hmm_files(
                 if final_selected_id:
                     final_reason = f"Selected via GFF tie-breaker at level 1. ({g_res})"
                 else:
-                    final_reason = f"{g_res}"
+                    final_reason = g_res
             else:
                 final_reason = f"No common IDs found at level {min_common}."
 
@@ -401,11 +559,18 @@ def process_hmm_files(
                     all_results.append({'ID': final_selected_id})
                     print(f"  Success: Selected ID '{final_selected_id}'. Reason: {final_reason}")
                 else:
-                    print(f"  No ID selected for {base_name}. Reason: {validation_reason}")
-                    empty_f.write(f"{base_name}\n")
+                    print(f"  No ID selected for {base_name}. Reason: {validation_reason[0]}")
+                    log_rejection(validation_reason[1], final_selected_id)
             else:
                 print(f"  No ID selected for {base_name}. Reason: {final_reason}")
-                empty_f.write(f"{base_name}\n")
+                closest_id, closest_reason = find_closest_candidate(
+                    all_seen_ids, gff_df, EXON_RANGE, range_kb,
+                    length_map=id_length_map, min_length=min_length
+                )
+                if closest_id:
+                    log_rejection(closest_reason, closest_id)
+                else:
+                    log_rejection("No_match", "NA")
     
     if all_results:
         try:
@@ -428,14 +593,17 @@ def main() -> None:
     parser.add_argument('--fasta', dest='fasta_folder', required=True, help='Path to FASTA folder.')
     parser.add_argument('--output', dest='output_file', required=True, help='Output filename.')
     parser.add_argument('--empty', dest='empty_output_file', required=True, help='Log for empty results.')
+    parser.add_argument('--not_passed', dest='not_passed_file', required=True,
+                         help='Tab-separated log of rejected elements: "<Name>\\t<Reason>\\t<Closest gene>".')
     parser.add_argument('--min_common', type=int, default=2, choices=[1, 2, 3])
     parser.add_argument('--min_length', type=int, default=250)
     parser.add_argument('--range_kb', type=int, default=20)
 
     args = parser.parse_args()
-    process_hmm_files(args.hmm_folder1, args.hmm_folder2, args.hmm_folder3, 
+    process_hmm_files(args.hmm_folder1, args.hmm_folder2, args.hmm_folder3,
                       args.gff_folder, args.fasta_folder, args.output_file, 
-                      args.empty_output_file, args.min_common, args.min_length, args.range_kb)
+                      args.empty_output_file, args.not_passed_file,
+                      args.min_common, args.min_length, args.range_kb)
 
 
 if __name__ == "__main__":
