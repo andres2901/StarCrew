@@ -128,9 +128,14 @@ def process_blast_hits(args: argparse.Namespace) -> tuple[dict, dict]:
         q_cover = (100.0 * total_q_sum / qlen_orig) if qlen_orig > 0 else 0.0
         s_cover = (100.0 * total_s_sum / slen_orig) if slen_orig > 0 else 0.0
 
-        if q_cover < args.min_hit_coverage and s_cover < args.min_hit_coverage:
-            stats["filtered_coverage"] += 1
-            continue
+        if args.mode == "Classification":
+            if q_cover < args.min_hit_coverage or s_cover < args.min_hit_coverage:
+                stats["filtered_coverage"] += 1
+                continue
+        elif args.mode == "Filter":
+            if q_cover < args.min_hit_coverage and s_cover < args.min_hit_coverage:
+                stats["filtered_coverage"] += 1
+                continue
 
         clean[hit_key] = {
             'pident': final_pident, 'qlen': qlen_orig, 'slen': slen_orig,
@@ -182,6 +187,7 @@ def main() -> None:
     )
     parser.add_argument("-f", "--file", dest="file_in", required=True, help="Input BLAST file")
     parser.add_argument("-o", "--output", dest="file_out", required=True, help="Output file")
+    parser.add_argument("-m", "--mode", dest="mode", default="Filter", choices=["Filter","Classification"], help="Output file")
     parser.add_argument("-fs", "--fragmentSize", type=int, default=2000, dest="min_fragment_size")
     parser.add_argument("-i", "--identity", type=float, default=70.0, dest="min_pident")
     parser.add_argument("-ms", "--mergeSize", type=int, default=2000, dest="min_merged_size")
@@ -190,7 +196,7 @@ def main() -> None:
     args = parser.parse_args()
 
     print(f"\n  Processing: {args.file_in}")
-    print(f"  Min Fragment: {args.min_fragment_size} bp | Min Identity: {args.min_pident}%")
+    print(f"  Min Fragment: {args.min_fragment_size} bp | Min Identity: {args.min_pident}% | Min coverage: {args.min_hit_coverage}")
 
     clean_hits, stats = process_blast_hits(args)
 

@@ -15,7 +15,7 @@
 # USAGE:       StarCrew OrthogroupsAnnotation [options]
 #              StarCrew OrthogroupsAnnotation -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        24/Apr/2026
+# DATE:        9/Jul/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -185,19 +185,19 @@ check_internal_directory_structure() {
 
   case "$mode" in
     SubAccesory)
-      local move_dir
+      local subacc_dir
       subacc_dir=$(find "$annotation_dir" -maxdepth 1 \
         -type d -name "Subcluster_accessory" 2>/dev/null)
-      if [[ -z "$move_dir" ]]; then
+      if [[ -z "$subacc_dir" ]]; then
         echo "WARNING: No Subcluster accessory orthogroup directory found in '${annotation_dir}'." >&2
         directory_flag=false
       fi
       ;;
     ShareAccessory)
-      local move_dir
+      local shareacc_dir
       shareacc_dir=$(find "$annotation_dir" -maxdepth 1 \
         -type d -name "Shared_accessory" 2>/dev/null)
-      if [[ -z "$move_dir" ]]; then
+      if [[ -z "$shareacc_dir" ]]; then
         echo "WARNING: No Shared accessory orthogroup directory found in '${annotation_dir}'." >&2
         directory_flag=false
       fi

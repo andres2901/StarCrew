@@ -6,7 +6,7 @@
 #              functions used across all pipeline commands.
 # USAGE:       source Utils.sh
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        12/Mar/2026
+# DATE:        09/Jul/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -104,6 +104,24 @@ overwrite() {
       fi
       ;;
 
+    GeneHomogenization)
+      local old_data="${working_dir}/Data/Old_gene_models"
+      if [[ -d "${old_data}" ]]; then
+        log_info "Restoring old gene models to Data/..."
+
+        local data_dir gff_dir protein_dir nucleotide_dir cds_dir
+        data_dir=$(find "$working_dir" -maxdepth 1 -type d -name "Data" 2>/dev/null)
+        gff_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Gff" 2>/dev/null)
+        protein_dir=$(find "$data_dir" -maxdepth 1 -type d -name "Protein" 2>/dev/null)
+        cds_dir=$(find "$data_dir" -maxdepth 1 -type d -name "CDS" 2>/dev/null)
+
+        mv ${old_data}/Gff/* "${gff_dir}/"
+        mv ${old_data}/Protein/* "${protein_dir}/"
+        mv ${old_data}/CDS/* "${cds_dir}/"
+
+        rm -r "$old_data"
+      fi
+      ;;
   esac
 }
 

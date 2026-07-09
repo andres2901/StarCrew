@@ -6,7 +6,7 @@
 #              structure, file integrity, and database completeness.
 # USAGE:       source Check.sh
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        24/Apr/2026
+# DATE:        09/Jul/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -41,6 +41,7 @@ check_main_directory() {
   local main_scripts=(
     CaptainIdentification
     ClusterCharacterization
+    GeneHomogenization
     Initialize
     OrthogroupsAnnotation
     OrthogroupsOverrepresentation
@@ -364,6 +365,9 @@ check_auxiliary_scripts() {
     Initialize)
       scripts=("rip_calculator.py" "gff_slicer.py" "gff_split.py" "merge.py")
       ;;
+    GeneHomogenization)
+      scripts=("Blast_CleanUp.py")
+      ;;
     SyntenyClustering)
       scripts=(
         "PreCluster.py" "Blast_CleanUp.py" "Clustering.py"
@@ -423,7 +427,7 @@ check_mode_parameter() {
       valid_modes="Simple Starfish"
       ;;
     SyntenyClustering)
-      valid_modes="Raw SSP FilterBlast FilterMetric"
+      valid_modes="Raw SSP FilterBlast FilterMetric Classification"
       ;;
     CaptainIdentification)
       valid_modes="FullAll AllID Cluster"
@@ -468,6 +472,9 @@ check_required_software() {
     Initialize)
       tools=("python" "metaeuk" "agat_sp_extract_sequences.pl")
       ;;
+    GeneHomogenization)
+      tools=("python" "blastn" "makeblastdb" "agat_sp_extract_sequences.pl" "liftoff" "seqkit")
+      ;;
     SyntenyClustering)
       tools=(
         "python" "Rscript" "diamond"
@@ -492,7 +499,7 @@ check_required_software() {
     All)
       tools=(
         "python" "metaeuk" "agat_sp_extract_sequences.pl"
-        "Rscript" "diamond"
+        "Rscript" "diamond" "liftoff"
         "blastn" "makeblastdb" "blastdb_aliastool" "blastdbcmd"
         "orthofinder" "gotree"
         "macse" "hmmscan" "clipkit" "iqtree3" "mafft"

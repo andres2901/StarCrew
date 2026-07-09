@@ -14,7 +14,7 @@
 # USAGE:       StarCrew SyntenyClustering [options]
 #              StarCrew SyntenyClustering -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        04/May/2026
+# DATE:        09/Jul/2026
 # VERSION:     1.0.0
 # ==============================================================================
 
@@ -67,9 +67,10 @@ print_help() {
   echo "  2. All-vs-all DIAMOND similarity search."
   echo "  3. Interspecies synteny detection with syntenet."
   echo "  4. Collinearity summarization. Available modes:"
-  echo "     Raw         - All pairs."
+  echo "     Raw         - Pairs with >= 8% shared collinear genes."
+  echo "                   WARNING: High false positive rate."
   echo "     SSP         - Strong synteny pairs only."
-  echo "     FilterBlast - Pairs filtered by nucleotide-level BLAST."
+  echo "     FilterBlast - Raw pairs filtered by nucleotide-level BLAST."
   echo "     FilterMetric- Pairs filtered and updated by a metric system."
   echo "  5. Spectral clustering to define element sub-clusters."
   echo "  6. Per-cluster data organization."
@@ -85,7 +86,7 @@ print_help() {
   echo
   echo "Required args with defaults:"
   echo "  -m, --mode              Summarization mode (Default: FilterMetric)"
-  echo "                          [Available: Raw, SSP, FilterBlast, FilterMetric]."
+  echo "                          [Available: Raw, SSP, FilterBlast, FilterMetric, Classification]."
   echo "  -a, --anchors           Minimum anchor points for syntenet (Default: 8) [range: 3-25]."
   echo "  -g, --gaps              Maximum gaps between anchors for syntenet (Default: 8) [range: 5-25]."
   echo "  -e, --evalue            E-value threshold for syntenet (Default: 0.00001) [range: 0.00001-0.01]."
@@ -98,6 +99,11 @@ print_help() {
   echo "  -ms, --mergeSize        Minimum merge fragment size (Default: 5000) [range: 2000-10000]."
   echo "  -i, --identity          Minimum BLAST identity % (Default: 70.0) [range: 60.0-90.0]."
   echo "  -c, --coverage          Minimum coverage of merged fragments (Default: 20.0) [range: 10.0-50.0]."
+  echo
+  echo "Required args with defaults in 'Classification' mode:"
+  echo "  -cm, --classMode        Classification mode (Default: Blastn) [Available: Blastn, GCP]
+                                  Note: In Blastn mode, the -fs,-ms, and -i flags are used too."
+  echo "  -p, --percentage        Percentage of coverage (Default: 80.0) [range: 70.0 - 90.0]"
   echo
   echo "Optional args:"
   echo "  -t, --threads           Threads for DIAMOND and BLAST (Default: 8)."
@@ -518,6 +524,54 @@ process_collinearity() {
         >> "${working_dir}/Collinearity_percentage.txt"
     fi
 
+  elif [[ "$run_mode" == "Classification" ]]; then
+
+    if [[ "$classmode" == "GCP" ]]; then
+      awk "$join_awk" \
+          "${temp_prefix}_percentage_general_filter.txt" \
+          "${temp_prefix}_percentage_pairwise.txt" \
+        | awk "$format_awk" \
+        | awk -v perc="$percentageClass" '{if($3>=perc) print}' \
+        | sed -e 's/ /;/g' | sort -t ';' \
+        >> "${temp_dir}/Collinearity_percentage.txt"
+    else
+      awk "$join_awk" \
+          "${temp_prefix}_percentage_general_filter.txt" \
+          "${temp_prefix}_percentage_pairwise.txt" \
+        | awk "$format_awk" \
+        | sed -e 's/ /;/g' | sort -t ';' \
+        >> "${temp_prefix}_Collinearity_percentage.txt"
+
+      run_blastn_pairwise \
+        "${temp_prefix}_Collinearity_percentage.txt" \
+        "${nucleotide_dir}" \
+        "${working_dir}/BlastnResults.out"
+
+      log_step "Filtering BLASTN results..."
+      python "${AUXILIARY_DIR}/Blast_CleanUp.py" \
+        -f "${working_dir}/BlastnResults.out" \
+        -o "${working_dir}/BlastnClean.out" \
+        -fs "${fragment_size}" -i "${identity}" -m "Classification" \
+        -ms "${merge_size}" -c "${percentageClass}" &> ${working_dir}/blast_cleanup_log.txt
+
+      log_step "Filtering false positive pairs..."
+      awk '{OFS=";"} {print $1 OFS $2}' "${working_dir}/BlastnClean.out" \
+        > "${working_dir}/BlastnPairs.out"
+
+      grep -w -f "${working_dir}/BlastnPairs.out" \
+        "${temp_prefix}_Collinearity_percentage.txt" >> "${temp_dir}/Collinearity_percentage.txt"
+    fi
+
+    if $metadata_flag; then
+      python "${AUXILIARY_DIR}/merge_metadata.py" \
+        -d "${temp_dir}/Collinearity_percentage.txt" \
+        -m "$metadata_file" \
+        -o "${working_dir}/Collinearity_percentage.txt" &> ${working_dir}/merge_metadata_log.txt
+    else
+      sed -e 's/;/\t/g' "${temp_dir}/Collinearity_percentage.txt" \
+        >> "${working_dir}/Collinearity_percentage.txt"
+    fi
+
   elif [[ "$run_mode" == "FilterBlast" ]]; then
     awk "$join_awk" \
         "${temp_prefix}_percentage_general_filter.txt" \
@@ -551,7 +605,7 @@ process_collinearity() {
       log_step "Filtering false positive pairs..."
       awk '{OFS=";"} {print $1 OFS $2}' "${working_dir}/BlastnClean.out" \
         > "${working_dir}/BlastnPairs.out"
-      grep -f "${working_dir}/BlastnPairs.out" \
+      grep -w -f "${working_dir}/BlastnPairs.out" \
         "${temp_prefix}_Collinearity_percentage_low.txt" > "${temp_prefix}_Collinearity_percentage_lowSelected.txt"
       cat "${temp_prefix}_Collinearity_percentage_high.txt" \
           "${temp_prefix}_Collinearity_percentage_lowSelected.txt" \
@@ -564,6 +618,7 @@ process_collinearity() {
 
     cat "${temp_prefix}_Collinearity_percentage_filter.txt" \
       >> "${temp_dir}/Collinearity_percentage.txt"
+
     if $metadata_flag; then
       python "${AUXILIARY_DIR}/merge_metadata.py" \
         -d "${temp_dir}/Collinearity_percentage.txt" \
@@ -722,6 +777,8 @@ fragment_size="2000"
 merge_size="5000"
 identity="70.0"
 coverage="20.0"
+classmode="Blastn"
+percentageClass="80.0"
 threads="8"
 precluster=false
 captain_info=false
@@ -748,6 +805,8 @@ while [[ $# -gt 0 ]]; do
     -ms|--mergeSize)        shift; merge_size="$1" ;;
     -i|--identity)          shift; identity="$1" ;;
     -c|--coverage)          shift; coverage="$1" ;;
+    -cm|--classMode)        shift; classmode="$1" ;;
+    -p|--percentage)        shift; percentageClass="$1" ;;
     -t|--threads)           shift; threads="$1" ;;
     --preCluster)           precluster=true ;;
     --captainInfo)          captain_info=true ;;
@@ -907,6 +966,24 @@ if [[ "$mode" == "FilterBlast" ]]; then
   fi
 fi
 
+if [[ "$mode" == "Classification" ]]; then
+  if [[ "$classmode" != "Blastn" &&  "$classmode" != "GCP" ]]; then
+    echo "Error: Classification '${classmode}' is not valid." >&2
+    print_help; exit 1
+  fi
+
+  if [[ "$percentageClass" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
+    if (( $(echo "$percentageClass < 70.0" | bc -l) )) || \
+       (( $(echo "$percentageClass > 90.0" | bc -l) )); then
+      echo "Error: percentage for classification '${percentageClass}' is out of range [70.0-90.0]." >&2
+      print_help; exit 1
+    fi
+  else
+    echo "Error: coverage '${coverage}' is not a valid float." >&2
+    print_help; exit 1
+  fi
+fi
+
 check_threads "$threads"
 
 if $captain_info; then
@@ -978,10 +1055,17 @@ process_collinearity "${working_directory}" "${mode}"
 log_info "-> Step 4 finished. Proceeding."
 
 log_info "Step 5: Generating element clusters."
-python "${AUXILIARY_DIR}/Clustering.py" \
-  -i "${working_directory}/Workspace/$(basename -s .sh "$0")/Collinearity_percentage.txt" \
-  -o "${working_directory}/Clusters/" \
-  -m "${min_size}" -n "${min_nodes}" -t "${threshold}" &> ${working_directory}/Workspace/$(basename -s .sh "$0")/clustering_log.txt
+if [[ "$mode" == "Classification" ]]; then
+  python "${AUXILIARY_DIR}/Clustering.py" \
+    -i "${working_directory}/Workspace/$(basename -s .sh "$0")/Collinearity_percentage.txt" \
+    -o "${working_directory}/Clusters/" -b \
+    -m "${min_size}" -n "${min_nodes}" -t "${threshold}" &> ${working_directory}/Workspace/$(basename -s .sh "$0")/clustering_log.txt
+else
+  python "${AUXILIARY_DIR}/Clustering.py" \
+    -i "${working_directory}/Workspace/$(basename -s .sh "$0")/Collinearity_percentage.txt" \
+    -o "${working_directory}/Clusters/" \
+    -m "${min_size}" -n "${min_nodes}" -t "${threshold}" &> ${working_directory}/Workspace/$(basename -s .sh "$0")/clustering_log.txt
+fi
 log_info "-> Step 5 finished. Proceeding."
 
 log_info "Step 6: Sorting elements into clusters."

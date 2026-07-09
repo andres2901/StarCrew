@@ -7,7 +7,7 @@
 #               and Captain vs Cargo discordance analysis.
 # Usage       : Rscript ClusterAnalysis.R [options]
 # Author      : Andres F. Lizcano Salas
-# Date        : 24/Apr/2026
+# Date        : 07/Jul/2026
 # ==============================================================================
 
 
@@ -385,6 +385,7 @@ pangenome_analysis <- function(ortho_counts, cluster, cluster_number = "", subcl
 
         if (ncol(sub_counts) > 4) {
           sub_acc_mat <- sub_counts[rowSums(sub_counts < 1) <= ncol(sub_counts) * 0.2, ]
+          sub_acc_mat <- sub_acc_mat[!(rownames(sub_acc_mat) %in% core), ]
 
           if (nrow(sub_acc_mat) > 0) {
             accesory         <- rownames(sub_acc_mat)
@@ -413,6 +414,7 @@ pangenome_analysis <- function(ortho_counts, cluster, cluster_number = "", subcl
 
       if (ncol(sub_counts) > 4) {
         sub_acc_mat <- sub_counts[rowSums(sub_counts < 1) <= ncol(sub_counts) * 0.2, ]
+        sub_acc_mat <- sub_acc_mat[!(rownames(sub_acc_mat) %in% core), ]
 
         if (nrow(sub_acc_mat) > 0) {
           accesory          <- rownames(sub_acc_mat)

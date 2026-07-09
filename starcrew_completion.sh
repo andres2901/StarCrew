@@ -4,6 +4,16 @@
 # DESCRIPTION: Bash completion for the StarCrew command-line interface.
 #              Provides Tab-completion for subcommands and their flags,
 #              including value suggestions for enumerated arguments.
+#
+# INSTALL (conda environment):
+#   mkdir -p "${CONDA_PREFIX}/etc/conda/activate.d"
+#   mkdir -p "${CONDA_PREFIX}/etc/conda/deactivate.d"
+#   cp starcrew_completion.sh "${CONDA_PREFIX}/etc/conda/activate.d/"
+#   echo 'complete -r StarCrew 2>/dev/null; unset _starcrew_complete' \
+#     > "${CONDA_PREFIX}/etc/conda/deactivate.d/starcrew_completion.sh"
+#
+# MANUAL LOAD (current session only):
+#   source starcrew_completion.sh
 # ==============================================================================
 
 _starcrew_complete() {
@@ -13,7 +23,7 @@ _starcrew_complete() {
   # All available subcommands
   local subcommands=(
     Initialize
-    Setup
+    GeneHomogenization
     CaptainIdentification
     SyntenyClustering
     ClusterCharacterization
@@ -87,8 +97,7 @@ _starcrew_complete() {
     ClusterCharacterization)
       flags="${common_flags}
              -l --length
-             -i --identity
-             --skip-orthofinder"
+             -i --identity"
       ;;
 
     OrthogroupsOverrepresentation)
@@ -134,18 +143,12 @@ _starcrew_complete() {
           COMPREPLY=( $(compgen -W "Outliers Enrichment" -- "$cur") )
           ;;
         OrthogroupsAnnotation)
-          COMPREPLY=( $(compgen -W "Core MoveAssociated All Overrepresented" -- "$cur") )
+          COMPREPLY=( $(compgen -W "Core ShareAccessory SubAccessory Overrepresented" -- "$cur") )
           ;;
         Initialize)
           COMPREPLY=( $(compgen -W "Simple Starfish" -- "$cur") )
           ;;
       esac
-      return
-      ;;
-
-    # --- SyntenyClustering ---
-    -th|--threshold)
-      COMPREPLY=()
       return
       ;;
 
@@ -168,19 +171,12 @@ _starcrew_complete() {
       ;;
 
     # --- OrthogroupsAnnotation ---
-    -f)
+    -f|--foldseekdb)
       case "$subcmd" in
         OrthogroupsAnnotation)
           COMPREPLY=( $(compgen -W "pdb afdb_swissprot" -- "$cur") )
           ;;
-        Initialize)
-          COMPREPLY=( $(compgen -f -- "$cur") )
-          ;;
       esac
-      return
-      ;;
-    --foldseekdb)
-      COMPREPLY=( $(compgen -W "pdb afdb_swissprot" -- "$cur") )
       return
       ;;
 

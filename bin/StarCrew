@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# NAME:          Main.sh
+# NAME:          StarCrew
 # DESCRIPTION:   Main entry point. Validates the environment and dispatches
 #                the requested command to its corresponding script.
-# USAGE:         ./Main.sh <COMMAND> [options]
-#                ./Main.sh -help
-#                ./Main.sh -version
+# USAGE:         ./StarCrew <COMMAND> [options]
+#                ./StarCrew -help
+#                ./StarCrew -version
 # AUTHOR:        Andres F. Lizcano Salas
-# DATE:          11/Mar/2026
+# DATE:          09/Jul/2026
 # VERSION:       1.0.0
 # ==============================================================================
 
@@ -51,6 +51,7 @@ show_main_help() {
   echo
   echo "Available commands:"
   echo "  Initialize                    - Gathers the input data and organizes the working directory."
+  echo "  GeneHomogenization            - Homogenize gene models between similar elements in the dataset."
   echo "  CaptainIdentification         - Performs identification and phylogenetic analysis of elements' captain."
   echo "  SyntenyClustering             - Performs clustering of elements based on collinear regions."
   echo "  ClusterCharacterization       - Analyzes and visualizes clusters with a captain phylogenetic tree."

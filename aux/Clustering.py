@@ -58,6 +58,66 @@ def find_clusters(pairs: list[tuple]) -> list[set]:
     return clusters
 
 
+def resolve_articulation_bridges(graph: nx.Graph) -> nx.Graph:
+    """Break articulation points that bridge two well-connected components.
+
+    Identifies nodes whose removal would split the graph into multiple
+    components (articulation points). For each one, computes the average
+    edge weight from the node to each resulting component and removes the
+    edges toward all components except the one with the highest average
+    weight. The node itself is never removed -- only its weaker connections
+    are cut, which separates the lower-weight side into its own component.
+
+    Args:
+        graph: NetworkX Graph to process. Edges must have a 'weight'
+               attribute.
+
+    Returns:
+        A new NetworkX Graph with bridging edges removed. The original
+        graph is not modified.
+    """
+
+    working_graph = graph.copy()
+    articulation_nodes = list(nx.articulation_points(working_graph))
+
+    for node in articulation_nodes:
+        if node not in working_graph:
+            continue
+
+        neighbors = list(working_graph.neighbors(node))
+
+        temp_graph = working_graph.copy()
+        temp_graph.remove_node(node)
+        components = list(nx.connected_components(temp_graph))
+
+        if len(components) < 2:
+            continue
+
+        comp_weights = []
+        for component in components:
+            neighbors_in_comp = [n for n in neighbors if n in component]
+            if not neighbors_in_comp:
+                continue
+            total_weight = sum(
+                working_graph[node][n]['weight'] for n in neighbors_in_comp
+            )
+            avg_weight = total_weight / len(neighbors_in_comp)
+            comp_weights.append((avg_weight, neighbors_in_comp))
+
+        if len(comp_weights) < 2:
+            continue
+
+        comp_weights.sort(key=lambda x: x[0], reverse=True)
+
+        # Keep the strongest side, cut edges toward every other side
+        for avg_weight, neighbors_in_comp in comp_weights[1:]:
+            for n in neighbors_in_comp:
+                if working_graph.has_edge(node, n):
+                    working_graph.remove_edge(node, n)
+
+    return working_graph
+
+
 def find_sub_clusters_spectral(all_raw_weighted_edges: list[tuple], main_clusters: list[set],
                                min_final_cluster_size: int,
                                min_nodes_for_meaningful_spectral_split: int,
@@ -214,7 +274,7 @@ def write_clusters_to_file(filename: str, clusters_data: list,
         Dictionary mapping original cluster index to cluster ID string,
         when writing main clusters. Returns None when writing sub-clusters.
     """
-    
+
     try:
         with open(filename, 'w') as f_out:
             if main_cluster_id_map:
@@ -264,10 +324,15 @@ def write_network_edges(filename: str, edges: list[tuple]) -> None:
                the network edges.
     """
 
-    with open(filename, 'w') as f:
-        f.write("Source\tTarget\tWeight\n")
-        for n1, n2, w in edges:
-            f.write(f"{n1}\t{n2}\t{w}\n")
+    try:
+        with open(filename, 'w') as f:
+            f.write("Source\tTarget\tWeight\n")
+            for n1, n2, w in edges:
+                f.write(f"{n1}\t{n2}\t{w}\n")
+    except PermissionError:
+        sys.exit(f"Error: No write permission for '{filename}'.")
+    except OSError as e:
+        sys.exit(f"Error writing file '{filename}': {e}")
 
 
 def write_cytoscape_node_attributes(filename: str, sub_info: list[tuple],
@@ -302,15 +367,20 @@ def write_cytoscape_node_attributes(filename: str, sub_info: list[tuple],
             node_attrs[node] = {'SubID': full_id, 'MainID': p_id, 'Split': was_split}
 
     headers = ["NodeID", "SubClusterID", "MainClusterID", "WasSplit"] + meta_keys
-    with open(filename, 'w') as f:
-        f.write('\t'.join(headers) + '\n')
-        for nid in sorted(node_attrs.keys()):
-            attrs = node_attrs[nid]
-            row = [nid, attrs['SubID'], attrs['MainID'], str(attrs['Split'])]
-            meta = node_meta.get(nid, {})
-            for k in meta_keys:
-                row.append(str(meta.get(k, 'N/A')))
-            f.write('\t'.join(row) + '\n')
+    try:
+        with open(filename, 'w') as f:
+            f.write('\t'.join(headers) + '\n')
+            for nid in sorted(node_attrs.keys()):
+                attrs = node_attrs[nid]
+                row = [nid, attrs['SubID'], attrs['MainID'], str(attrs['Split'])]
+                meta = node_meta.get(nid, {})
+                for k in meta_keys:
+                    row.append(str(meta.get(k, 'N/A')))
+                f.write('\t'.join(row) + '\n')
+    except PermissionError:
+        sys.exit(f"Error: No write permission for '{filename}'.")
+    except OSError as e:
+        sys.exit(f"Error writing file '{filename}': {e}")
 
 
 def write_cluster_stats(filename: str, main_c: list[set],
@@ -337,19 +407,27 @@ def write_cluster_stats(filename: str, main_c: list[set],
             sub_counts[m_map[p_idx]] += 1
     for cid, count in sub_counts.items():
         stats[cid]['Subs'] = count
-    with open(filename, 'w') as f:
-        f.write("ClusterID\tSize\tNumberSubCluster\n")
-        for cid in sorted(stats.keys()):
-            stat = stats[cid]
-            f.write(f"{cid}\t{stat['Size']}\t{stat['Subs']}\n")
+
+    try:
+        with open(filename, 'w') as f:
+            f.write("ClusterID\tSize\tNumberSubCluster\n")
+            for cid in sorted(stats.keys()):
+                stat = stats[cid]
+                f.write(f"{cid}\t{stat['Size']}\t{stat['Subs']}\n")
+    except PermissionError:
+        sys.exit(f"Error: No write permission for '{filename}'.")
+    except OSError as e:
+        sys.exit(f"Error writing file '{filename}': {e}")
 
 
 def process_clustering(input_file: str, output_dir: str, min_size: int,
-                       min_nodes: int, threshold: float) -> None:
+                       min_nodes: int, threshold: float,
+                       break_bridges: bool = False) -> None:
     """Orchestrate the full clustering pipeline.
 
-    Reads the input edge file, runs main and spectral sub-clustering,
-    and writes all output files to the specified directory.
+    Reads the input edge file, optionally resolves articulation bridge
+    points, runs main and spectral sub-clustering, and writes all output
+    files to the specified directory.
 
     Args:
         input_file: Path to the input TSV file containing network edges
@@ -360,6 +438,9 @@ def process_clustering(input_file: str, output_dir: str, min_size: int,
         min_nodes: Minimum number of nodes a main cluster must have to
                    attempt spectral splitting.
         threshold: Minimum modularity score to accept a spectral partition.
+        break_bridges: If True, identify articulation points that bridge
+                       two well-connected components and cut their weaker
+                       connection before clustering.
 
     Raises:
         FileNotFoundError: If input_file does not exist.
@@ -417,6 +498,22 @@ def process_clustering(input_file: str, output_dir: str, min_size: int,
     except ValueError as e:
         sys.exit(f"Unexpected format in {input_file}: {e}")
 
+    if break_bridges:
+        print("Resolving articulation bridge points...")
+        original_edge_count = len(edges)
+
+        temp_graph = nx.Graph()
+        for n1, n2, weight in edges:
+            temp_graph.add_edge(n1, n2, weight=weight)
+
+        resolved_graph = resolve_articulation_bridges(temp_graph)
+
+        edges = [(u, v, d['weight']) for u, v, d in resolved_graph.edges(data=True)]
+        pairs = [(u, v) for u, v, _ in edges]
+
+        cut_count = original_edge_count - len(edges)
+        print(f"Bridge resolution complete. Edges cut: {cut_count}.")
+
     main_c = find_clusters(pairs)
     sub_info = find_sub_clusters_spectral(edges, main_c, min_size, min_nodes, threshold)
 
@@ -435,9 +532,12 @@ def main() -> None:
     parser.add_argument('-m', '--min-size', type=int, default=1, help="Minimum final cluster size.")
     parser.add_argument('-n', '--min-nodes', type=int, default=4, help="Min nodes to trigger spectral split.")
     parser.add_argument('-t', '--threshold', type=float, default=0.05, help="Modularity split threshold.")
+    parser.add_argument('-b', '--break-bridges', action='store_true',
+                        help="Cut weaker connections at articulation points that bridge two components.")
 
     args = parser.parse_args()
-    process_clustering(args.input_file, args.output_dir, args.min_size, args.min_nodes, args.threshold)
+    process_clustering(args.input_file, args.output_dir, args.min_size,
+                       args.min_nodes, args.threshold, args.break_bridges)
 
 
 if __name__ == "__main__":
