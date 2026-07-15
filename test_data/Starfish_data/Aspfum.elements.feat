@@ -6,20 +6,14 @@
 08-19-02-30_scaffold4	08-19-02-30_s00027	08-19-02-30_ASFUM08-19-02-30005090	378949	462066	83118	+	flank	AF100-12-18_site079	AF100-12-18_scaffold6	365428	365437	ctacggagta	ctacggagtaa	ctacggagta	0.91	.	.	.	.	.
 08-19-02-30_scaffold4	08-19-02-30_s00028	08-19-02-30_ASFUM08-19-02-30005252	738298	864234	125937	-	flank	F12636_site094	F12636_scaffold6	622106	622113	gactactg	cttact	ctact	0.83	.	.	.	.	.
 08-19-02-30_scaffold8	08-19-02-30_s00033	08-19-02-30_ASFUM08-19-02-30010209	1428788	1510200	81413	+	flank	aspfum126_site092	aspfum126_JAIBUI010000148.1	32433	32460	taagtacggctgagcggacgggaagccc	agcggcg	agcggca	0.86	atgagtgctggtgatacg	cgctaatcaccacctcat	0.78	.	08-19-02-30_s00034
-08-19-02-30_scaffold9	08-19-02-30_e00035	08-19-02-30_ASFUM08-19-02-30010362	5436	27235	21800	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 47-10_scaffold1	47-10_s00011	47-10_000771:000772	2122733	2144180	21448	-	flank	F20063_site004	F20063_scaffold1	2657062	2657073	aataactatata	tactataat	tactata	0.78	actaataagtattta	tataatagttattaat	0.81	.	.
 47-10_scaffold1	47-10_s00012	47-10_001273	3753344	3835029	81686	+	flank	IFM-59777_site003	IFM-59777_scaffold1	1063418	1063427	cgtgtggctt	aagcc	aagc	0.8	atgagtgctggtgatacg	cgctaatcaccacctcat	0.78	.	47-10_s00013
 47-10_scaffold2	47-10_s00014	47-10_010287	3902590	3942058	39469	+	flank	CM7560_site021	CM7560_scaffold2	598926	598934	gtggcttaa	ttaagccacc	tttaagccac	0.8	agtcgctgctttatgggt	acggtaaagcagcgct	0.78	.	.
 47-10_scaffold3	47-10_s00017	47-10_tyr5	3357556	3405079	47524	-	flank	F18085_site089	F18085_scaffold6	779493	779500	aagccaca	aagccaca	aagccaca	1	gcctgctgcttta	taaaagcagcgtc	0.77	.	.
 47-10_scaffold7	47-10_s00024	47-10_008543	651586	734955	83370	-	flank	AF100-12-3_site107	AF100-12-3_scaffold7	1444132	1444142	actacggagta	actacggagtaa	actacggagta	0.92	.	.	.	.	.
-47-10_scaffold10	47-10_e00027	47-10_010138	26566	166250	139685	-	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
-47-10_scaffold12	47-10_e00028	47-10_010195	1	76017	76017	-	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
-AF293_NC-007194.1	AF293_e00029	AF293_XP-749839.2	6458	338217	331760	-	extend	.	.	.	.	.	.	.	.	.	.	.	AF293_e00030	AF293_e00030
-AF293_NC-007194.1	AF293_e00030	AF293_XP-749857.1:XP-749858.1:XP-749859.1	328781	394205	65425	-	extend	.	.	.	.	.	.	.	.	.	.	.	AF293_e00029	AF293_e00029
 AF293_NC-007194.1	AF293_s00031	AF293_XP-752984.1	4343057	4400409	57353	-	flank	IFM-59361-1_site014	IFM-59361-1_scaffold1	4291882	4291888	gttgtaa	ttacaac	ttacaac	1	atggggacctgtgaaatc	gaattcacaggtcctcgctt	0.8	.	.
 AF293_NC-007196.1	AF293_s00032	AF293_XP-748576.1	639099	688505	49407	+	flank	F16311_site050	F16311_scaffold4	393891	393898	aagccaca	aagccaca	aagccaca	1	ctgctgctttacg	ctaaaagcagcg	0.77	.	.
 AF293_NC-007198.1	AF293_s00037	AF293_XP-753153.2	3842374	3895493	53120	-	flank	F17582_site061	F17582_scaffold4	3833630	3833635	tgtaaa	ttttaca	tttaca	0.86	.	.	.	.	.
-AF293_NC-007199.1	AF293_e00039	AF293_XP-750817.1	2214305	2290183	75879	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 AF293_NC-007201.1	AF293_s00042	AF293_XP-001481410.1	1455665	1544710	89046	+	flank	aspfum109_site098	aspfum109_JAIBTS010000102.1	30269	30279	actacggagta	actacggagtaa	actacggagta	0.92	.	.	.	.	.
 ATCC13073_scaffold6	ATCC13073_s00050	ATCC13073_008222	2089897	2155565	65669	+	insert	aspfum199_site008	aspfum199_JAIBXD010000010.1	84755	84756	gt	.	.	.	.	.	.	.	.
 ATCC42202_scaffold1	ATCC42202_s00053	ATCC42202_tyr56	4519056	4568643	49588	-	flank	ATCC13073_site060	ATCC13073_scaffold3	3342606	3342613	tgtggctt	aagccaca	aagccaca	1	gcctgctgcttta	taaaagcagcgtc	0.77	.	.
@@ -27,32 +21,21 @@ ATCC42202_scaffold7	ATCC42202_s00060	ATCC42202_008667	155262	233875	78614	+	inse
 ATCC42202_scaffold7	ATCC42202_s00061	ATCC42202_009152	1594820	1677985	83166	+	flank	aspfum111_site019	aspfum111_JAIBTT010000016.1	133052	133062	tactccgtagt	actacggagtaa	actacggagta	0.92	.	.	.	.	.
 ATCC-46645-lr_scaffold1	ATCC-46645-lr_s00065	ATCC-46645-lr_000930	2725741	2783021	57281	+	flank	IFM-59355-1_site022	IFM-59355-1_scaffold1	1803220	1803232	attattgttgtaa	tgtttt	tgttta	0.83	.	.	.	.	.
 ATCC-46645-lr_scaffold2	ATCC-46645-lr_s00069	ATCC-46645-lr_tyr73	3604305	3651842	47538	-	flank	AF100-12-3G_site045	AF100-12-3G_scaffold3	749503	749510	aagccaca	aagccaca	aagccaca	1	gcctgctgcttta	taaaagcagcgtc	0.77	.	.
-ATCC-46645-lr_scaffold4	ATCC-46645-lr_e00071	ATCC-46645-lr_005088	2530342	2642841	112500	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 ATCC-46645-lr_scaffold4	ATCC-46645-lr_s00070	ATCC-46645-lr_004778	1610901	1675972	65072	-	insert	IFM-62516_site071	IFM-62516_scaffold6	1641851	1641852	ac	.	.	.	.	.	.	.	.
-ATCC-46645-lr_scaffold6	ATCC-46645-lr_e00072	ATCC-46645-lr_006139	922919	949082	26164	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 ATCC-46645-lr_scaffold11	ATCC-46645-lr_s00078	ATCC-46645-lr_008924	490628	519738	29111	-	insert	CM4602_site075	CM4602_scaffold5	2730323	2730456	.	.	.	.	.	.	.	.	.
-ATCC-46645-lr_scaffold13	ATCC-46645-lr_e00080	ATCC-46645-lr_009816	566396	642202	75807	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
-ATCC-46645-lr_scaffold13	ATCC-46645-lr_e00081	ATCC-46645-lr_009841	642982	677870	34889	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
-ATCC-46645-lr_scaffold15	ATCC-46645-lr_e00083	ATCC-46645-lr_010263	137005	155830	18826	-	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 ATCC-46645-lr_scaffold15	ATCC-46645-lr_s00084	ATCC-46645-lr_010328	271511	324531	53021	-	flank	aspfum109_site006	aspfum109_JAIBTS010000004.1	88404	88411	gcattaca	gcatt	catt	0.8	ctgtattt	aaatggacag	0.8	.	.
-ATCC-46645-lr_scaffold17	ATCC-46645-lr_e00086	ATCC-46645-lr_010510	23149	87779	64631	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	ATCC-46645-lr_e00087
 B5233_scaffold6	B5233_s00093	B5233_007073	202898	268566	65669	-	insert	IFM-58026_site085	IFM-58026_scaffold6	1498417	1498418	ac	.	.	.	.	.	.	.	.
-CEA10_CP097563.1	CEA10_e00018	CEA10_g193.t1	534355	551738	17384	-	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 CEA10_CP097565.1	CEA10_s00022	CEA10_g3700.t1	1237030	1318765	81736	-	insert	aspfum85_site003	aspfum85_JAIBST010000077.1	104869	104897		.	.	.	.	.	.	.	.
 CEA10_CP097566.1	CEA10_s00024	CEA10_g7198.t1	3432667	3497269	64603	+	insert	AF106-6-3_site002	AF106-6-3_scaffold5	3469713	3469720		.	.	.	.	.	.	.	.
 CEA10_CP097566.1	CEA10_s00026	CEA10_g7249.t1	3588188	3680552	92365	+	insert	09-7500806_site003	09-7500806_scaffold6	3551201	3551205		.	.	.	.	.	.	.	.
 CEA10_CP097568.1	CEA10_s00031	CEA10_g5565.t1	2572862	2642423	69562	+	insert	M5960-D_site002	M5960-D_scaffold4	3039226	3040738		.	.	.	.	.	.	.	.
 CEA10_CP097568.1	CEA10_s00033	CEA10_g5960.t1	3645813	3698867	53055	-	insert	B5460_site003	B5460_scaffold7	2091330	2091335		.	.	.	.	.	.	.	.
 CEA10_CP097569.1	CEA10_s00034	CEA10_g9913.t1	1786815	1864696	77882	-	insert	aspfum120_site002	aspfum120_JAIBUC010000317.1	4643	4657		.	.	.	.	.	.	.	.
-CEA10_CP097570.1	CEA10_e00035	CEA10_g9293.t1	1754030	1942492	188463	-	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 H237_scaffold1	H237_s00131	H237_001676	4732495	4815619	83125	-	flank	B72911_site033	B72911_scaffold2	54912	54920	tacggagta	tacggagtaa	tacggagta	0.9	.	.	.	.	.
 H237_scaffold4	H237_s00136	H237_005592	2410693	2486699	76007	+	insert	IFM-59361-2_site056	IFM-59361-2_scaffold5	2322044	2322046	cta	.	.	.	.	.	.	.	.
-H237_scaffold5	H237_e00138	H237_006918	2301570	2337699	36130	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 S02-30_scaffold3	S02-30_s00142	S02-30_tyr150	853380	902721	49342	+	flank	F13535_site042	F13535_scaffold3	687866	687873	aagccaca	aagccaca	aagccaca	1	ctgctgctttacg	ctaaaagcagcg	0.77	S02-30_s00143	.
 S02-30_scaffold5	S02-30_s00148	S02-30_007123	2991369	3066702	75334	+	flank	aspfum248_site033	aspfum248_JAIBZA010000033.1	43296	43303	cagtagtc	cagtagtc	cagtatcc	0.75	ggtgccgccgcttttatg	caaaaagcggcggcgc	0.83	.	.
 S02-30_scaffold7	S02-30_s00150	S02-30_008302	326287	408135	81849	-	flank	aspfum106_site055	aspfum106_JAIBTO010000042.1	20411	20442	gccggccggttagtagttgggtgggtgaccag	cgtggtca	cctggtc	0.75	tttttgcttct	agaacaaaaca	0.82	.	.
-S02-30_scaffold8	S02-30_e00152	S02-30_009244	1257862	1279826	21965	-	extend	.	.	.	.	.	.	.	.	.	.	.	.	.
 S02-30_scaffold11	S02-30_s00153	S02-30_009991	111179	194292	83114	-	flank	aspfum52_site074	aspfum52_JAIBSB010000090.1	96124	96133	ctacggagta	ctacggagtaa	ctacggagta	0.91	.	.	.	.	.
-W72310-lr_scaffold1	W72310-lr_e00163	W72310-lr_001669	4563356	4585319	21964	+	extend	.	.	.	.	.	.	.	.	.	.	.	.	
 W72310-lr_scaffold1	W72310-lr_s00161	W72310-lr_000052	42719	125815	83097	-	flank	AP65_site018	AP65_scaffold2	62217	62228	tactccgtattc	gaata	aata	0.8	.	.	.	.	
 W72310-lr_scaffold1	W72310-lr_s00162	W72310-lr_001481	3985949	4039092	53144	-	flank	AF100-1-14_site012	AF100-1-14_scaffold1	4330536	4330540	atttt	aaaaat	aaaat	0.83	atggggacctgtgaaatc	gaattcacaggtcctcgctt	0.8	.	
