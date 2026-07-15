@@ -176,6 +176,9 @@ _starcrew_complete() {
         OrthogroupsAnnotation)
           COMPREPLY=( $(compgen -W "pdb afdb_swissprot" -- "$cur") )
           ;;
+        Initialize)
+          COMPREPLY=( $(compgen -f -- "$cur") )
+          ;;
       esac
       return
       ;;
