@@ -119,10 +119,6 @@ _starcrew_complete() {
              -f --foldseekdb"
       ;;
 
-    *)
-      COMPREPLY=( $(compgen -W "${subcommands[*]}" -- "$cur") )
-      return
-      ;;
   esac
 
   # ============================================================
