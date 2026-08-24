@@ -310,10 +310,11 @@ It performs six main steps:
 2. Runs DIAMOND using the preprocessed data.
 3. Runs the interspecies synteny command of syntenet to identify regions with gene collinearity between elements.
 4. Summarizes the results of syntenet on four possible modes:
- a. Raw: Return pairs that have a minimum of 8% of shared collinear genes. WARNING: This mode may yield a high rate of false positives.
+ a. Raw: Return all pairs without filtering. WARNING: This mode may yield a high rate of false positives.
  b. SSP: Return only pairs with strong synteny (Check wrapper documentation for more information).
  c. FilterBlast: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level.
  d. FilterMetric: Filter and update collinearity percentages based on a metric system (Check wrapper documentation for more information).
+ e. Classification: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level or a GCP threshold.
 5. Defines initial clusters of elements and performs a spectral clustering process to identify subclusters.
 6. Organizes the final data output for each identified cluster.
 
@@ -387,6 +388,10 @@ A preliminary filter is performed by removing any pair with a GCP below 8%, as i
         - Bonus Points: Hits with identity percentage $\ge 95$% receive $0.1$ extra point per $200 \text{aa}$ of alignment length. **Example:** A hit with 98% identity and $350 \text{aa}$ alignment length gives $0.175$ extra points.
         - **Acceptance Criteria:** A pair is accepted if the obtained points are equal to or higher than the number of anchor points defined by the user. If the user-defined anchor point parameter is less than 6, the threshold will be 6 to prevent 'false positive' results from using a low metric threshold.
         - **GCP/ECP Update:** A ratio is defined as $\frac{Obtain\_points}{Expected\_points}$. The GCP and ECP of the pair are then updated by multiplying them by this ratio. **Note:** If a pair's ratio is higher than 1 (due to bonus points), the ratio is capped at 1 to prevent GCP or ECP from exceeding 100%.
+5. **Classification:**
+    - This filtering approach is designed to guide cargogroup classification and it support two modes:
+        - Blastn: Similar logic as the **FilterBlast** approach with a higher threshold.
+        - GCP: Similar logic to **SSP** approach with a higher threshold and without the ECP check.
 
 Once the final set of filtered pairs is obtained, a graph-based clustering process is performed:
 
@@ -622,7 +627,7 @@ To get a better sense of each mode, you can run the tutorial as described in the
 
 Please cite our work if you use **StarCrew** in your research:
 
-< Here will go the citation to the paper when available >
+Lizcano-Salas, A.F.; Ryberg, M.; Vogan, A.A. (2026). StarCrew: A wrapper for exploratory analysis of *Starship* cargo with a refined classification framework [Manuscript in preparation].
 
 StarCrew is a wrapper that calls different bioinformatic software, for that reason any publication of results obtained by StarCrew required the citation of the tools that were called.
 
@@ -634,7 +639,7 @@ StarCrew is a wrapper that calls different bioinformatic software, for that reas
 |`CaptainIdentification`| `AllID` | `Starfish`, `hmmer`, `seqkit`, `blast+`  | [Gluck-Thaler & Vogan 2024](https://pubmed.ncbi.nlm.nih.gov/38686785/), [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`CaptainIdentification`| `Cluster`, `FullAll`| `Starfish`, `hmmer`, `seqkit`, `blast+`, `macse`, `iqtree3`, `gotree` | [Gluck-Thaler & Vogan 2024](https://pubmed.ncbi.nlm.nih.gov/38686785/), [hmmer](http://hmmer.org/), [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Ranwez et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30165589/), [Wong et al. 2025](https://ecoevorxiv.org/repository/view/8916/), [Lemoine & Gascuel 2021](https://pubmed.ncbi.nlm.nih.gov/34396097/) |
 |`SyntenyClustering`| `Raw`, `SSP`, `FilterMetric` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/) |
-|`SyntenyClustering`| `FilterBlast` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx`, `blast+` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
+|`SyntenyClustering`| `FilterBlast`, `Classification` | `seqkit`, `syntenet`, `DIAMOND`, `scikit-learn`, `networkx`, `blast+` | [Shen et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38898985/), [Almeida-Silva et al. 2023](https://pubmed.ncbi.nlm.nih.gov/36539202/), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Pedregosa et al. 2011](https://jmlr.csail.mit.edu/papers/v12/pedregosa11a.html), [Hagberg et al. 2008](http://conference.scipy.org.s3-website-us-east-1.amazonaws.com/proceedings/scipy2008/paper_2/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/) |
 |`ClusterCharacterization`| - | `orthofinder`, `DIAMOND`, `blast+`, `ape`, `ggtree`, `gggenomes` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [Buchfink et al. 2021](https://pubmed.ncbi.nlm.nih.gov/33828273/), [Camacho et al. 2009](https://pubmed.ncbi.nlm.nih.gov/20003500/), [Paradis et al. 2004](https://pubmed.ncbi.nlm.nih.gov/14734327/), [Yu et al. 2016](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12628), [Hackl et al. 2024](https://arxiv.org/abs/2411.13556) |
 |`OrthogroupsOverrepresented`| `Outliers` | `orthofinder`| [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1) |
 |`OrthogroupsOverrepresented`| `enrichment` | `orthofinder`, `bc3net` | [Emms et al. 2025](https://www.biorxiv.org/content/10.1101/2025.07.15.664860v1), [de Matos Simoes & Emmert-Streib 2012](https://pubmed.ncbi.nlm.nih.gov/22479422/) |

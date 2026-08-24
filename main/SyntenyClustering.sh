@@ -72,6 +72,7 @@ print_help() {
   echo "     SSP         - Strong synteny pairs only."
   echo "     FilterBlast - Raw pairs filtered by nucleotide-level BLAST."
   echo "     FilterMetric- Pairs filtered and updated by a metric system."
+  echo "     Classification: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level or a GCP threshold."
   echo "  5. Spectral clustering to define element sub-clusters."
   echo "  6. Per-cluster data organization."
   echo
