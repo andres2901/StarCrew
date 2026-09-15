@@ -128,7 +128,7 @@ def process_blast_hits(args: argparse.Namespace) -> tuple[dict, dict]:
         q_cover = (100.0 * total_q_sum / qlen_orig) if qlen_orig > 0 else 0.0
         s_cover = (100.0 * total_s_sum / slen_orig) if slen_orig > 0 else 0.0
 
-        if args.mode == "Classification":
+        if args.mode == "Constellation":
             if q_cover < args.min_hit_coverage or s_cover < args.min_hit_coverage:
                 stats["filtered_coverage"] += 1
                 continue
@@ -187,7 +187,7 @@ def main() -> None:
     )
     parser.add_argument("-f", "--file", dest="file_in", required=True, help="Input BLAST file")
     parser.add_argument("-o", "--output", dest="file_out", required=True, help="Output file")
-    parser.add_argument("-m", "--mode", dest="mode", default="Filter", choices=["Filter","Classification"], help="Output file")
+    parser.add_argument("-m", "--mode", dest="mode", default="Filter", choices=["Filter","Constellation"], help="Output file")
     parser.add_argument("-fs", "--fragmentSize", type=int, default=2000, dest="min_fragment_size")
     parser.add_argument("-i", "--identity", type=float, default=70.0, dest="min_pident")
     parser.add_argument("-ms", "--mergeSize", type=int, default=2000, dest="min_merged_size")

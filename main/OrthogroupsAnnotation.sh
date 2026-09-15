@@ -116,7 +116,7 @@ check_clusters() {
       clusters_file="${cluster_dir}/ClusterSubAcc.txt"
       ;;
     ShareAccessory)
-      clusters_file="${cluster_dir}/ClusterSubAcc.txt"
+      clusters_file="${cluster_dir}/ClusterSharedAcc.txt"
       ;;
     Core)
       clusters_file="${cluster_dir}/ClusterCore.txt"

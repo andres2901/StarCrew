@@ -97,7 +97,8 @@ _starcrew_complete() {
     ClusterCharacterization)
       flags="${common_flags}
              -l --length
-             -i --identity"
+             -i --identity
+             -c --constellation"
       ;;
 
     OrthogroupsOverrepresentation)
@@ -133,7 +134,7 @@ _starcrew_complete() {
           COMPREPLY=( $(compgen -W "Cluster FullAll AllID" -- "$cur") )
           ;;
         SyntenyClustering)
-          COMPREPLY=( $(compgen -W "Raw SSP FilterBlast FilterMetric" -- "$cur") )
+          COMPREPLY=( $(compgen -W "Raw SSP FilterBlast FilterMetric Constellation" -- "$cur") )
           ;;
         OrthogroupsOverrepresentation)
           COMPREPLY=( $(compgen -W "Outliers Enrichment" -- "$cur") )

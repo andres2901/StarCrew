@@ -80,6 +80,11 @@ option_list <- list(
     type = "numeric", action = "store", default = 70,
     help = "Minimum percentage identity of BLAST results to include as links for nucleotide synteny visualization [default: %default] [range: 50 - 95].",
     metavar = "NUMBER"
+  ),
+  make_option(
+    c("-n", "--constellation"),
+    type = "logical", action = "store_true",
+    help = "Perform Constellation characterization if enable which avoid captain analysis."
   )
 )
 
@@ -151,9 +156,9 @@ load_and_preprocess_data <- function(
 ) {
 
   # --- BLAST results ----------------------------------------------------------
-  blast_col_names   <- c("qseqid", "sseqid", "qstart", "qend", "sstart", "send",
-                         "pident", "length", "qlen", "slen")
-  blast_col_classes <- c("character", "character", rep("numeric", 8))
+  blast_col_names   <- c("qseqid", "sseqid", "evalue", "pident", "bitscore","qstart", "qend", "qlen",
+                         "sstart", "send", "slen", "length")
+  blast_col_classes <- c("character", "character", rep("numeric", 10))
 
   blast_results <- read.delim(
     blast_file,
@@ -204,11 +209,22 @@ load_and_preprocess_data <- function(
   # --- Subcluster definitions (only when multiple subclusters requested) ------
   subcluster_definition <- vector()
   if (arguments$subclusters > 1) {
-    subcluster_definition <- read.table(
-      "Subclusters_MCL.txt",
+    if(arguments$constellation) {
+      subcluster_definition <- read.table(
+      "STAR-groups.txt",
       sep       = "\t",
-      col.names = c("Subcluster", "Elements")
+      col.names = c("Subcluster", "Elements"),
+      colClasses = c("character", "character")
     )
+      } else {
+        subcluster_definition <- read.table(
+          "Subclusters_MCL.txt",
+          sep       = "\t",
+          col.names = c("Subcluster", "Elements"),
+          colClasses = c("character", "character")
+        )
+      }
+    
   }
 
   return(list(
@@ -290,8 +306,8 @@ Shared_accessory_analysis <- function(accessory, accessory_matrix, orthocounts, 
     matrix <- accessory_matrix[[paste(sub_id)]]
     elements_cluster <- colnames(matrix)
     for(orthogroupID in subcluster_acc) {
-      Orthogroup <- as.data.frame(orthocounts[orthogroupID, ! colnames(orthocounts) %in% elements_cluster])
-      Orthogroup <- Orthogroup[,colSums(Orthogroup) >= 1]
+      Orthogroup <- as.data.frame(orthocounts[orthogroupID, ! colnames(orthocounts) %in% elements_cluster, drop=FALSE])
+      Orthogroup <- Orthogroup[,colSums(Orthogroup) >= 1, drop=FALSE]
       if(is.null(ncol(Orthogroup))){ next }
       if(ncol(Orthogroup) >= 1) {
         shared_acc <- c(shared_acc, orthogroupID)
@@ -353,9 +369,15 @@ Shared_accessory_analysis <- function(accessory, accessory_matrix, orthocounts, 
 #'   \item{subcluster_acc}{Character vector of subcluster accesory orthogroup IDs}
 pangenome_analysis <- function(ortho_counts, cluster, cluster_number = "", subcluster) {
 
-  # --- General core genes (present in >= 80% of all elements) ----------------
-  core_mat <- ortho_counts[rowSums(ortho_counts < 1) <= ncol(ortho_counts) * 0.2, ]
-  core     <- rownames(core_mat)
+  if(arguments$constellation) {
+    # --- Constellation core genes (present in all elements) ----------------
+    core_mat <- ortho_counts[rowSums(ortho_counts < 1) <= ncol(ortho_counts) * 0.1, ]
+    core     <- rownames(core_mat)
+  } else {
+    # --- General core genes (present in >= 80% of all elements) ----------------
+    core_mat <- ortho_counts[rowSums(ortho_counts < 1) <= ncol(ortho_counts) * 0.2, ]
+    core     <- rownames(core_mat)
+  }
 
   if (length(core) > 0) {
     write.table(
@@ -665,7 +687,7 @@ plot_cluster_synteny <- function(
   # Cap dimensions at 49 inches (svglite limitation)
   plot_width  <- min(49, max(16, round(max_seq_len * 0.0001) +
                                   round(max(my_tree$edge.length, na.rm = TRUE) * 10)))
-  plot_height <- min(49, n_elements)
+  plot_height <- min(49, max(3,n_elements))
 
   if (cluster_number != "") {
     if(subcluster_number != "") {
@@ -845,7 +867,7 @@ plot_subcluster_synteny <- function(
       sep       = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
     )
 
-    if (!is.matrix(matrix)) {
+    if (!is.matrix(matrix) || nrow(matrix) == 1) {
       log_message(paste0("Subcluster ", sub_id, " cannot be analyzed automatically (single element or malformed matrix)."))
       next
     }
@@ -1099,7 +1121,7 @@ if (clustering_data$individual_clusters == 1) {
 # CAPTAIN VS CARGO DISCORDANCE ANALYSIS
 # ==============================================================================
 
-if (clustering_data$individual_clusters == 1) {
+if (clustering_data$individual_clusters == 1 && ! arguments$constellation) {
 
   log_message("Analyzing Captain vs Cargo discordance...")
 

@@ -7,13 +7,13 @@
 #              2. Removal of orthogroups associated with captain genes.
 #              3. Overrepresentation analysis in one of two modes:
 #                 Outliers   - Flags orthogroups with abnormal copy numbers
-#                              using IQR-based upper fence.
+#                              using IQR-based upper fence (Standard or Skew).
 #                 Enrichment - Identifies orthogroups enriched in a metadata
 #                              group using one-sided Fisher's exact test.
 # USAGE:       StarCrew OrthogroupsOverrepresentation [options]
 #              StarCrew OrthogroupsOverrepresentation -help
 # AUTHOR:      Andres F. Lizcano Salas
-# DATE:        04/May/2026
+# DATE:        12/Mar/2026
 # VERSION:     1.0.0
 # ==============================================================================
 

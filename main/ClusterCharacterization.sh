@@ -73,7 +73,7 @@ print_help() {
   echo "  8. Discordance detection between cargo clustering and captain tree."
   echo
   echo "Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>"
-  echo "       [ -l <integer> -i <float> -t <integer> --overwrite ]"
+  echo "       [ -l <integer> -i <float> -t <integer> --overwrite --constellation ]"
   echo
   echo "Required args:"
   echo "  -w, --workingDirectory  Working directory where all data are stored."
@@ -86,6 +86,9 @@ print_help() {
   echo
   echo "Optional args:"
   echo "  -t, --threads   Threads for OrthoFinder and BLAST (Default: 8)."
+  echo "  -c, --constellation  Avoid Captain infromation and analyze all available cluster"
+  echo "                       [The clusters are expected to come from the 'Constellation'"
+  echo "                       mode in SyntenyClustering]."
   echo "  --overwrite     Overwrite a previous run (Default: off)."
   echo "  --skip-orthofinder     Skip OrthoFinder and re-run from blastn step."
   echo "                         Not compatible with '--overwrite'."
@@ -102,7 +105,10 @@ print_help() {
 check_clusters() {
   local base_dir="$1"
 
-  local cluster_information
+  if $constellation; then
+    cut -f1 ${base_dir}/Clusters/sub_clusters.txt > ${base_dir}/Clusters/ClustersAnalyzed.txt
+  fi
+
   if $skip_orthofinder; then
     cluster_information="${base_dir}/Clusters/ClusterOrthogroups.txt"
     if [[ ! -f "$cluster_information" ]]; then
@@ -130,10 +136,12 @@ check_clusters() {
 check_captain_information() {
   local base_dir="$1"
   local captain_phylogeny="${base_dir}/CaptainIdentification/CaptainPhylogeny.nw"
-
-  if [[ ! -f "$captain_phylogeny" ]]; then
-    echo "Error: captain phylogeny not found in '${base_dir}/CaptainIdentification'." >&2
-    exit 1
+  
+  if ! ${constellation}; then
+    if [[ ! -f "$captain_phylogeny" ]]; then
+      echo "Error: captain phylogeny not found in '${base_dir}/CaptainIdentification'." >&2
+      exit 1
+    fi
   fi
 
   local captainremoval_dir
@@ -184,7 +192,9 @@ organize_working_directory() {
   cp -r "$nucleotide_dir" "$working_dir"
   cp -r "$protein_dir" "$working_dir"
   cp -r "$cds_dir" "$working_dir"
-  cp "$captain_phylogeny" "$working_dir"
+  if ! ${constellation}; then
+    cp "$captain_phylogeny" "$working_dir"
+  fi
 
   grep "${subcluster_id}" "$subcluster_file" \
     > "${working_dir}/Subclusters_MCL.txt"
@@ -198,7 +208,7 @@ organize_working_directory() {
 # Arguments:
 #   $1 - cluster base directory path
 # Returns:
-#   0 always; sets orthofinder_flag=false on failure
+#   0 on success; sets orthofinder_flag=false on failure
 run_orthofinder() {
   local base_dir="$1"
   local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
@@ -217,12 +227,21 @@ run_orthofinder() {
       "using 'ulimit -n'."
   fi
 
-  orthofinder \
-    -a "$(( threads / 2 ))" -t "${threads}" \
-    -f "${protein_dir}" -A mafft -S diamond \
-    --matrix PAM30 -s "${captain_phylogeny}" \
-    --scores-v2 -o "${output_dir}" -n characterization \
+  if ${constellation}; then
+    orthofinder \
+      -a "$(( threads / 2 ))" -t "${threads}" \
+      -f "${protein_dir}" -A mafft -S diamond \
+      --matrix PAM30 \
+      --scores-v2 -o "${output_dir}" -n characterization \
+      &> "${working_dir}/orthofinder.log"
+  else
+    orthofinder \
+      -a "$(( threads / 2 ))" -t "${threads}" \
+      -f "${protein_dir}" -A mafft -S diamond \
+      --matrix PAM30 -s "${captain_phylogeny}" \
+      --scores-v2 -o "${output_dir}" -n characterization \
     &> "${working_dir}/orthofinder.log"
+  fi
 
   local results_path="${output_dir}/Results_characterization/Orthogroups/Orthogroups.GeneCount.tsv"
 
@@ -273,18 +292,19 @@ run_blast() {
     -in "${temp_dir}/sequence.fasta" \
     -out "${temp_dir}/Cluster" &> /dev/null
 
-  blastn \
+    blastn \
     -query "${temp_dir}/sequence.fasta" \
     -db "${temp_dir}/Cluster" \
     -evalue 1e-60 \
     -num_threads "${threads}" \
-    -outfmt "6 qseqid sseqid qstart qend sstart send pident length qlen slen" \
+    -outfmt "6 qseqid sseqid evalue pident bitscore qstart qend qlen sstart send slen length" \
     -task blastn \
     -gapopen 8 -gapextend 6 -reward 5 -penalty -4 \
     -out "${temp_dir}/blastresults.txt"
 
+
   awk -v min="$blast_length" \
-    'BEGIN{FS=OFS="\t"} {if($8>=min) print}' \
+    'BEGIN{FS=OFS="\t"} {if($12>=min) print}' \
     "${temp_dir}/blastresults.txt" \
     > "${working_dir}/Blast_CleanResults.txt"
 }
@@ -294,7 +314,7 @@ run_blast() {
 # Arguments:
 #   $1 - cluster base directory path
 # Returns:
-#   0 always
+#   0 on success
 check_core() {
   local base_dir="$1"
   local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
@@ -319,7 +339,7 @@ check_core() {
 # Arguments:
 #   $1 - cluster base directory path
 # Returns:
-#   0 always
+#   0 on success
 check_accessory() {
   local base_dir="$1"
   local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
@@ -362,12 +382,37 @@ check_accessory() {
   fi
 }
 
+# Define STAR groups for Constellation mode
+# Arguments:
+#  $1 - cluster base directory path
+# Returns:
+#  0 on success
+star_groups() {
+  local base_dir="$1"
+  local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
+  local output_dir="${base_dir}/$(basename -s .sh "$0")"
+  local temp_dir="${working_dir}/temp"
+
+  awk 'BEGIN{FS=OFS="\t"}{if($1 == $2) {print $1 OFS $2}}' "${temp_dir}/blastresults.txt" | sort -u > ${working_dir}/blast-cleanSTAR.out 
+  
+  python "${AUXILIARY_DIR}/Blast_CleanUp.py" \
+        -f "${temp_dir}/blastresults.txt" \
+        -o "${temp_dir}/blast-cleanSTAR.txt" \
+        -fs 2000 -i 95 -m Constellation \
+        -ms 5000 -c 95 &> ${working_dir}/blast_cleanup_log.txt
+
+  cut -f1,2 ${temp_dir}/blast-cleanSTAR.txt | sort -u >> ${working_dir}/blast-cleanSTAR.out 
+  python "${AUXILIARY_DIR}/PreCluster.py" -i ${working_dir}/blast-cleanSTAR.out -o ${temp_dir}/STAR &> /dev/null
+
+  sed 's/Cluster/STAR/' ${temp_dir}/STAR/Clusters.txt > ${working_dir}/STAR-groups.txt
+}
+
 # Copies final characterization outputs from the workspace to the cluster's
 # output directory.
 # Arguments:
 #   $1 - cluster base directory path
 # Returns:
-#   0 always
+#   0 on success
 organize_information() {
   local base_dir="$1"
   local working_dir="${base_dir}/Workspace/$(basename -s .sh "$0")"
@@ -425,6 +470,10 @@ organize_information() {
         done
   fi
 
+  if ${constellation}; then
+    cp "${working_dir}/STAR-groups.txt" "${output_dir}/"
+  fi
+
   [[ -f "${working_dir}/Discordant_elements.txt" ]] && \
     cp "${working_dir}/Discordant_elements.txt" "${output_dir}/"
 }
@@ -460,6 +509,7 @@ working_directory=""
 threads="8"
 blast_length="1000"
 identity="70"
+constellation=false
 overwrite=false
 skip_orthofinder=false
 
@@ -473,6 +523,7 @@ while [[ $# -gt 0 ]]; do
     -t|--threads)           shift; threads="$1" ;;
     -l|--length)            shift; blast_length="$1" ;;
     -i|--identity)          shift; identity="$1" ;;
+    --constellation)        constellation=true ;;
     --overwrite)            overwrite=true ;;
     --skip-orthofinder)     skip_orthofinder=true ;;
     -help)
@@ -497,6 +548,7 @@ echo "  Working directory:               ${working_directory}"
 echo "  Minimum alignment length:        ${blast_length}"
 echo "  Minimum identity (%):            ${identity}"
 echo "  Threads:                         ${threads}"
+echo "  Constellation:                   ${constellation}"
 echo "  Overwrite previous run:          ${overwrite}"
 echo "  Skip OrthoFinder:                ${skip_orthofinder}"
 echo ""
@@ -568,12 +620,6 @@ check_clusters "${working_directory}"
 # Iterate over each cluster
 while read -r cluster_id; do
   internal_dir="${working_directory}/Clusters/${cluster_id}"
-  subcluster_number=$(
-    grep -w "${cluster_id}" \
-      "${working_directory}/Clusters/ClustersAnalyzed.txt" \
-      | awk '{print $3}' \
-      | sed $'s/[^[:print:]\t]//g'
-  )
 
   log_info "Analyzing cluster '${cluster_id}'."
   check_directory_structure "${internal_dir}"
@@ -611,12 +657,34 @@ while read -r cluster_id; do
   run_blast "${internal_dir}"
   log_info "-> Step 2 finished. Proceeding."
 
+  if $constellation; then
+    log_info "Step 2.5: Defining STAR groups in the constellation..."
+    star_groups "${internal_dir}"
+    log_info "-> Step 2 finished. Proceeding."
+  fi
+
   log_info "Step 3: Running cluster characterization..."
-  Rscript "${AUXILIARY_DIR}/ClusterAnalysis.R" \
-    -d "${internal_dir}/Workspace/$(basename -s .sh "$0")/" \
-    -s "${subcluster_number}" \
-    -c "${captainremoval_number}" \
-    -p "${identity}"
+  if ${constellation}; then
+    subcluster_number=$( wc -l < ${internal_dir}/Workspace/$(basename -s .sh "$0")/STAR-groups.txt)
+    Rscript "${AUXILIARY_DIR}/ClusterAnalysis.R" \
+      -d "${internal_dir}/Workspace/$(basename -s .sh "$0")/" \
+      -s "${subcluster_number}" \
+      -c "${captainremoval_number}" \
+      -p "${identity}" --constellation
+  else
+    subcluster_number=$(
+    grep -w "${cluster_id}" \
+      "${working_directory}/Clusters/ClustersAnalyzed.txt" \
+      | awk '{print $3}' \
+      | sed $'s/[^[:print:]\t]//g'
+    )
+
+    Rscript "${AUXILIARY_DIR}/ClusterAnalysis.R" \
+      -d "${internal_dir}/Workspace/$(basename -s .sh "$0")/" \
+      -s "${subcluster_number}" \
+      -c "${captainremoval_number}" \
+      -p "${identity}"
+  fi
 
   mkdir -p "${internal_dir}/Workspace/$(basename -s .sh "$0")/Figures"
   mv "${internal_dir}/Workspace/$(basename -s .sh "$0")"/*.svg \
@@ -635,7 +703,7 @@ while read -r cluster_id; do
   log_info "Cluster '${cluster_id}' complete.\n"
 
 done < <(
-  awk '{print $1}' "${working_directory}/Clusters/ClustersAnalyzed.txt" \
+  awk '{print $1}' "${cluster_information}" \
     | sed $'s/[^[:print:]\t]//g'
 )
 

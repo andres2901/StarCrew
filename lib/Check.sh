@@ -379,7 +379,7 @@ check_auxiliary_scripts() {
       scripts=("hmmscan_process.py")
       ;;
     ClusterCharacterization)
-      scripts=("ClusterAnalysis.R")
+      scripts=("ClusterAnalysis.R" "Blast_CleanUp.py")
       ;;
     OrthogroupsOverrepresentation)
       scripts=("OverrepresentationAnalysis.R")
@@ -427,7 +427,7 @@ check_mode_parameter() {
       valid_modes="Simple Starfish"
       ;;
     SyntenyClustering)
-      valid_modes="Raw SSP FilterBlast FilterMetric Classification"
+      valid_modes="Raw SSP FilterBlast FilterMetric Constellation"
       ;;
     CaptainIdentification)
       valid_modes="FullAll AllID Cluster"

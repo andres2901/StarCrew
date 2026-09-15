@@ -67,19 +67,19 @@ print_help() {
   echo "  2. All-vs-all DIAMOND similarity search."
   echo "  3. Interspecies synteny detection with syntenet."
   echo "  4. Collinearity summarization. Available modes:"
-  echo "     Raw         - Pairs with >= 8% shared collinear genes."
+  echo "     Raw          - Pairs with >= 8% shared collinear genes."
   echo "                   WARNING: High false positive rate."
-  echo "     SSP         - Strong synteny pairs only."
-  echo "     FilterBlast - Raw pairs filtered by nucleotide-level BLAST."
-  echo "     FilterMetric- Pairs filtered and updated by a metric system."
-  echo "     Classification: Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level or a GCP threshold."
+  echo "     SSP          - Strong synteny pairs only."
+  echo "     FilterBlast  - Raw pairs filtered by nucleotide-level BLAST."
+  echo "     FilterMetric - Pairs filtered and updated by a metric system."
+  echo "     Constellation- Returns pairs that have been filtered using a BLAST-based approach at the nucleotide level or a GCP threshold."
   echo "  5. Spectral clustering to define element sub-clusters."
   echo "  6. Per-cluster data organization."
   echo
   echo "Usage: StarCrew $(basename -s .sh "$0") [-help] -w <directory_path>"
   echo "       [ -m <string> -a <integer> -g <integer> -e <float> -n <integer>"
   echo "         -s <integer> -th <float> { -fs <integer> -ms <integer>"
-  echo "         -i <float> -c <float> } -t <integer>"
+  echo "         -i <float> -c <float> | -cm <string> -p <float>} -t <integer>"
   echo "         --preCluster --captainInfo { --overwrite | --skip-syntenet } ]"
   echo
   echo "Required args:"
@@ -87,7 +87,7 @@ print_help() {
   echo
   echo "Required args with defaults:"
   echo "  -m, --mode              Summarization mode (Default: FilterMetric)"
-  echo "                          [Available: Raw, SSP, FilterBlast, FilterMetric, Classification]."
+  echo "                          [Available: Raw, SSP, FilterBlast, FilterMetric, Constellation]."
   echo "  -a, --anchors           Minimum anchor points for syntenet (Default: 8) [range: 3-25]."
   echo "  -g, --gaps              Maximum gaps between anchors for syntenet (Default: 8) [range: 5-25]."
   echo "  -e, --evalue            E-value threshold for syntenet (Default: 0.00001) [range: 0.00001-0.01]."
@@ -101,8 +101,8 @@ print_help() {
   echo "  -i, --identity          Minimum BLAST identity % (Default: 70.0) [range: 60.0-90.0]."
   echo "  -c, --coverage          Minimum coverage of merged fragments (Default: 20.0) [range: 10.0-50.0]."
   echo
-  echo "Required args with defaults in 'Classification' mode:"
-  echo "  -cm, --classMode        Classification mode (Default: Blastn) [Available: Blastn, GCP]
+  echo "Required args with defaults in 'Constellation' mode:"
+  echo "  -cm, --classMode        Constellation mode (Default: Blastn) [Available: Blastn, GCP]
                                   Note: In Blastn mode, the -fs,-ms, and -i flags are used too."
   echo "  -p, --percentage        Percentage of coverage (Default: 80.0) [range: 70.0 - 90.0]"
   echo
@@ -525,7 +525,7 @@ process_collinearity() {
         >> "${working_dir}/Collinearity_percentage.txt"
     fi
 
-  elif [[ "$run_mode" == "Classification" ]]; then
+  elif [[ "$run_mode" == "Constellation" ]]; then
 
     if [[ "$classmode" == "GCP" ]]; then
       awk "$join_awk" \
@@ -552,7 +552,7 @@ process_collinearity() {
       python "${AUXILIARY_DIR}/Blast_CleanUp.py" \
         -f "${working_dir}/BlastnResults.out" \
         -o "${working_dir}/BlastnClean.out" \
-        -fs "${fragment_size}" -i "${identity}" -m "Classification" \
+        -fs "${fragment_size}" -i "${identity}" -m "Constellation" \
         -ms "${merge_size}" -c "${percentageClass}" &> ${working_dir}/blast_cleanup_log.txt
 
       log_step "Filtering false positive pairs..."
@@ -692,8 +692,13 @@ process_cluster_file() {
     [[ -f "${captain_dir}/CaptainsID.txt" ]]  && id_file="${captain_dir}/CaptainsID.txt"
     [[ -f "${captain_dir}/Captains_pseudo.fa" ]] && pseudo_file="${captain_dir}/Captains_pseudo.fa"
   fi
+  
+  if [[ "$mode" == "Constellation" ]]; then
+    local cluster_path="${cluster_dir}/sub_clusters.txt"
+  else
+    local cluster_path="${cluster_dir}/main_clusters.txt"
+  fi
 
-  local cluster_path="${cluster_dir}/main_clusters.txt"
   if [[ ! -f "$cluster_path" ]]; then
     echo "Error: file '${cluster_path}' not found." >&2
     return 1
@@ -967,16 +972,16 @@ if [[ "$mode" == "FilterBlast" ]]; then
   fi
 fi
 
-if [[ "$mode" == "Classification" ]]; then
+if [[ "$mode" == "Constellation" ]]; then
   if [[ "$classmode" != "Blastn" &&  "$classmode" != "GCP" ]]; then
-    echo "Error: Classification '${classmode}' is not valid." >&2
+    echo "Error: Constellation '${classmode}' is not valid." >&2
     print_help; exit 1
   fi
 
   if [[ "$percentageClass" =~ ^[-+]?[0-9]*\.?[0-9]+$ ]]; then
     if (( $(echo "$percentageClass < 70.0" | bc -l) )) || \
        (( $(echo "$percentageClass > 90.0" | bc -l) )); then
-      echo "Error: percentage for classification '${percentageClass}' is out of range [70.0-90.0]." >&2
+      echo "Error: percentage for Constellation '${percentageClass}' is out of range [70.0-90.0]." >&2
       print_help; exit 1
     fi
   else
@@ -1056,7 +1061,7 @@ process_collinearity "${working_directory}" "${mode}"
 log_info "-> Step 4 finished. Proceeding."
 
 log_info "Step 5: Generating element clusters."
-if [[ "$mode" == "Classification" ]]; then
+if [[ "$mode" == "Constellation" ]]; then
   python "${AUXILIARY_DIR}/Clustering.py" \
     -i "${working_directory}/Workspace/$(basename -s .sh "$0")/Collinearity_percentage.txt" \
     -o "${working_directory}/Clusters/" -b \
