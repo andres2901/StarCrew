@@ -34,23 +34,23 @@ In addition to the main commands, StarCrew is distributed with a diverse set of 
 
 This workflow was specifically written for Linux and requires the following software and dependencies to be installed and accessible via the system path. The version numbers provided are those used during testing; for Python and R, these specific versions ensure the successful installation of all required packages, while for OrthoFinder newer versions have deprecated the --matrix argument, which would break the workflow. Also, be aware that newer versions of numpy are not compatible with the Orthofinder version use in this workflow.
 
-- agat v1.5.1.
-- blast+ v2.17.0.
-- clipkit v2.7.0.
-- diamond v2.1.17.
-- foldseek v10.941cd33.
-- gotree v0.5.1.
-- hhsuite v3.3.0.
-- hmmer v3.4.
-- interproscan.
-- iqtree3 3.0.1.
-- liftoff 1.6.3.
-- macse v2.07.
-- metaeuk v7.bba0d80.
-- orthofinder v3.1.0.
+- [agat](https://nbisweden.github.io/AGAT/) v1.5.1.
+- [blast+](https://www.ncbi.nlm.nih.gov/books/NBK279690/) v2.17.0.
+- [clipkit](https://github.com/jlsteenwyk/clipkit) v2.7.0.
+- [diamond](https://github.com/bbuchfink/diamond) v2.1.17.
+- [foldseek](https://github.com/steineggerlab/foldseek) v10.941cd33.
+- [gotree](https://github.com/evolbioinfo/gotree) v0.5.1.
+- [hhsuite](https://github.com/soedinglab/hh-suite) v3.3.0.
+- [hmmer](https://github.com/EddyRivasLab/hmmer) v3.4.
+- [interproscan](https://github.com/ebi-pf-team/interproscan6).
+- [iqtree3](https://iqtree.github.io/) 3.0.1.
+- [liftoff](https://github.com/agshumate/Liftoff) 1.6.3.
+- [macse](https://www.agap-ge2pop.org/macse/) v2.07.
+- [metaeuk](https://github.com/soedinglab/metaeuk) v7.bba0d80.
+- [orthofinder](https://github.com/OrthoFinder/OrthoFinder) v3.1.0.
 - python v3.11.14 with the following packages: biopython v1.86, gffutils v0.13, networkx v3.6.1, numpy v2.3.5, pandas v2.3.3, scikit-learn v1.8.0.
 - R v4.4.3 with the following packages: ape v5.8.1, bc3net v1.0.5, dendextend v1.19.1, dplyr v1.1.4, future v1.68.0, gggenomes v1.1.2, ggnewscale v0.5.2, ggplot2 v3.5.2, ggtree v3.14.0, mrfdepth v1.0.17, NbClust v3.0.1, optparse v1.7.5, reshape2 v1.4.5, scales v1.4.0, svglite v2.2.2, syntenet v1.8.0, viridis v0.6.5.
-- seqkit 2.12.0.
+- [seqkit](https://github.com/shenwei356/seqkit) 2.12.0.
 
 ### Database requirements
 
